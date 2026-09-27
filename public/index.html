@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="description" content="Dashboard v30 de indicadores macroeconómicos de Argentina: inflación, actividad, PIB, pobreza, industria, recaudación, expectativas y agenda de publicaciones.">
+  <meta name="theme-color" content="#071b35">
+  <title>Macro Argentina | Indicadores económicos</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 rx=%2222%22 fill=%22%230b5bd3%22/><path d=%22M22 69V50h12v19zm22 0V36h12v33zm22 0V22h12v47z%22 fill=%22white%22/></svg>">
+  <link rel="stylesheet" href="styles.css?v=64">
+  <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+  <script defer src="app.js?v=64"></script>
+</head>
+<body>
+<a class="skip-link" href="#main">Saltar al contenido</a>
+<header class="topbar">
+  <a class="brand" href="#inicio" aria-label="Macro Argentina, inicio">
+    <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+    <span><strong>MACRO</strong><small>ARGENTINA</small></span>
+  </a>
+  <button class="menu-btn" id="menuBtn" aria-expanded="false" aria-controls="nav">☰<span class="sr-only">Abrir menú</span></button>
+  <nav id="nav" aria-label="Navegación principal">
+    <a href="#tablero">Tablero</a><a href="#tipo-cambio">Tipo de cambio</a><a href="#historicos">Históricos</a><a href="#expectativas">Expectativas</a><a href="#calculadoras">Calculadoras</a><a href="#agenda">Agenda</a><a href="#fuentes">Fuentes</a>
+  </nav>
+</header>
+
+<main id="main">
+<section class="hero" id="inicio">
+  <div class="hero-copy">
+    <span class="eyebrow">Datos macroeconómicos · Argentina</span>
+    <h1>La economía argentina,<br><span>en perspectiva.</span></h1>
+    <p>Indicadores oficiales, series históricas, expectativas privadas y herramientas de cálculo en un solo lugar.</p>
+    <div class="hero-actions"><a class="btn primary" href="#tablero">Ver indicadores</a><a class="btn ghost" href="#calculadoras">Usar calculadoras</a></div>
+    <p class="update"><span></span> <span id="autoStatus">Conectando con fuentes…</span></p>
+  </div>
+  <div class="hero-panel market-hero" aria-label="Indicadores financieros actualizados">
+    <div class="mini-head"><span>Mercados ahora</span><span class="pill">Actualización automática</span></div>
+    <div class="market-strip market-grid">
+      <div class="market-card market-card-wide"><span>Merval</span><strong id="heroMerval">—</strong><em id="heroMervalChange" class="market-change neutral">—</em><small id="heroMervalDate">Consultando…</small></div>
+      <div class="market-card"><span>Dólar MEP</span><strong id="heroDollar">—</strong><em id="heroDollarChange" class="market-change neutral">—</em><small id="heroDollarDate">Consultando…</small></div>
+      <div class="market-card"><span>Riesgo país</span><strong id="heroRisk">—</strong><em id="heroRiskChange" class="market-change neutral">—</em><small id="heroRiskDate">Consultando…</small></div>
+      <div class="market-card"><span>Dólar oficial BNA</span><strong id="heroBna">—</strong><em id="heroBnaChange" class="market-change neutral">—</em><small id="heroBnaDate">Consultando…</small></div>
+    </div>
+    <div class="latest-release"><span>Último dato publicado</span><strong id="latestReleaseTitle">Consultando fuentes…</strong><p id="latestReleaseValue">—</p><small id="latestReleaseDate"></small></div>
+  </div>
+</section>
+
+<section class="section" id="tablero">
+  <div class="section-title"><div><span class="eyebrow">Pulso económico</span><h2>Últimos datos disponibles</h2></div><p>El período de referencia varía según cada publicación.</p></div>
+  <div class="kpi-grid" id="kpiGrid">
+    <article class="kpi" data-kpi="ipc"><div class="kpi-top"><span>Inflación nacional</span><b>INDEC</b></div><strong data-value>1,7%</strong><p data-period>ago 2026 · mensual</p><em data-detail>33,5% interanual</em><div class="data-health cached" data-health>Último dato verificado</div></article>
+    <article class="kpi" data-kpi="ipcCaba"><div class="kpi-top"><span>Inflación CABA</span><b>IDECBA</b></div><strong data-value>1,7%</strong><p data-period>ago 2026 · mensual</p><em data-detail>33,3% interanual</em><div class="data-health cached" data-health>Último dato verificado</div></article>
+    <article class="kpi" data-kpi="gdp"><div class="kpi-top"><span>PIB real</span><b>INDEC</b></div><strong data-value>+2,0%</strong><p data-period>2T 2026 · interanual</p><em data-detail class="down">−0,6% trimestral s.e.</em><div class="data-health cached" data-health>Último dato verificado</div></article>
+    
+    <article class="kpi" data-kpi="ipi"><div class="kpi-top"><span>IPI manufacturero</span><b>INDEC</b></div><strong data-value>−5,0%</strong><p data-period>jul 2026 · interanual</p><em data-detail>Industria</em><div class="data-health cached" data-health>Último dato verificado</div></article>
+    <article class="kpi" data-kpi="arca"><div class="kpi-top"><span>Recaudación</span><b>ARCA</b></div><strong data-value>$20,51 B</strong><p data-period>ago 2026 · billones ARS</p><em data-detail>+33,5% interanual</em><div class="data-health cached" data-health>Último dato verificado</div></article>
+    <article class="kpi" data-kpi="poverty"><div class="kpi-top"><span>Pobreza</span><b>INDEC</b></div><strong data-value>32,3%</strong><p data-period>1S 2026 · personas</p><em data-detail>7,5% indigencia</em><div class="data-health cached" data-health>Último dato verificado</div></article>
+    <article class="kpi" data-kpi="icg"><div class="kpi-top"><span>Confianza gobierno</span><b>UTDT</b></div><strong data-value>2,06</strong><p data-period>ago 2026 · puntos</p><em data-detail>+6,4% mensual</em><div class="data-health cached" data-health>Último dato verificado</div></article>
+    <article class="kpi" data-kpi="trade"><div class="kpi-top"><span>Balanza comercial</span><b>INDEC</b></div><strong data-value>USD 2.187 M</strong><p data-period>ago 2026 · superávit</p><em data-detail>Comercio exterior</em><div class="data-health cached" data-health>Último dato verificado</div></article>
+    <article class="kpi" data-kpi="fiscal"><div class="kpi-top"><span>Resultado fiscal</span><b>Economía</b></div><strong data-value>+$636 mil M</strong><p data-period>ago 2026 · resultado financiero</p><em data-detail>Primario: +$1,99 B</em><div class="data-health cached" data-health>Último dato verificado</div></article>
+    <article class="kpi" data-kpi="cement"><div class="kpi-top"><span>Despachos de cemento</span><b>AFCP</b></div><strong data-value>817 mil t</strong><p data-period>ago 2026 · total</p><em data-detail class="down">−8,1% interanual</em><div class="data-health cached" data-health>Último dato verificado</div></article>
+    <article class="kpi" data-kpi="isac"><div class="kpi-top"><span>ISAC construcción</span><b>INDEC</b></div><strong data-value>−4,5%</strong><p data-period>jul 2026 · interanual</p><em data-detail class="down">−4,6% mensual s.e.</em><div class="data-health cached" data-health>Último dato verificado</div></article>
+    <article class="kpi" data-kpi="autos"><div class="kpi-top"><span>Patentamientos 0 km</span><b>ACARA</b></div><strong data-value>44.415</strong><p data-period>ago 2026 · unidades</p><em data-detail class="down">−19,1% interanual</em><div class="data-health cached" data-health>Último dato verificado</div></article>
+    <article class="kpi" data-kpi="credit"><div class="kpi-top"><span>Crédito privado</span><b>BCRA</b></div><strong data-value>−1,0%</strong><p data-period>ago 2026 · pesos, real mensual s.e.</p><em data-detail>USD: 25.241 M · +USD 258 M mensual</em><div class="data-health cached" data-health>Último dato verificado</div></article>
+    <article class="kpi" data-kpi="arrears"><div class="kpi-top"><span>Mora bancaria</span><b>BCRA</b></div><strong data-value>7,7%</strong><p data-period>jul 2026 · irregularidad total</p><em data-detail>Familias 12,9% · empresas 3,6%</em><div class="data-health cached" data-health>Último dato verificado</div></article>
+  </div>
+</section>
+
+
+<section class="section" id="tipo-cambio">
+  <div class="section-title"><div><span class="eyebrow">Tipo de cambio</span><h2>Dólar oficial, libre y brecha</h2></div><p>Series empalmadas según el régimen cambiario. Los huecos no se interpolan.</p></div>
+  <div class="chart-card">
+    <div class="inflation-controls"><span>Serie</span><div class="segmented compact"><button class="active" data-fx-series="free">Dólar libre / mercado</button><button data-fx-series="official">Dólar oficial</button><button data-fx-series="gap">Brecha %</button></div></div>
+    <div class="inflation-controls"><span>Pesos</span><div class="segmented compact"><button data-fx-price="nominal">ARS corrientes</button><button data-fx-price="real">ARS constantes</button><button class="active" data-fx-price="tcr">TCR bilateral</button></div><label class="fx-check"><input id="fxControlsToggle" type="checkbox"> Marcar períodos con controles de cambio</label></div><div class="fx-explainer"><strong>TCR bilateral</strong> ajusta el tipo de cambio nominal por la evolución relativa de los precios de Argentina y Estados Unidos. Permite comparar el valor del dólar en términos reales entre períodos: un nivel más alto indica, en términos generales, un peso real bilateralmente más depreciado frente al dólar que en un período con un nivel menor. La base se actualiza al último mes común con IPC disponible en ambos países.</div>
+    <div class="history-tools"><span>Frecuencia</span><button class="active" data-fx-frequency="auto">Automático</button><button data-fx-frequency="annual">Anual</button><button data-fx-frequency="monthly">Mensual</button><button data-fx-frequency="daily">Diario</button></div>
+    <div class="history-tools"><span>Rango</span><button data-fx-range="5">5 años</button><button data-fx-range="10">10 años</button><button data-fx-range="20">20 años</button><button class="active" data-fx-range="max">Máximo</button><button id="fxZoomOut" type="button" title="Alejar">−</button><button id="fxZoomIn" type="button" title="Acercar">+</button><div class="period-picker"><label>Desde <input id="fxPeriodFrom" type="date" aria-label="Fecha inicial tipo de cambio"></label><label>Hasta <input id="fxPeriodTo" type="date" aria-label="Fecha final tipo de cambio"></label><button id="fxApplyPeriod" type="button">Aplicar</button></div></div>
+    <div class="chart-meta"><div><h3 id="fxTitle">Dólar libre / de mercado</h3><p id="fxSubtitle">TCR bilateral · último mes común ARG–EE.UU.</p></div><span id="fxSource">BCRA / Ámbito / fuentes históricas</span></div>
+    <div class="chart-wrap"><canvas id="fxChart" aria-label="Historia del tipo de cambio argentino" role="img"></canvas><p id="fxEmpty" class="chart-empty" hidden></p></div>
+    <div id="fxSummary" class="period-summary"></div>
+    <div class="method-note"><strong>Metodología:</strong> se prioriza la cotización libre/de mercado cuando existió. La cotización oficial se muestra por separado y la brecha es (libre/oficial − 1) × 100. Los períodos de controles se documentan como una capa opcional. No se supone que oficial = libre cuando existieron restricciones.</div>
+  </div>
+</section>
+
+<section class="section alt" id="historicos">
+  <div class="section-title"><div><span class="eyebrow">Series históricas</span><h2>Mirar el dato en contexto</h2></div><div class="segmented" role="group" aria-label="Seleccionar serie"><button class="active" data-series="inflation">Inflación</button><button data-series="gdp">PIB</button><button data-series="poverty">Pobreza</button><button data-series="industry">Industria</button><button data-series="unemployment">Desempleo</button><button data-series="tradeBalance">Balanza comercial</button><button data-series="exports">Exportaciones</button><button data-series="imports">Importaciones</button><button data-series="countryRisk">Riesgo país</button><button data-series="mervalUsd">Merval</button><button data-series="interestRate">Tasa de interés</button><button data-series="salary">Salario promedio (RIPTE)</button></div></div>
+  <div class="chart-card"><div id="inflationControls" class="inflation-controls"><span>Inflación</span><div class="segmented compact"><button class="active" data-inf-frequency="annual">Anual</button><button data-inf-frequency="monthly">Mensual</button></div><div class="segmented compact"><button class="active" data-inf-annual="eop">Punta a punta</button><button data-inf-annual="avg">Promedio anual</button></div></div><div id="tradeControls" class="inflation-controls" hidden><span>Comercio exterior</span><div class="segmented compact"><button class="active" data-trade-price="real">USD constantes · último CPI-U</button><button data-trade-price="nominal">USD corrientes</button></div></div><div id="dollarControls" class="inflation-controls" hidden><span>Dólar libre</span><div class="segmented compact"><button class="active" data-dollar-price="real">ARS constantes · último IPC</button><button data-dollar-price="nominal">ARS corrientes</button></div></div><div id="rateControls" class="inflation-controls" hidden><span>Tasa de interés</span><div class="segmented compact"><button class="active" data-rate-mode="real">Real</button><button data-rate-mode="nominal">Nominal</button></div></div><div id="salaryControls" class="inflation-controls" hidden><span>RIPTE</span><div class="segmented compact"><button data-salary-mode="arsReal">ARS constantes</button><button class="active" data-salary-mode="arsNominal">ARS corrientes</button><button data-salary-mode="usdReal">USD constantes</button><button data-salary-mode="usdNominal">USD corrientes</button></div></div><div class="history-tools" role="group" aria-label="Rango temporal"><span>Rango</span><button data-range="5">5 años</button><button data-range="10">10 años</button><button data-range="20">20 años</button><button class="active" data-range="max">Máximo</button><button id="zoomOut" type="button" title="Alejar">−</button><button id="zoomIn" type="button" title="Acercar">+</button><div class="period-picker"><label>Desde <select id="periodFrom" aria-label="Año inicial del gráfico"></select></label><label>Hasta <select id="periodTo" aria-label="Año final del gráfico"></select></label></div></div><div id="periodSummary" class="period-summary" aria-live="polite"></div><div class="chart-meta"><div><h3 id="chartTitle">Inflación anual · punta a punta</h3><p id="chartSubtitle">Diciembre contra diciembre · %</p></div><span id="chartSource">Fuente compuesta</span></div><div class="chart-wrap"><canvas id="historyChart" aria-label="Gráfico histórico interactivo" role="img"></canvas><p id="chartEmpty" class="chart-empty" hidden></p></div><div id="seriesCoverage" class="series-coverage" aria-label="Cobertura de series"></div><div id="ripteDiagnostic" class="series-diagnostic" aria-live="polite"></div><div id="methodNote" class="method-note"><strong>Metodología:</strong> la serie identifica el cambio de fuente. Hasta 2006 se utiliza el IPC-GBA histórico oficial de INDEC (serie empalmada desde 1943). Para 2007–2015 se utiliza IPC San Luis; 2016 se presenta como transición; desde 2017, IPC Nacional INDEC. Los cambios de fuente y cobertura quedan identificados.</div></div>
+</section>
+
+<section class="section" id="expectativas">
+  <div class="section-title"><div><span class="eyebrow">Expectativas</span><h2>Qué espera el mercado</h2></div><p>Proyecciones ≠ datos observados.</p></div>
+  <div class="expect-grid">
+    <article class="forecast featured"><span>EcoGo · estimación preliminar</span><strong>2,0%</strong><h3>Inflación septiembre 2026</h3><p>Relevamiento de la 3.ª semana, publicado el 21/09.</p></article>
+    <article class="forecast"><span>REM BCRA · mediana</span><strong>2,1%</strong><h3>PIB real 2026</h3><p>Crecimiento anual esperado en el REM de agosto.</p></article>
+    <article class="forecast"><span>REM BCRA · mediana</span><strong>$1.630</strong><h3>USD oficial · dic 2026</h3><p>Tipo de cambio nominal promedio esperado.</p></article>
+    <article class="forecast"><span>REM BCRA · mediana</span><strong>21,0%</strong><h3>Inflación próximos 12 meses</h3><p>Expectativa informada para agosto 2026.</p></article>
+  </div>
+  <div class="callout"><strong>REM de agosto:</strong> 47 participantes: 35 consultoras y centros de investigación y 12 entidades financieras. Las proyecciones del REM no son pronósticos propios del BCRA.</div>
+</section>
+
+<section class="section alt" id="calculadoras">
+  <div class="section-title"><div><span class="eyebrow">Herramientas</span><h2>Calculadoras económicas</h2></div><p>Cálculos orientativos sobre las series incluidas.</p></div>
+  <div class="calc-grid single-calc">
+    <form class="calc-card calc-card-wide" id="updateCalc"><div class="calc-icon">↻</div><h3>Calculadora de actualización</h3><p>Actualizá un monto entre dos períodos usando el índice pactado.</p><label>Índice<select id="updateIndex"><option value="ipc">IPC · INDEC</option><option value="icl">ICL · BCRA</option><option value="cer">CER · BCRA</option><option value="uva">UVA · BCRA</option></select></label><div class="calc-latest" id="updateLatest">Último dato vigente: cargando…</div><label>Desde<div class="date-pair"><span id="updateStartDayWrap" hidden><select id="updateStartDay" aria-label="Día inicial"></select></span><select id="updateStartMonth"></select><select id="updateStartYear"></select></div></label><label>Hasta<div class="date-pair"><span id="updateEndDayWrap" hidden><select id="updateEndDay" aria-label="Día final"></select></span><select id="updateEndMonth"></select><select id="updateEndYear"></select></div></label><label>Monto inicial<input id="updateAmount" type="number" min="0" step="100" placeholder="$ 500.000"></label><button class="btn primary" type="submit">Calcular actualización</button><div class="result" id="updateResult" aria-live="polite">Elegí el índice y el período.</div><small id="updateMethod">IPC: se compone la variación mensual publicada por INDEC. CER, UVA e ICL permiten seleccionar fecha exacta y utilizan el valor diario oficial vigente del BCRA.</small></form>
+  </div>
+</section>
+
+<section class="section" id="agenda">
+  <div class="section-title"><div><span class="eyebrow">Calendario económico</span><h2>Próximas publicaciones</h2></div><p>Los próximos 10 eventos entre los 10 indicadores públicos y privados más relevantes seleccionados.</p></div>
+  <div class="agenda-note"><strong>Indicadores monitoreados:</strong> IPC, EMAE, IPI manufacturero, mercado de trabajo, balanza comercial, recaudación ARCA, resultado fiscal, REM, Confianza del Consumidor UTDT e Indicador CAMARCO. Sólo se muestran fechas futuras confirmadas.</div>
+  <div class="agenda-list" id="agendaList"><div class="agenda-empty">Cargando próximas publicaciones…</div></div>
+</section>
+
+<section class="section alt" id="fuentes">
+  <div class="section-title"><div><span class="eyebrow">Transparencia</span><h2>Fuentes y metodología</h2></div><p>Cada indicador debe conservar organismo, período y fecha de actualización.</p></div>
+  <div class="sources-grid">
+    <a href="https://www.indec.gob.ar/" target="_blank" rel="noopener"><b>INDEC ↗</b><span>IPC, PIB, IPI, pobreza, desempleo y comercio exterior.</span></a>
+    <a href="https://www.bcra.gob.ar/" target="_blank" rel="noopener"><b>BCRA ↗</b><span>REM, variables monetarias y calendario.</span></a>
+    <a href="https://www.arca.gob.ar/institucional/estudios/" target="_blank" rel="noopener"><b>ARCA ↗</b><span>Recaudación y estadísticas tributarias.</span></a>
+    <a href="https://www.utdt.edu/ver_contenido.php?id_contenido=1439&id_item_menu=2964" target="_blank" rel="noopener"><b>UTDT ↗</b><span>Índice de Confianza en el Gobierno.</span></a>
+    <a href="https://estadistica.sanluis.gov.ar/Categorias/economia/precios/ipc-sanluis" target="_blank" rel="noopener"><b>Estadística San Luis ↗</b><span>IPC utilizado para el tramo 2007–2015; el tramo anterior a 2007 proviene del IPC histórico de INDEC.</span></a>
+    <a href="https://repositorio.uca.edu.ar/" target="_blank" rel="noopener"><b>ODSA-UCA ↗</b><span>Serie alternativa de pobreza para 2007–2015.</span></a>
+    <a href="https://www.estadisticaciudad.gob.ar/eyc/" target="_blank" rel="noopener"><b>IDECBA ↗</b><span>IPC de la Ciudad de Buenos Aires.</span></a>
+    <a href="https://www.byma.com.ar/productos/productos-de-datos/market-data" target="_blank" rel="noopener"><b>BYMA ↗</b><span>S&P Merval e Índice Dólar BYMA (MEP). Fuente primaria de los indicadores bursátiles; cuando el acceso automatizado directo requiere credenciales, el backend identifica por separado el proveedor técnico.</span></a>
+    <a href="https://www.bna.com.ar/Personas" target="_blank" rel="noopener"><b>Banco Nación ↗</b><span>Dólar oficial billete: cotizaciones de compra y venta y fecha de actualización.</span></a>
+    <a href="https://www.jpmorgan.com/insights/global-research" target="_blank" rel="noopener"><b>J.P. Morgan ↗</b><span>EMBI+ Argentina, referencia metodológica del riesgo país. La redistribución pública puede provenir de un proveedor secundario identificado por el backend.</span></a>
+    <a href="https://www.camarco.org.ar/indicadores/indicadores-de-costos/" target="_blank" rel="noopener"><b>CAMARCO ↗</b><span>Indicadores de costos de construcción; agenda sólo con fechas confirmadas, sin inferir publicaciones futuras.</span></a>
+    <a href="https://www.afcp.org.ar/despacho-mensual" target="_blank" rel="noopener"><b>AFCP ↗</b><span>Despachos mensuales de cemento Portland.</span></a>
+    <a href="https://www.acara.org.ar/" target="_blank" rel="noopener"><b>ACARA ↗</b><span>Patentamientos mensuales de vehículos 0 km.</span></a>
+    <a href="https://www.argentina.gob.ar/economia" target="_blank" rel="noopener"><b>Ministerio de Economía ↗</b><span>Resultado primario y financiero del Sector Público Nacional.</span></a>
+    <a href="https://ecogo.com.ar/" target="_blank" rel="noopener"><b>EcoGo ↗</b><span>Relevamientos privados y estimaciones preliminares.</span></a>
+  </div>
+  <div class="disclaimer"><strong>Nota metodológica.</strong> Este sitio es una plantilla editorial y analítica. Las series históricas empalmadas combinan fuentes y metodologías diferentes; no deben tratarse como una única serie oficial homogénea. Antes de publicar profesionalmente, conviene automatizar la ingestión desde APIs/archivos oficiales y validar cada observación.</div>
+</section>
+</main>
+<footer><div class="brand"><span class="brand-mark"><i></i><i></i><i></i></span><span><strong>MACRO</strong><small>ARGENTINA</small></span></div><p>Información económica para análisis. No constituye asesoramiento financiero.</p><a href="#inicio">Volver arriba ↑</a><span class="build-version">Frontend v64</span></footer>
+
+<div id="kpiModal" class="kpi-modal" hidden aria-hidden="true">
+  <div class="kpi-modal-backdrop" data-kpi-close></div>
+  <section class="kpi-modal-panel" role="dialog" aria-modal="true" aria-labelledby="kpiModalTitle">
+    <button class="kpi-modal-close" type="button" data-kpi-close aria-label="Cerrar">×</button>
+    <div class="kpi-modal-head"><div><span id="kpiModalAgency" class="kpi-modal-agency"></span><h2 id="kpiModalTitle">Evolución</h2><p id="kpiModalPeriod"></p></div><strong id="kpiModalValue">—</strong></div>
+    <div class="kpi-modal-chart"><canvas id="kpiModalChart" aria-label="Evolución reciente" role="img"></canvas><p id="kpiModalEmpty" class="chart-empty" hidden></p></div>
+    <div id="kpiModalLegend" class="kpi-modal-legend"></div>
+    <p id="kpiModalSource" class="kpi-modal-source"></p>
+  </section>
+</div>
+</body>
+</html>
