@@ -1,4 +1,4 @@
-# Macro Argentina — Cloudflare v65
+# Macro Argentina — Cloudflare v66
 
 Migración de la v63 desde Netlify a Cloudflare Workers + Static Assets.
 
@@ -33,12 +33,12 @@ npm run dev
 Las URLs del navegador permanecen iguales: `/api/macro-data` y `/api/calendar-data`.
 
 
-## v65
+## v66
 - Explorador de tarjetas: últimas 12 observaciones disponibles.
 - Resultado fiscal: histórico mensual primario y financiero incorporado desde publicaciones oficiales de Hacienda.
 - Mora bancaria: histórico reciente total/familias/empresas incorporado desde Informe sobre Bancos del BCRA.
 - Las tarjetas sin histórico verificable siguen sin interpolación artificial.
 
 
-## v65
+## v66
 Tarjetas: últimas 12 observaciones disponibles. Se incorporan históricos de resultado fiscal, cemento AFCP, ISAC INDEC, patentamientos ACARA, crédito BCRA y mora bancaria.

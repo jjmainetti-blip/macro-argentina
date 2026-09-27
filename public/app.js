@@ -427,7 +427,7 @@ async function loadAutomaticData(){
   const status=document.getElementById('autoStatus');
   try{
     const r=await fetch('/api/macro-data',{headers:{accept:'application/json'}}); if(!r.ok)throw new Error(`API ${r.status}`);
-    const data=await r.json(), S=data.sources||{}; kpiSourceCache=S;
+    const data=await r.json(), S=data.sources||{}; kpiSourceCache=S; hydrateKpiHistoryCache(S);
     safeApply('calculatorHydration',()=>hydrateCalculatorSources(S));
 
     // RIPTE se hidrata primero y de forma independiente. Ningún error posterior de
@@ -499,7 +499,13 @@ window.addEventListener('load',()=>{
 
 
 // v63 · Explorador rápido de tarjetas (últimas 12 observaciones publicadas)
-let kpiDetailChart=null, kpiSourceCache={};
+let kpiDetailChart=null, kpiSourceCache={}, kpiHistoryCache={};
+function hydrateKpiHistoryCache(S){
+  const A=S?.activityPulse||{}; kpiHistoryCache={};
+  for(const key of ['fiscal','cement','isac','autos','credit','arrears']){
+    const h=A?.[key]?.history; if(h&&typeof h==='object')kpiHistoryCache[key]={history:h,source:A[key]?.source||A[key]?.sourceUrl||A.source||''};
+  }
+}
 const KPI_META={
  ipc:{title:'Inflación nacional',agency:'INDEC'},ipcCaba:{title:'Inflación CABA',agency:'IDECBA'},gdp:{title:'PIB real',agency:'INDEC'},ipi:{title:'IPI manufacturero',agency:'INDEC'},arca:{title:'Recaudación',agency:'ARCA'},poverty:{title:'Pobreza',agency:'INDEC / UCA'},icg:{title:'Confianza de gobierno',agency:'UTDT'},trade:{title:'Balanza comercial',agency:'INDEC'},fiscal:{title:'Resultado fiscal',agency:'Ministerio de Economía'},cement:{title:'Despachos de cemento',agency:'AFCP'},isac:{title:'ISAC construcción',agency:'INDEC'},autos:{title:'Patentamientos 0 km',agency:'ACARA'},credit:{title:'Crédito privado',agency:'BCRA'},arrears:{title:'Mora bancaria',agency:'BCRA'}
 };
@@ -508,7 +514,7 @@ function kpiSeries(key){const S=kpiSourceCache||{},A=S.activityPulse||{};
   if(key==='ipc'&&Array.isArray(S.ipc?.monthly)){const x=S.ipc.monthly.filter(r=>/^\d{4}-\d{2}$/.test(String(r?.date||''))&&Number.isFinite(Number(r?.value))).slice(-12);return {labels:x.map(r=>displayMonth(r.date)),datasets:[{label:'Inflación mensual (%)',data:x.map(r=>Number(r.value))}],source:'INDEC'};}
   if(key==='arca'&&S.arca?.history){const x=recentEntries(S.arca.history);return {labels:x.map(([d])=>displayMonth(d)),datasets:[{label:'Recaudación',data:x.map(([,v])=>v)}],source:'ARCA'};}
   if(key==='icg'&&S.icg?.history){const x=recentEntries(S.icg.history);return {labels:x.map(([d])=>displayMonth(d)),datasets:[{label:'ICG',data:x.map(([,v])=>v)}],source:'UTDT'};}
-  const h=A[key]?.history;if(h){const keys=Object.keys(h);if(keys.length&&typeof h[keys[0]]==='object'){const labels=[...new Set(keys.flatMap(k=>Object.keys(h[k]||{})))].sort().slice(-12);return {labels:labels.map(displayMonth),datasets:keys.map(k=>({label:k,data:labels.map(d=>h[k]?.[d]??null)})),source:A[key]?.source||A[key]?.sourceUrl||A.source};}const x=recentEntries(h);return {labels:x.map(([d])=>displayMonth(d)),datasets:[{label:KPI_META[key]?.title||key,data:x.map(([,v])=>v)}],source:A[key]?.source||A[key]?.sourceUrl||A.source};}
+  const cached=kpiHistoryCache[key],h=cached?.history||A[key]?.history;if(h){const keys=Object.keys(h);if(keys.length&&h[keys[0]]&&typeof h[keys[0]]==='object'&&!Array.isArray(h[keys[0]])){const labels=[...new Set(keys.flatMap(k=>Object.keys(h[k]||{})))].sort().slice(-12);const datasets=keys.map(k=>({label:k,data:labels.map(d=>{const v=h[k]?.[d];return v===null||v===undefined?null:Number(v);})})).filter(ds=>ds.data.some(v=>Number.isFinite(v)));if(labels.length&&datasets.length)return {labels:labels.map(displayMonth),datasets,source:cached?.source||A[key]?.source||A[key]?.sourceUrl||A.source};}const x=recentEntries(h);if(x.length)return {labels:x.map(([d])=>displayMonth(d)),datasets:[{label:KPI_META[key]?.title||key,data:x.map(([,v])=>Number(v))}],source:cached?.source||A[key]?.source||A[key]?.sourceUrl||A.source};}
   // Todas las frecuencias siguen el mismo criterio: últimas 12 observaciones publicadas.
   const maps={gdp:gdpGrowth,ipi:industry,poverty:poverty,trade:tradeBalance};if(maps[key]){const x=recentEntries(maps[key],12);if(x.length)return {labels:x.map(([d])=>String(d)),datasets:[{label:KPI_META[key]?.title||key,data:x.map(([,v])=>v)}],source:KPI_META[key]?.agency};}
   return null;
