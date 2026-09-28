@@ -1,5 +1,6 @@
 import macroData from './api/macro-data.mjs';
 import calendarData from './api/calendar-data.mjs';
+import marketsData from './api/markets.mjs';
 
 const jsonHeaders = {
   'X-Content-Type-Options': 'nosniff',
@@ -15,6 +16,9 @@ function withHeaders(response) {
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+    if (request.method === 'GET' && url.pathname === '/api/markets') {
+      return withHeaders(await marketsData());
+    }
     if (request.method === 'GET' && url.pathname === '/api/macro-data') {
       return withHeaders(await macroData());
     }

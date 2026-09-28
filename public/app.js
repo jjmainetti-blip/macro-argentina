@@ -439,6 +439,18 @@ function renderLatestRelease(releases){
 }
 // Respaldo inmediato: este bloque no debe depender de que termine /api/macro-data.
 renderLatestRelease([{releaseDate:'2026-09-28',date:'sep 2026',displayDate:'Publicado 28 sep 2026 · período sep 2026',title:'ICG UTDT',value:'1,94 puntos · −5,9% mensual'}]);
+function paintMarkets(L){
+  if(!L)return;
+  const marketChange=(id,x,inverse=false)=>{const el=document.getElementById(id);if(!el)return;const c=x?.changePct;if(c==null||!Number.isFinite(Number(c))){el.textContent='—';el.className='market-change neutral';return;}const n=Number(c),good=inverse?n<0:n>0;el.textContent=`${n>0?'↑':n<0?'↓':'→'} ${n>0?'+':''}${fmt.format(n)}%`;el.className='market-change '+(n===0?'neutral':good?'positive':'negative');};
+  if(L.merval){document.getElementById('heroMerval').textContent=`${fmt.format(L.merval.value)} pts`;marketChange('heroMervalChange',L.merval,false);document.getElementById('heroMervalDate').textContent=L.merval.date||'';}
+  if(L.dollar){document.getElementById('heroDollar').textContent=`$ ${fmt.format(L.dollar.value)}`;marketChange('heroDollarChange',L.dollar,true);document.getElementById('heroDollarDate').textContent=L.dollar.date||'';}
+  if(L.risk){document.getElementById('heroRisk').textContent=`${fmt.format(L.risk.value)} pb`;marketChange('heroRiskChange',L.risk,true);document.getElementById('heroRiskDate').textContent=L.risk.date||'';}
+  if(L.bna){document.getElementById('heroBna').textContent=`$ ${fmt.format(L.bna.sell)} venta`;marketChange('heroBnaChange',L.bna,true);document.getElementById('heroBnaDate').textContent=`${L.bna.date||''} · compra $ ${fmt.format(L.bna.buy)}`;}
+}
+async function loadMarketsFast(){
+  try{const cached=JSON.parse(localStorage.getItem('macroMarketsSnapshot')||'null');if(cached?.latest)paintMarkets(cached.latest);}catch{}
+  try{const r=await fetch('/api/markets',{headers:{accept:'application/json'}});if(!r.ok)throw new Error(`markets ${r.status}`);const d=await r.json();paintMarkets(d.latest);try{localStorage.setItem('macroMarketsSnapshot',JSON.stringify(d));}catch{}}catch(e){console.warn('markets fast',e);}
+}
 async function loadAutomaticData(){
   const status=document.getElementById('autoStatus');
   try{
@@ -463,7 +475,7 @@ async function loadAutomaticData(){
     merge(industry,S.industryHistorical); if(S.unemploymentHistorical?.status==='ok'&&S.unemploymentHistorical.annual){for(const [y,v0] of Object.entries(S.unemploymentHistorical.annual)){const v=Number(v0);if(Number.isFinite(v))unemployment[y]=Number((Math.abs(v)<=1?v*100:v).toFixed(1));}}
     if(S.tradeHistorical?.status==='ok'){Object.assign(tradeBalanceMonthly,S.tradeHistorical.monthlyBalance||{});const tm=Object.entries(S.tradeHistorical.monthlyBalance||{}).sort(([a],[b])=>a.localeCompare(b));if(tm.length){const [d,v]=tm.at(-1),prev=(S.tradeHistorical.monthlyBalance||{})[`${Number(d.slice(0,4))-1}${d.slice(4)}`];if(Number.isFinite(Number(prev))){const diff=Number(v)-Number(prev),arrow=diff>0?'↑':diff<0?'↓':'→';const card=document.querySelector('.kpi[data-kpi="trade"] [data-detail]');if(card)card.textContent=`${arrow} ${diff>=0?'+':''}${fmt.format(diff)} M USD vs. igual mes del año anterior`;}}const from1913=o=>Object.fromEntries(Object.entries(o||{}).filter(([y])=>Number(y)>=1913));Object.assign(tradeBalanceNominal,from1913(S.tradeHistorical.balance));Object.assign(exportsNominal,from1913(S.tradeHistorical.exports));Object.assign(importsNominal,from1913(S.tradeHistorical.imports));if(S.tradeHistorical.real){tradeBasePeriod=S.tradeHistorical.real.basePeriod||'';Object.assign(tradeBalance,from1913(S.tradeHistorical.real.balance));Object.assign(exportsSeries,from1913(S.tradeHistorical.real.exports));Object.assign(importsSeries,from1913(S.tradeHistorical.real.imports));}else rebuildRealTrade();}
     safeApply('financialHistorical',()=>{
-    if(S.financialHistorical?.status==='ok'){const F=S.financialHistorical;Object.assign(countryRisk,F.countryRisk||{});Object.assign(mervalUsdCcl,F.mervalUsdCcl||{});Object.assign(freeDollarNominal,F.freeDollar?.nominal||{});Object.assign(freeDollarReal,F.freeDollar?.real||{});Object.assign(interestNominal,F.interestRate?.nominal||{});Object.assign(interestReal,F.interestRate?.real||{});seriesConfig.freeDollar.data=dollarPriceMode==='real'?freeDollarReal:freeDollarNominal;seriesConfig.interestRate.data=interestMode==='real'?interestReal:interestNominal;const L=F.latest||{};const marketChange=(id,x,inverse=false)=>{const el=document.getElementById(id);if(!el)return;const c=x?.changePct;if(c==null||!Number.isFinite(Number(c))){el.textContent='—';el.className='market-change neutral';return;}const n=Number(c),good=inverse?n<0:n>0;el.textContent=`${n>0?'↑':n<0?'↓':'→'} ${n>0?'+':''}${fmt.format(n)}%`;el.className='market-change '+(n===0?'neutral':good?'positive':'negative');};if(L.merval){document.getElementById('heroMerval').textContent=`${fmt.format(L.merval.value)} pts`;marketChange('heroMervalChange',L.merval,false);document.getElementById('heroMervalDate').textContent=L.merval.date||'';}if(L.dollar){document.getElementById('heroDollar').textContent=`$ ${fmt.format(L.dollar.value)}`;marketChange('heroDollarChange',L.dollar,true);document.getElementById('heroDollarDate').textContent=L.dollar.date||'';}if(L.risk){document.getElementById('heroRisk').textContent=`${fmt.format(L.risk.value)} pb`;marketChange('heroRiskChange',L.risk,true);document.getElementById('heroRiskDate').textContent=L.risk.date||'';}if(L.bna){document.getElementById('heroBna').textContent=`$ ${fmt.format(L.bna.sell)} venta`;marketChange('heroBnaChange',L.bna,true);document.getElementById('heroBnaDate').textContent=`${L.bna.date||''} · compra $ ${fmt.format(L.bna.buy)}`;}}
+    if(S.financialHistorical?.status==='ok'){const F=S.financialHistorical;Object.assign(countryRisk,F.countryRisk||{});Object.assign(mervalUsdCcl,F.mervalUsdCcl||{});Object.assign(freeDollarNominal,F.freeDollar?.nominal||{});Object.assign(freeDollarReal,F.freeDollar?.real||{});Object.assign(interestNominal,F.interestRate?.nominal||{});Object.assign(interestReal,F.interestRate?.real||{});seriesConfig.freeDollar.data=dollarPriceMode==='real'?freeDollarReal:freeDollarNominal;seriesConfig.interestRate.data=interestMode==='real'?interestReal:interestNominal;const L=F.latest||{};paintMarkets(L);}
     });
     safeApply('exchangeHistorical',()=>{
     if(S.exchangeHistorical?.status==='ok'){const X=S.exchangeHistorical;Object.assign(freeDollarNominal,X.free?.nominal||{});Object.assign(freeDollarReal,X.free?.real||{});Object.assign(fxOfficialNominal,X.official?.nominal||{});Object.assign(fxOfficialReal,X.official?.real||{});Object.assign(fxFreeTcr,X.free?.tcr||{});Object.assign(fxOfficialTcr,X.official?.tcr||{});Object.assign(fxFreeMonthlyNominal,X.free?.monthly?.nominal||{});Object.assign(fxFreeMonthlyReal,X.free?.monthly?.real||{});Object.assign(fxFreeMonthlyTcr,X.free?.monthly?.tcr||{});Object.assign(fxOfficialMonthlyNominal,X.official?.monthly?.nominal||{});Object.assign(fxOfficialMonthlyReal,X.official?.monthly?.real||{});Object.assign(fxOfficialMonthlyTcr,X.official?.monthly?.tcr||{});Object.assign(fxFreeDailyNominal,X.free?.daily?.nominal||{});Object.assign(fxFreeDailyReal,X.free?.daily?.real||{});Object.assign(fxFreeDailyTcr,X.free?.daily?.tcr||{});Object.assign(fxOfficialDailyNominal,X.official?.daily?.nominal||{});Object.assign(fxOfficialDailyReal,X.official?.daily?.real||{});Object.assign(fxOfficialDailyTcr,X.official?.daily?.tcr||{});
@@ -507,6 +519,7 @@ window.addEventListener('load',()=>{
   initKpiExplorer();
   // Las dos capas se cargan en paralelo: una API pública lenta o bloqueada por CORS no puede impedir que se dibujen las series del backend.
   loadAgenda();
+  loadMarketsFast();
   Promise.allSettled([loadAutomaticData(),loadPublicHistorical()]).then(()=>{
     updateCoverage();
     if(window.Chart){ renderHistory(currentSeries); renderFx(); }
@@ -514,7 +527,7 @@ window.addEventListener('load',()=>{
 });
 
 
-// v79 · Explorador de tarjetas
+// v83 · Explorador de tarjetas
 let kpiDetailChart=null, kpiSourceCache={}, kpiHistoryCache={}, fiscalMetric='primary';
 
 // ICG: separadores de períodos presidenciales. Las fechas se expresan con la
