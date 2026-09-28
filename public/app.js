@@ -451,6 +451,17 @@ async function loadMarketsFast(){
   try{const cached=JSON.parse(localStorage.getItem('macroMarketsSnapshot')||'null');if(cached?.latest)paintMarkets(cached.latest);}catch{}
   try{const r=await fetch('/api/markets',{headers:{accept:'application/json'}});if(!r.ok)throw new Error(`markets ${r.status}`);const d=await r.json();paintMarkets(d.latest);try{localStorage.setItem('macroMarketsSnapshot',JSON.stringify(d));}catch{}}catch(e){console.warn('markets fast',e);}
 }
+async function loadTradeMonthlyFast(){
+  try{
+    const r=await fetch('/api/trade-monthly',{headers:{accept:'application/json'}}); if(!r.ok)throw new Error(`trade monthly ${r.status}`);
+    const d=await r.json(); if(d.status!=='ok'||!d.monthlyBalance)return;
+    for(const k of Object.keys(tradeBalanceMonthly))delete tradeBalanceMonthly[k];
+    Object.assign(tradeBalanceMonthly,d.monthlyBalance);
+    const tm=Object.entries(tradeBalanceMonthly).sort(([a],[b])=>a.localeCompare(b));
+    if(tm.length){const [period,value]=tm.at(-1),prevKey=`${Number(period.slice(0,4))-1}${period.slice(4)}`,prev=tradeBalanceMonthly[prevKey];if(Number.isFinite(Number(prev))){const pct=((Number(value)/Number(prev))-1)*100;const card=document.querySelector('.kpi[data-kpi="trade"] [data-detail]');if(card)card.textContent=`${pct>0?'↑':pct<0?'↓':'→'} ${pct>0?'+':''}${fmt.format(pct)}% i.a. del saldo`;}}
+    if(currentSeries==='trade'&&window.Chart)renderHistory('trade');
+  }catch(e){console.warn('trade monthly fast',e);}
+}
 async function loadAutomaticData(){
   const status=document.getElementById('autoStatus');
   try{
@@ -473,7 +484,7 @@ async function loadAutomaticData(){
 
     const merge=(target,src)=>{if(src?.status==='ok'&&src.annual)Object.assign(target,src.annual)};
     merge(industry,S.industryHistorical); if(S.unemploymentHistorical?.status==='ok'&&S.unemploymentHistorical.annual){for(const [y,v0] of Object.entries(S.unemploymentHistorical.annual)){const v=Number(v0);if(Number.isFinite(v))unemployment[y]=Number((Math.abs(v)<=1?v*100:v).toFixed(1));}}
-    if(S.tradeHistorical?.status==='ok'){Object.assign(tradeBalanceMonthly,S.tradeHistorical.monthlyBalance||{});const tm=Object.entries(S.tradeHistorical.monthlyBalance||{}).sort(([a],[b])=>a.localeCompare(b));if(tm.length){const [d,v]=tm.at(-1),prev=(S.tradeHistorical.monthlyBalance||{})[`${Number(d.slice(0,4))-1}${d.slice(4)}`];if(Number.isFinite(Number(prev))){const diff=Number(v)-Number(prev),arrow=diff>0?'↑':diff<0?'↓':'→';const card=document.querySelector('.kpi[data-kpi="trade"] [data-detail]');if(card)card.textContent=`${arrow} ${diff>=0?'+':''}${fmt.format(diff)} M USD vs. igual mes del año anterior`;}}const from1913=o=>Object.fromEntries(Object.entries(o||{}).filter(([y])=>Number(y)>=1913));Object.assign(tradeBalanceNominal,from1913(S.tradeHistorical.balance));Object.assign(exportsNominal,from1913(S.tradeHistorical.exports));Object.assign(importsNominal,from1913(S.tradeHistorical.imports));if(S.tradeHistorical.real){tradeBasePeriod=S.tradeHistorical.real.basePeriod||'';Object.assign(tradeBalance,from1913(S.tradeHistorical.real.balance));Object.assign(exportsSeries,from1913(S.tradeHistorical.real.exports));Object.assign(importsSeries,from1913(S.tradeHistorical.real.imports));}else rebuildRealTrade();}
+    if(S.tradeHistorical?.status==='ok'){if(Object.keys(tradeBalanceMonthly).length<55)Object.assign(tradeBalanceMonthly,S.tradeHistorical.monthlyBalance||{});const tm=Object.entries(S.tradeHistorical.monthlyBalance||{}).sort(([a],[b])=>a.localeCompare(b));if(tm.length){const [d,v]=tm.at(-1),prev=(S.tradeHistorical.monthlyBalance||{})[`${Number(d.slice(0,4))-1}${d.slice(4)}`];if(Number.isFinite(Number(prev))){const diff=Number(v)-Number(prev),arrow=diff>0?'↑':diff<0?'↓':'→';const card=document.querySelector('.kpi[data-kpi="trade"] [data-detail]');if(card)card.textContent=`${arrow} ${diff>=0?'+':''}${fmt.format(diff)} M USD vs. igual mes del año anterior`;}}const from1913=o=>Object.fromEntries(Object.entries(o||{}).filter(([y])=>Number(y)>=1913));Object.assign(tradeBalanceNominal,from1913(S.tradeHistorical.balance));Object.assign(exportsNominal,from1913(S.tradeHistorical.exports));Object.assign(importsNominal,from1913(S.tradeHistorical.imports));if(S.tradeHistorical.real){tradeBasePeriod=S.tradeHistorical.real.basePeriod||'';Object.assign(tradeBalance,from1913(S.tradeHistorical.real.balance));Object.assign(exportsSeries,from1913(S.tradeHistorical.real.exports));Object.assign(importsSeries,from1913(S.tradeHistorical.real.imports));}else rebuildRealTrade();}
     safeApply('financialHistorical',()=>{
     if(S.financialHistorical?.status==='ok'){const F=S.financialHistorical;Object.assign(countryRisk,F.countryRisk||{});Object.assign(mervalUsdCcl,F.mervalUsdCcl||{});Object.assign(freeDollarNominal,F.freeDollar?.nominal||{});Object.assign(freeDollarReal,F.freeDollar?.real||{});Object.assign(interestNominal,F.interestRate?.nominal||{});Object.assign(interestReal,F.interestRate?.real||{});seriesConfig.freeDollar.data=dollarPriceMode==='real'?freeDollarReal:freeDollarNominal;seriesConfig.interestRate.data=interestMode==='real'?interestReal:interestNominal;const L=F.latest||{};paintMarkets(L);}
     });
@@ -520,6 +531,7 @@ window.addEventListener('load',()=>{
   // Las dos capas se cargan en paralelo: una API pública lenta o bloqueada por CORS no puede impedir que se dibujen las series del backend.
   loadAgenda();
   loadMarketsFast();
+loadTradeMonthlyFast();
   Promise.allSettled([loadAutomaticData(),loadPublicHistorical()]).then(()=>{
     updateCoverage();
     if(window.Chart){ renderHistory(currentSeries); renderFx(); }
