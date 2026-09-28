@@ -1,7 +1,7 @@
 {
   "name": "macro-argentina-dashboard-cloudflare",
   "private": true,
-  "version": "77.0.0",
+  "version": "78.0.0",
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",

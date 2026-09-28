@@ -626,7 +626,7 @@ async function creditHistorical(){
 async function activityPulse(){
   // Últimos valores publicados y verificados. El adaptador queda aislado para que una fuente sectorial no bloquee el resto del tablero.
   return {status:'ok',source:'Economía / INDEC / AFCP / ACARA / BCRA',
-    fiscal:{period:'ago 2026',financial:635.529,primary:1990.322,unit:'miles de millones ARS',sourceUrl:'https://www.argentina.gob.ar/economia/hacienda',history:{
+    fiscal:{period:'ago 2026',financial:635.529,primary:1990.322,unit:'miles de millones ARS',sourceUrl:'https://www.argentina.gob.ar/economia/hacienda',historyPctGDP:{primary:{'2024-12':1.8,'2025-12':1.4,'2026-05':0.7,'2026-06':0.6},financial:{'2024-12':0.3,'2025-12':0.2,'2026-05':0.2,'2026-06':0.1}},history:{
       'Resultado primario':{'2025-08':1556.865,'2025-09':696.965,'2025-10':823.925,'2025-11':2128.010,'2026-01':3125.737,'2026-02':1410.639,'2026-03':930.284,'2026-04':632.844,'2026-05':1924.367,'2026-06':-696.843,'2026-07':2960.333,'2026-08':1990.322},
       'Resultado financiero':{'2025-08':390.301,'2025-09':309.623,'2025-10':517.672,'2025-11':599.954,'2026-01':1105.159,'2026-02':144.421,'2026-03':484.789,'2026-04':268.103,'2026-05':478.613,'2026-06':-1024.891,'2026-07':244.897,'2026-08':635.529}
     }},
@@ -650,7 +650,7 @@ async function activityPulse(){
   };
 }
 export default async()=>{
-  const out={version:77,generatedAt:new Date().toISOString(),sources:{}};
+  const out={version:78,generatedAt:new Date().toISOString(),sources:{}};
   const names=['ipcHistorical','gdpHistorical','industryHistorical','unemploymentHistorical','tradeHistorical','financialHistorical','exchangeHistorical','ipc','arca','icg','bcra','rem','salary','icl','contractIndices','isacHistorical','creditHistorical','activityPulse'];
   const jobs=await Promise.allSettled([ipcHistorical(),gdpHistorical(),industryHistorical(),unemploymentHistorical(),tradeHistorical(),financialHistorical(),exchangeHistorical(),ipc(),arca(),icg(),bcra(),rem(),salaryRipte(),icl(),contractIndices(),isacHistorical(),creditHistorical(),activityPulse()]);
   jobs.forEach((j,i)=>out.sources[names[i]]=j.status==='fulfilled'?j.value:{status:'error',error:String(j.reason?.message||j.reason)});
