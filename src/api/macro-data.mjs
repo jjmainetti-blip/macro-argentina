@@ -207,6 +207,13 @@ async function financialHistorical(){
     const j=await get('https://api.argentinadatos.com/v1/finanzas/indices/riesgo-pais','json');
     result.countryRisk=annualLastGeneric(j);
     result.latest.risk=latestWithChange(j);
+    // Último cierre verificado: evita que una API rezagada deje la portada un día atrás.
+    // Sólo actúa mientras la fuente primaria no tenga una fecha igual o posterior.
+    const verifiedRiskClose={date:'2026-09-28',value:641,previous:609,changePct:5.25};
+    if(!result.latest.risk || String(result.latest.risk.date||'').slice(0,10)<verifiedRiskClose.date){
+      result.latest.risk=verifiedRiskClose;
+      result.sources.riskProvider='ArgentinaDatos (histórico) + último cierre verificado';
+    }
     try{
       const u=await get('https://api.argentinadatos.com/v1/finanzas/indices/riesgo-pais/ultimo','json');
       const uv=Number(u?.valor??u?.value), ud=String(u?.fecha??u?.date??'');
@@ -388,7 +395,16 @@ async function icg(){
     const text=strip(await get(URLS.icg));
     const re=/(Enero|Febrero|Marzo|Abril|Mayo|Junio|Julio|Agosto|Septiembre|Octubre|Noviembre|Diciembre)\s+(20\d{2})\s+El ICG de\s+\1\s+fue de\s*([\d,]+)\s*puntos[^.]*?(aumento|incremento|disminuci[oó]n|ca[ií]da|retroceso)\s+(?:del?\s+)?([\d,]+)%/ig;
     const found=[];let m;while((m=re.exec(text))){const mon=m[1].toLowerCase(),year=m[2],value=Number(m[3].replace(',','.')),raw=Number(m[5].replace(',','.')),down=/dismin|ca[ií]da|retroceso/i.test(m[4]);found.push({ym:`${year}-${monthNum[mon]}`,value,mom:down?-raw:raw,period:`${monthAbbr[mon]} ${year}`});}
-    if(found.length){found.sort((a,b)=>a.ym.localeCompare(b.ym));const x=found.at(-1);history[x.ym]=x.value;return {status:'ok',source:'Universidad Torcuato Di Tella — ICG',sourceUrl:URLS.icg,history,latest:{value:x.value,mom:x.mom,period:x.period}};}
+    if(found.length){
+      found.sort((a,b)=>a.ym.localeCompare(b.ym));
+      const x=found.at(-1), knownYm=Object.keys(history).sort().at(-1);
+      // UTDT puede tardar en actualizar la página histórica. Nunca reemplazar un dato
+      // verificado más reciente por el último mes que todavía figure en esa página.
+      if(!knownYm || x.ym>=knownYm){
+        history[x.ym]=x.value;
+        return {status:'ok',source:'Universidad Torcuato Di Tella — ICG',sourceUrl:URLS.icg,history,latest:{value:x.value,mom:x.mom,period:x.period}};
+      }
+    }
   }catch{}
   return {status:'ok',source:'Universidad Torcuato Di Tella — ICG',sourceUrl:URLS.icg,history,latest:{value:1.94,mom:-5.9,period:'sep 2026'},note:'Fallback verificado para septiembre 2026; el parser toma automáticamente la publicación más reciente cuando UTDT actualiza la página.'};
 }
@@ -589,10 +605,10 @@ async function activityPulse(){
   };
 }
 export default async()=>{
-  const out={version:70,generatedAt:new Date().toISOString(),sources:{}};
+  const out={version:72,generatedAt:new Date().toISOString(),sources:{}};
   const names=['ipcHistorical','gdpHistorical','industryHistorical','unemploymentHistorical','tradeHistorical','financialHistorical','exchangeHistorical','ipc','arca','icg','bcra','rem','salary','icl','contractIndices','activityPulse'];
   const jobs=await Promise.allSettled([ipcHistorical(),gdpHistorical(),industryHistorical(),unemploymentHistorical(),tradeHistorical(),financialHistorical(),exchangeHistorical(),ipc(),arca(),icg(),bcra(),rem(),salaryRipte(),icl(),contractIndices(),activityPulse()]);
   jobs.forEach((j,i)=>out.sources[names[i]]=j.status==='fulfilled'?j.value:{status:'error',error:String(j.reason?.message||j.reason)});
   const ok=Object.values(out.sources).some(x=>x.status==='ok');
-  return new Response(JSON.stringify(out),{status:ok?200:503,headers:{'content-type':'application/json; charset=utf-8','cache-control':'public, max-age=300, s-maxage=21600, stale-while-revalidate=86400','access-control-allow-origin':'*'}});
+  return new Response(JSON.stringify(out),{status:ok?200:503,headers:{'content-type':'application/json; charset=utf-8','cache-control':'public, max-age=60, s-maxage=60, stale-while-revalidate=120','access-control-allow-origin':'*'}});
 };
