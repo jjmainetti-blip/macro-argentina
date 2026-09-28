@@ -514,7 +514,7 @@ window.addEventListener('load',()=>{
 });
 
 
-// v78 · Explorador de tarjetas
+// v79 · Explorador de tarjetas
 let kpiDetailChart=null, kpiSourceCache={}, kpiHistoryCache={}, fiscalMetric='primary';
 function hydrateKpiHistoryCache(S){
   const A=S?.activityPulse||{}; kpiHistoryCache={};

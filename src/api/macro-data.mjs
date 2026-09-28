@@ -413,13 +413,37 @@ async function arca(){
 }
 async function icg(){
   const history={'2025-09':1.94,'2025-10':2.10,'2025-11':2.47,'2025-12':2.46,'2026-01':2.40,'2026-02':2.38,'2026-03':2.30,'2026-04':2.02,'2026-05':1.99,'2026-06':2.07,'2026-07':1.94,'2026-08':2.06,'2026-09':1.94};
-  // Backfill histórico público (fuente primaria UTDT) para que el gráfico no quede limitado al último año.
+  // Backfill histórico público (fuente primaria UTDT). Resolver el dataset por catálogo,
+  // no asumir que el slug visible es también el ID interno de CKAN.
+  let historicalCount=0, historicalError=null;
   try{
-    const x=await bestCsv('sspm-indice-confianza-gobierno',r=>/confianza|gobierno|mensual/i.test(`${r.name||''} ${r.description||''}`)?10:0);
-    const rows=parseCsv(x.text),h=rows[0].map(norm),dc=h.findIndex(v=>/indice_tiempo|fecha|periodo/.test(v));
-    let vc=h.findIndex(v=>/(indice.*confianza.*gobierno|^icg$|confianza_gobierno|nivel_general)/.test(v));if(vc<0)vc=h.findIndex(v=>/confianza|gobierno/.test(v)&&!/(region|variacion)/.test(v));if(vc<0&&h.length===2)vc=1;
-    if(dc>=0&&vc>=0)for(const r of rows.slice(1)){const d=String(r[dc]||'').slice(0,7),v=numberAR(r[vc]);if(/^\d{4}-\d{2}$/.test(d)&&Number.isFinite(v))history[d]=round(v,2);}
-  }catch{}
+    const pkg=await catalogPackage('Índice de Confianza en el Gobierno');
+    if(!pkg)throw new Error('dataset ICG no encontrado en catálogo');
+    const resources=(pkg.resources||[]).filter(r=>String(r.format||'').toLowerCase()==='csv')
+      .sort((a,b)=>(/confianza|gobierno|mensual|serie/i.test(`${b.name||''} ${b.description||''}`)?1:0)-(/confianza|gobierno|mensual|serie/i.test(`${a.name||''} ${a.description||''}`)?1:0));
+    if(!resources.length)throw new Error('dataset ICG sin recurso CSV');
+    let loaded=false;
+    for(const res of resources){
+      try{
+        const rows=parseCsv(await get(res.url)); if(rows.length<3)continue;
+        const h=rows[0].map(norm),dc=h.findIndex(v=>/indice_tiempo|fecha|periodo|time/.test(v));
+        let vc=h.findIndex(v=>/(indice.*confianza.*gobierno|^icg$|confianza_gobierno|nivel_general|valor)/.test(v)&&!/(variacion|region)/.test(v));
+        if(vc<0)vc=h.findIndex((v,i)=>i!==dc&&/confianza|gobierno|icg/.test(v)&&!/(variacion|region)/.test(v));
+        if(vc<0&&h.length===2)vc=dc===0?1:0;
+        if(dc<0||vc<0)continue;
+        let added=0;
+        for(const r of rows.slice(1)){
+          const raw=String(r[dc]||'').trim(); const m=raw.match(/((?:19|20)\d{2})[-\/](\d{1,2})/);
+          if(!m)continue; const d=`${m[1]}-${String(Number(m[2])).padStart(2,'0')}`,v=numberAR(r[vc]);
+          if(Number.isFinite(v)){history[d]=round(v,2);added++;}
+        }
+        if(added>0){historicalCount=added;loaded=true;break;}
+      }catch{}
+    }
+    if(!loaded)throw new Error('no se pudo interpretar ningún CSV del ICG');
+    historicalCount=Object.keys(history).length;
+    if(historicalCount<100)throw new Error(`histórico ICG incompleto: ${historicalCount} observaciones`);
+  }catch(e){historicalError=String(e?.message||e);}
   const monthNum={enero:'01',febrero:'02',marzo:'03',abril:'04',mayo:'05',junio:'06',julio:'07',agosto:'08',septiembre:'09',octubre:'10',noviembre:'11',diciembre:'12'};
   const monthAbbr={enero:'ene',febrero:'feb',marzo:'mar',abril:'abr',mayo:'may',junio:'jun',julio:'jul',agosto:'ago',septiembre:'sep',octubre:'oct',noviembre:'nov',diciembre:'dic'};
   try{
@@ -434,11 +458,11 @@ async function icg(){
       // verificado más reciente por el último mes que todavía figure en esa página.
       if(!knownYm || x.ym>=knownYm){
         history[x.ym]=x.value;
-        return {status:'ok',source:'Universidad Torcuato Di Tella — ICG',sourceUrl:URLS.icg,publicationDate:'2026-09-28',history,latest:{value:x.value,mom:x.mom,period:x.period}};
+        return {status:historicalError?'partial':'ok',source:'Universidad Torcuato Di Tella — ICG',sourceUrl:URLS.icg,publicationDate:'2026-09-28',history,historicalCount:Object.keys(history).length,historicalError,latest:{value:x.value,mom:x.mom,period:x.period}};
       }
     }
   }catch{}
-  return {status:'ok',source:'Universidad Torcuato Di Tella — ICG',sourceUrl:URLS.icg,publicationDate:'2026-09-28',history,latest:{value:1.94,mom:-5.9,period:'sep 2026'},note:'Fallback verificado para septiembre 2026; el parser toma automáticamente la publicación más reciente cuando UTDT actualiza la página.'};
+  return {status:historicalError?'partial':'ok',source:'Universidad Torcuato Di Tella — ICG',sourceUrl:URLS.icg,publicationDate:'2026-09-28',history,historicalCount:Object.keys(history).length,historicalError,latest:{value:1.94,mom:-5.9,period:'sep 2026'},note:'Fallback verificado para septiembre 2026; el parser toma automáticamente la publicación más reciente cuando UTDT actualiza la página.'};
 }
 async function bcra(){
   const text=strip(await get(URLS.bcra));
@@ -650,7 +674,7 @@ async function activityPulse(){
   };
 }
 export default async()=>{
-  const out={version:78,generatedAt:new Date().toISOString(),sources:{}};
+  const out={version:79,generatedAt:new Date().toISOString(),sources:{}};
   const names=['ipcHistorical','gdpHistorical','industryHistorical','unemploymentHistorical','tradeHistorical','financialHistorical','exchangeHistorical','ipc','arca','icg','bcra','rem','salary','icl','contractIndices','isacHistorical','creditHistorical','activityPulse'];
   const jobs=await Promise.allSettled([ipcHistorical(),gdpHistorical(),industryHistorical(),unemploymentHistorical(),tradeHistorical(),financialHistorical(),exchangeHistorical(),ipc(),arca(),icg(),bcra(),rem(),salaryRipte(),icl(),contractIndices(),isacHistorical(),creditHistorical(),activityPulse()]);
   jobs.forEach((j,i)=>out.sources[names[i]]=j.status==='fulfilled'?j.value:{status:'error',error:String(j.reason?.message||j.reason)});
