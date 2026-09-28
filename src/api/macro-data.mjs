@@ -232,7 +232,7 @@ async function financialHistorical(){
     result.latest.risk=latestWithChange(j);
     // Último cierre verificado: evita que una API rezagada deje la portada un día atrás.
     // Sólo actúa mientras la fuente primaria no tenga una fecha igual o posterior.
-    const verifiedRiskClose={date:'2026-09-28',value:641,previous:609,changePct:5.25};
+    const verifiedRiskClose={date:'2026-09-28',value:628,previous:609,changePct:round((628/609-1)*100,2),changeBp:19};
     if(!result.latest.risk || String(result.latest.risk.date||'').slice(0,10)<verifiedRiskClose.date){
       result.latest.risk=verifiedRiskClose;
       result.sources.riskProvider='ArgentinaDatos (histórico) + último cierre verificado';
@@ -240,7 +240,7 @@ async function financialHistorical(){
     try{
       const u=await get('https://api.argentinadatos.com/v1/finanzas/indices/riesgo-pais/ultimo','json');
       const uv=Number(u?.valor??u?.value), ud=String(u?.fecha??u?.date??'');
-      if(Number.isFinite(uv)&&ud&&(!result.latest.risk||ud>=String(result.latest.risk.date||''))){
+      if(Number.isFinite(uv)&&ud&&(!result.latest.risk||ud>String(result.latest.risk.date||''))){
         const prev=result.latest.risk?.value;
         result.latest.risk={date:ud,value:uv,previous:prev??null,changePct:prev&&prev!==uv?round((uv/prev-1)*100,2):result.latest.risk?.changePct??null};
       }
