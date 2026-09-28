@@ -468,7 +468,7 @@ async function loadCementMonthlyFast(){
     const r=await fetch('/api/cement-monthly',{headers:{accept:'application/json'}}); if(!r.ok)throw new Error(`cement monthly ${r.status}`);
     const d=await r.json(); if(!d.monthlyYoy)return;
     for(const k of Object.keys(cementMonthlyYoy))delete cementMonthlyYoy[k];
-    Object.assign(cementMonthlyYoy,d.monthlyYoy);
+    Object.assign(cementMonthlyYoy,d.monthlyYoy||{});
     if(currentSeries==='cement'&&window.Chart)renderHistory('cement');
   }catch(e){console.warn('cement monthly fast',e);}
 }

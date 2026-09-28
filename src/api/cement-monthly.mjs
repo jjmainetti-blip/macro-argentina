@@ -4,27 +4,26 @@ function urlFor(y,m){
   return `${AFCP}/${ym}${y>=2023?'-ProDesp':''}/estadistica02.html`;
 }
 function textify(html){return String(html).replace(/<script[\s\S]*?<\/script>/gi,' ').replace(/<style[\s\S]*?<\/style>/gi,' ').replace(/<[^>]+>/g,' ').replace(/&nbsp;|&#160;/gi,' ').replace(/&[a-z]+;/gi,' ').replace(/\s+/g,' ');}
-function firstDispatch(text,year){
-  const i=text.search(new RegExp(`Año\\s+${year}\\b`,'i')); if(i<0)return null;
-  const chunk=text.slice(i,i+700);
-  const m=chunk.match(/Año\s+\d{4}\s+([\d.]{5,})/i); if(!m)return null;
-  const n=Number(m[1].replace(/\./g,'')); return Number.isFinite(n)?n:null;
+function num(s){const n=Number(String(s).replace(/\./g,'').replace(',','.'));return Number.isFinite(n)?n:null;}
+function dispatchForYear(text,year){
+  const re=new RegExp(`(?:Año\\s*)?${year}\\b([\\s\\S]{0,320})`,'i'),m=text.match(re); if(!m)return null;
+  const vals=[...m[1].matchAll(/\b(\d{1,3}(?:\.\d{3})+(?:,\d+)?|\d{6,7}(?:,\d+)?)\b/g)].map(x=>num(x[1])).filter(n=>n>=300000&&n<=2000000);
+  return vals.length?vals[0]:null;
 }
-async function one(y,m){
-  const u=urlFor(y,m),r=await fetch(u,{headers:{'user-agent':'MacroArgentinaDashboard/4.0'},cf:{cacheTtl:21600,cacheEverything:true}});
-  if(!r.ok)throw new Error(`${r.status} ${u}`); const t=textify(await r.text());
-  return {y,m,url:u,cur:firstDispatch(t,y),prev:firstDispatch(t,y-1)};
+async function page(y,m){
+  const u=urlFor(y,m),r=await fetch(u,{headers:{'user-agent':'MacroArgentinaDashboard/5.0'},cf:{cacheTtl:21600,cacheEverything:true}});
+  if(!r.ok)throw new Error(`${r.status} ${u}`); return {m,text:textify(await r.text()),url:u};
 }
 export default async()=>{
-  const jobs=[];
-  for(let m=1;m<=12;m++)jobs.push(one(2023,m)); // aporta 2022 y 2023
-  for(let m=1;m<=12;m++)jobs.push(one(2025,m)); // aporta 2024 y 2025
-  for(let m=1;m<=8;m++)jobs.push(one(2026,m));  // aporta ene-ago 2026
-  for(let m=9;m<=12;m++)jobs.push(one(2022,m)); // completa sep-dic 2021
+  // Cada ficha mensual de AFCP contiene la comparación del mismo mes para varios años.
+  // 12 requests bastan para reconstruir 2020-2026 y calcular 60 variaciones i.a.
+  const jobs=[]; for(let m=1;m<=8;m++)jobs.push(page(2026,m)); for(let m=9;m<=12;m++)jobs.push(page(2025,m));
   const settled=await Promise.allSettled(jobs),tons={};
-  for(const j of settled){if(j.status!=='fulfilled')continue;const {y,m,cur,prev}=j.value,k=String(m).padStart(2,'0');if(Number.isFinite(prev))tons[`${y-1}-${k}`]=prev;if(Number.isFinite(cur))tons[`${y}-${k}`]=cur;}
-  const periods=Object.keys(tons).sort().slice(-60),monthlyTons=Object.fromEntries(periods.map(k=>[k,tons[k]])),monthlyYoy={};
-  for(const k of periods){const p=`${Number(k.slice(0,4))-1}${k.slice(4)}`;if(Number.isFinite(tons[p])&&tons[p]!==0)monthlyYoy[k]=Math.round(((tons[k]/tons[p])-1)*1000)/10;}
-  const ok=Object.keys(monthlyYoy).length>=48;
-  return new Response(JSON.stringify({status:ok?'ok':'partial',source:'AFCP — Despacho de Cemento y Consumo del Mercado Interno',sourceUrl:'https://www.afcp.org.ar/copia-de-produccion-de-cemento-y-cl',monthlyTons,monthlyYoy,observations:Object.keys(monthlyYoy).length,failed:settled.filter(x=>x.status==='rejected').length}),{status:200,headers:{'content-type':'application/json; charset=utf-8','cache-control':'public, max-age=21600, s-maxage=21600, stale-while-revalidate=86400','access-control-allow-origin':'*'}});
+  for(const j of settled){if(j.status!=='fulfilled')continue;const {m,text}=j.value,k=String(m).padStart(2,'0');for(let y=2020;y<=2026;y++){if(y===2026&&m>8)continue;const v=dispatchForYear(text,y);if(Number.isFinite(v))tons[`${y}-${k}`]=v;}}
+  const all=Object.keys(tons).sort(); const monthlyYoy={};
+  for(const k of all){const p=`${Number(k.slice(0,4))-1}${k.slice(4)}`;if(Number.isFinite(tons[p])&&tons[p]!==0)monthlyYoy[k]=Math.round(((tons[k]/tons[p])-1)*1000)/10;}
+  const yoyKeys=Object.keys(monthlyYoy).sort().slice(-60), levelKeys=Object.keys(tons).sort().slice(-72);
+  const outYoy=Object.fromEntries(yoyKeys.map(k=>[k,monthlyYoy[k]])),outLevels=Object.fromEntries(levelKeys.map(k=>[k,tons[k]]));
+  const continuous=yoyKeys.length===60&&yoyKeys.every((k,i)=>!i||(()=>{const a=yoyKeys[i-1],d=new Date(`${a}-01T00:00:00Z`);d.setUTCMonth(d.getUTCMonth()+1);return `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}`===k;})());
+  return new Response(JSON.stringify({status:continuous?'ok':'partial',source:'AFCP — Despacho de Cemento y Consumo del Mercado Interno',sourceUrl:'https://www.afcp.org.ar/copia-de-produccion-de-cemento-y-cl',monthlyLevels:outLevels,monthlyYoy:outYoy,levelObservations:levelKeys.length,observations:yoyKeys.length,continuous,first:yoyKeys[0]||null,last:yoyKeys.at(-1)||null,failed:settled.filter(x=>x.status==='rejected').length}),{status:200,headers:{'content-type':'application/json; charset=utf-8','cache-control':'public, max-age=21600, s-maxage=21600, stale-while-revalidate=86400','access-control-allow-origin':'*'}});
 };
