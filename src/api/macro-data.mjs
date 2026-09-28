@@ -109,7 +109,19 @@ async function gdpHistorical(){
   }
   // The official INDEC 1980–2005 empalmed workbook is the authority for the gap if CSV discovery is incomplete.
   if(Object.keys(annual).length<10)throw new Error('series históricas de PIB no disponibles en CSV');
-  const quarterlyYoy={'2025-T3':3.3,'2025-T4':2.1,'2026-T1':2.3,'2026-T2':2.0};
+  const quarterlyYoy={};
+  try{
+    const q=await bestCsv('sspm_6',r=>/trimestral/i.test(`${r.name||''} ${r.description||''}`)?10:0);
+    const rows=parseCsv(q.text),h=rows[0].map(norm),dc=h.findIndex(x=>/indice_tiempo|fecha|periodo/.test(x));
+    let vc=h.findIndex(x=>/producto_interno_bruto_precios_mercado|^pib$/.test(x));
+    if(vc<0)vc=h.findIndex(x=>/producto.*interno.*bruto/.test(x)&&!/(corriente|variacion|porcentaje)/.test(x));
+    const qrows=[];
+    if(dc>=0&&vc>=0)for(const r of rows.slice(1)){const d=String(r[dc]||'').slice(0,10),v=numberAR(r[vc]);if(/^\d{4}-\d{2}/.test(d)&&Number.isFinite(v))qrows.push([d,v]);}
+    qrows.sort((a,b)=>a[0].localeCompare(b[0]));
+    for(let i=4;i<qrows.length;i++){const [d,v]=qrows[i],[pd,pv]=qrows[i-4];if(d.slice(5,7)!==pd.slice(5,7)||!pv)continue;const m=Number(d.slice(5,7)),qtr=Math.floor((m-1)/3)+1;quarterlyYoy[`${d.slice(0,4)}-T${qtr}`]=round(pct(v,pv),1);}
+    if(Object.keys(quarterlyYoy).length)segments.push({query:'PIB trimestral a precios constantes, base 2004',range:'serie trimestral',sourceUrl:q.url});
+  }catch{}
+  Object.assign(quarterlyYoy,{'2025-T3':3.3,'2025-T4':2.1,'2026-T1':2.3,'2026-T2':2.0});
   return {status:'ok',source:'INDEC / Datos Argentina — Cuentas Nacionales históricas',annual,quarterlyYoy,segments};
 }
 
@@ -391,6 +403,13 @@ async function arca(){
 }
 async function icg(){
   const history={'2025-09':1.94,'2025-10':2.10,'2025-11':2.47,'2025-12':2.46,'2026-01':2.40,'2026-02':2.38,'2026-03':2.30,'2026-04':2.02,'2026-05':1.99,'2026-06':2.07,'2026-07':1.94,'2026-08':2.06,'2026-09':1.94};
+  // Backfill histórico público (fuente primaria UTDT) para que el gráfico no quede limitado al último año.
+  try{
+    const x=await bestCsv('sspm_370',r=>/confianza|gobierno|mensual/i.test(`${r.name||''} ${r.description||''}`)?10:0);
+    const rows=parseCsv(x.text),h=rows[0].map(norm),dc=h.findIndex(v=>/indice_tiempo|fecha|periodo/.test(v));
+    let vc=h.findIndex(v=>/(indice.*confianza.*gobierno|^icg$)/.test(v));if(vc<0)vc=h.findIndex(v=>/confianza.*gobierno/.test(v));
+    if(dc>=0&&vc>=0)for(const r of rows.slice(1)){const d=String(r[dc]||'').slice(0,7),v=numberAR(r[vc]);if(/^\d{4}-\d{2}$/.test(d)&&Number.isFinite(v))history[d]=round(v,2);}
+  }catch{}
   const monthNum={enero:'01',febrero:'02',marzo:'03',abril:'04',mayo:'05',junio:'06',julio:'07',agosto:'08',septiembre:'09',octubre:'10',noviembre:'11',diciembre:'12'};
   const monthAbbr={enero:'ene',febrero:'feb',marzo:'mar',abril:'abr',mayo:'may',junio:'jun',julio:'jul',agosto:'ago',septiembre:'sep',octubre:'oct',noviembre:'nov',diciembre:'dic'};
   try{
@@ -597,7 +616,7 @@ async function activityPulse(){
       'Resultado primario':{'2025-08':1556.865,'2025-09':696.965,'2025-10':823.925,'2025-11':2128.010,'2026-01':3125.737,'2026-02':1410.639,'2026-03':930.284,'2026-04':632.844,'2026-05':1924.367,'2026-06':-696.843,'2026-07':2960.333,'2026-08':1990.322},
       'Resultado financiero':{'2025-08':390.301,'2025-09':309.623,'2025-10':517.672,'2025-11':599.954,'2026-01':1105.159,'2026-02':144.421,'2026-03':484.789,'2026-04':268.103,'2026-05':478.613,'2026-06':-1024.891,'2026-07':244.897,'2026-08':635.529}
     }},
-    cement:{period:'ago 2026',tons:817082,yoy:-8.1,mom:-0.1,sourceUrl:'https://www.afcp.org.ar/copia-de-produccion-de-cemento-y-cl',historyYoy:{'2026-08':-8.1},history:{
+    cement:{period:'ago 2026',tons:817082,yoy:-8.1,mom:-0.1,sourceUrl:'https://www.afcp.org.ar/copia-de-produccion-de-cemento-y-cl',historyYoy:{'2026-01':-5.3,'2026-02':-5.3,'2026-03':11.0,'2026-04':-13.2,'2026-05':-1.5,'2026-06':-1.4,'2026-07':-8.2,'2026-08':-8.1},history:{
       'Despacho nacional (t)':{'2025-09':917330,'2025-10':944216,'2025-11':829590,'2025-12':776185,'2026-01':742456,'2026-02':750305,'2026-03':846616,'2026-04':837659,'2026-05':843563,'2026-06':811474,'2026-07':817901,'2026-08':817082}
     }},
     isac:{period:'jul 2026',yoy:-4.5,mom:-4.6,sourceUrl:'https://www.indec.gob.ar/indec/web/Institucional-Indec-InformesTecnicos-47',history:{
@@ -617,7 +636,7 @@ async function activityPulse(){
   };
 }
 export default async()=>{
-  const out={version:74,generatedAt:new Date().toISOString(),sources:{}};
+  const out={version:75,generatedAt:new Date().toISOString(),sources:{}};
   const names=['ipcHistorical','gdpHistorical','industryHistorical','unemploymentHistorical','tradeHistorical','financialHistorical','exchangeHistorical','ipc','arca','icg','bcra','rem','salary','icl','contractIndices','isacHistorical','creditHistorical','activityPulse'];
   const jobs=await Promise.allSettled([ipcHistorical(),gdpHistorical(),industryHistorical(),unemploymentHistorical(),tradeHistorical(),financialHistorical(),exchangeHistorical(),ipc(),arca(),icg(),bcra(),rem(),salaryRipte(),icl(),contractIndices(),isacHistorical(),creditHistorical(),activityPulse()]);
   jobs.forEach((j,i)=>out.sources[names[i]]=j.status==='fulfilled'?j.value:{status:'error',error:String(j.reason?.message||j.reason)});
