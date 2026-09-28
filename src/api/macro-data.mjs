@@ -422,7 +422,9 @@ async function icg(){
     const resources=(pkg.resources||[]).filter(r=>String(r.format||'').toLowerCase()==='csv')
       .sort((a,b)=>(/confianza|gobierno|mensual|serie/i.test(`${b.name||''} ${b.description||''}`)?1:0)-(/confianza|gobierno|mensual|serie/i.test(`${a.name||''} ${a.description||''}`)?1:0));
     if(!resources.length)throw new Error('dataset ICG sin recurso CSV');
-    let loaded=false;
+    // Un dataset puede exponer recursos anuales y mensuales. No aceptar el primer
+    // CSV interpretable: evaluar todos y conservar el de mayor cobertura mensual.
+    let bestHistory=null,bestCount=0,bestResource='';
     for(const res of resources){
       try{
         const rows=parseCsv(await get(res.url)); if(rows.length<3)continue;
@@ -431,16 +433,22 @@ async function icg(){
         if(vc<0)vc=h.findIndex((v,i)=>i!==dc&&/confianza|gobierno|icg/.test(v)&&!/(variacion|region)/.test(v));
         if(vc<0&&h.length===2)vc=dc===0?1:0;
         if(dc<0||vc<0)continue;
-        let added=0;
+        const candidate={};
         for(const r of rows.slice(1)){
-          const raw=String(r[dc]||'').trim(); const m=raw.match(/((?:19|20)\d{2})[-\/](\d{1,2})/);
-          if(!m)continue; const d=`${m[1]}-${String(Number(m[2])).padStart(2,'0')}`,v=numberAR(r[vc]);
-          if(Number.isFinite(v)){history[d]=round(v,2);added++;}
+          const raw=String(r[dc]||'').trim();
+          // Aceptar YYYY-MM, YYYY/MM y fechas completas, pero nunca reducir a YYYY.
+          const m=raw.match(/((?:19|20)\d{2})[-\/](\d{1,2})(?:[-\/]\d{1,2})?/);
+          if(!m)continue;
+          const month=Number(m[2]); if(month<1||month>12)continue;
+          const d=`${m[1]}-${String(month).padStart(2,'0')}`,v=numberAR(r[vc]);
+          if(Number.isFinite(v))candidate[d]=round(v,2);
         }
-        if(added>0){historicalCount=added;loaded=true;break;}
+        const count=Object.keys(candidate).length;
+        if(count>bestCount){bestHistory=candidate;bestCount=count;bestResource=res.name||res.url||'';}
       }catch{}
     }
-    if(!loaded)throw new Error('no se pudo interpretar ningún CSV del ICG');
+    if(!bestHistory||bestCount<100)throw new Error(`no se encontró recurso mensual completo del ICG (máximo: ${bestCount} meses)`);
+    Object.assign(history,bestHistory);
     historicalCount=Object.keys(history).length;
     if(historicalCount<100)throw new Error(`histórico ICG incompleto: ${historicalCount} observaciones`);
   }catch(e){historicalError=String(e?.message||e);}
@@ -674,7 +682,7 @@ async function activityPulse(){
   };
 }
 export default async()=>{
-  const out={version:79,generatedAt:new Date().toISOString(),sources:{}};
+  const out={version:81,generatedAt:new Date().toISOString(),sources:{}};
   const names=['ipcHistorical','gdpHistorical','industryHistorical','unemploymentHistorical','tradeHistorical','financialHistorical','exchangeHistorical','ipc','arca','icg','bcra','rem','salary','icl','contractIndices','isacHistorical','creditHistorical','activityPulse'];
   const jobs=await Promise.allSettled([ipcHistorical(),gdpHistorical(),industryHistorical(),unemploymentHistorical(),tradeHistorical(),financialHistorical(),exchangeHistorical(),ipc(),arca(),icg(),bcra(),rem(),salaryRipte(),icl(),contractIndices(),isacHistorical(),creditHistorical(),activityPulse()]);
   jobs.forEach((j,i)=>out.sources[names[i]]=j.status==='fulfilled'?j.value:{status:'error',error:String(j.reason?.message||j.reason)});
