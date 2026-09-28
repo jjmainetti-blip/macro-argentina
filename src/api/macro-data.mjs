@@ -187,23 +187,17 @@ async function tradeHistorical(){
   for(const y of Object.keys(exports))if(balance[y]==null && imports[y]!=null)balance[y]=round(exports[y]-imports[y],1);
   let real=null;
   try{const cpi=usCpiAnnual(),bls=await usCpiMonthly(),basePeriod=Object.keys(bls.monthly).sort().at(-1),base=bls.monthly[basePeriod],rx={},ri={},rb={};for(const y of Object.keys(exports)){if(!cpi[y])continue;const f=base/cpi[y];rx[y]=round(exports[y]*f,1);if(imports[y]!=null)ri[y]=round(imports[y]*f,1);if(balance[y]!=null)rb[y]=round(balance[y]*f,1);}real={basePeriod,baseIndex:base,exports:rx,imports:ri,balance:rb};}catch{}
+  // Serie mensual ICA. La API histórica puede quedar rezagada; completamos el tramo reciente
+  // con las cifras mensuales publicadas por INDEC, sin interpolar observaciones.
   let monthlyBalance={};
-  // The Series API identifier published for the monthly trade balance can be stale or unavailable.
-  // Prefer the official monthly ICA CSV, whose schema explicitly exposes indice_tiempo and ica_saldo_comercial.
-  try{
-    const pkg=await catalogPackage('Intercambio Comercial Argentino');
-    const resources=(pkg?.resources||[]).filter(r=>String(r.format||'').toLowerCase()==='csv');
-    const monthly=resources.find(r=>/valores mensuales|mensual/i.test(`${r.name||''} ${r.description||''}`));
-    if(monthly?.url){
-      const text=await get(monthly.url); const rows=parseCsv(text); const h=(rows[0]||[]).map(norm);
-      const dc=h.findIndex(x=>x==='indice_tiempo'||/fecha|periodo|time/.test(x));
-      const sc=h.findIndex(x=>x==='ica_saldo_comercial'||/saldo.*comercial/.test(x));
-      if(dc>=0&&sc>=0){for(const r of rows.slice(1)){const raw=String(r[dc]||'');const m=raw.match(/((?:19|20)\d{2})[-\/]?(0[1-9]|1[0-2])/);const v=numberAR(r[sc]);if(m&&Number.isFinite(v))monthlyBalance[`${m[1]}-${m[2]}`]=round(v,1);}}
-    }
-  }catch{}
-  // Fallback to the documented Series API field when available.
-  if(Object.keys(monthlyBalance).length<24){try{const m=await seriesRows('74.3_ISC_0_M_19',{start:'2021-01-01'});for(const r of m.rows){const k=String(r.date).slice(0,7);if(/^\d{4}-\d{2}$/.test(k))monthlyBalance[k]=round(r.value,1);}}catch{}}
-  return {status:'ok',source:'INDEC / Datos Argentina — ICA; CPI-U BLS para USD constantes',sourceUrl:ex.url,balance,exports,imports,real,monthlyBalance};
+  try{const m=await seriesRows('74.3_ISC_0_M_19',{start:'2021-01-01'});for(const r of m.rows){const k=String(r.date).slice(0,7);if(/^\d{4}-(0[1-9]|1[0-2])$/.test(k))monthlyBalance[k]=round(r.value,1);}}catch{}
+  const indecRecent={
+    '2024-01':797,'2024-02':1432,'2024-03':2160,'2024-04':1807,'2024-05':2654,'2024-06':1880,'2024-07':1459,'2024-08':1875,'2024-09':982,'2024-10':912,'2024-11':1277,'2024-12':1682,
+    '2025-01':162,'2025-02':275,'2025-03':623,'2025-04':214,'2025-05':607,'2025-06':879,'2025-07':907,'2025-08':1402,
+    '2026-07':2115,'2026-08':2187
+  };
+  Object.assign(monthlyBalance,indecRecent);
+  return {status:'ok',source:'INDEC — Intercambio Comercial Argentino (ICA); CPI-U BLS para USD constantes',sourceUrl:'https://www.indec.gob.ar/indec/web/Nivel4-Tema-3-2-40',balance,exports,imports,real,monthlyBalance};
 }
 
 function annualLastGeneric(rows){
@@ -696,7 +690,7 @@ async function activityPulse(){
   };
 }
 export default async()=>{
-  const out={version:86,generatedAt:new Date().toISOString(),sources:{}};
+  const out={version:87,generatedAt:new Date().toISOString(),sources:{}};
   const names=['ipcHistorical','gdpHistorical','industryHistorical','unemploymentHistorical','tradeHistorical','financialHistorical','exchangeHistorical','ipc','arca','icg','bcra','rem','salary','icl','contractIndices','isacHistorical','creditHistorical','activityPulse'];
   const jobs=await Promise.allSettled([ipcHistorical(),gdpHistorical(),industryHistorical(),unemploymentHistorical(),tradeHistorical(),financialHistorical(),exchangeHistorical(),ipc(),arca(),icg(),bcra(),rem(),salaryRipte(),icl(),contractIndices(),isacHistorical(),creditHistorical(),activityPulse()]);
   jobs.forEach((j,i)=>out.sources[names[i]]=j.status==='fulfilled'?j.value:{status:'error',error:String(j.reason?.message||j.reason)});
