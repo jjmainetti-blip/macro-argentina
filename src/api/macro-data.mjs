@@ -10,9 +10,17 @@ const URLS={
   bcra:'https://www.bcra.gob.ar/principales-variables/',
   calendar:'https://www.bcra.gob.ar/calendario-de-informes/'
 };
+const GET_CACHE=new Map();
 async function get(url,type='text'){
-  const c=new AbortController(); const t=setTimeout(()=>c.abort(),9000);
-  try{const r=await fetch(url,{signal:c.signal,headers:{'user-agent':'MacroArgentinaDashboard/3.0 (+public economic dashboard)','accept-language':'es-AR,es;q=.9'}});if(!r.ok)throw new Error(`${r.status} ${r.statusText}`);return type==='json'?r.json():r.text();}finally{clearTimeout(t)}
+  const key=`${type}:${url}`;
+  if(GET_CACHE.has(key))return GET_CACHE.get(key);
+  const promise=(async()=>{
+    const c=new AbortController(); const t=setTimeout(()=>c.abort(),9000);
+    try{const r=await fetch(url,{signal:c.signal,headers:{'user-agent':'MacroArgentinaDashboard/3.0 (+public economic dashboard)','accept-language':'es-AR,es;q=.9'}});if(!r.ok)throw new Error(`${r.status} ${r.statusText}`);return type==='json'?r.json():r.text();}
+    finally{clearTimeout(t)}
+  })();
+  GET_CACHE.set(key,promise);
+  try{return await promise}catch(e){GET_CACHE.delete(key);throw e}
 }
 const round=(n,d=1)=>n==null?null:Number(n.toFixed(d));
 const pct=(a,b)=>b?(a/b-1)*100:null;
@@ -92,7 +100,7 @@ async function gdpHistorical(){
       const pack=await catalogPackage(q); if(!pack)continue;
       const resources=(pack.resources||[]).filter(r=>String(r.format).toLowerCase()==='csv');
       let best={}; let url='';
-      for(const r of resources.slice(0,12)){
+      for(const r of resources.slice(0,3)){
         try{const x=annualGrowthFromCsv(await get(r.url),a,b);if(Object.keys(x).length>Object.keys(best).length){best=x;url=r.url}}catch{}
       }
       if(Object.keys(best).length){Object.assign(annual,best);segments.push({query:q,range:`${Math.min(...Object.keys(best).map(Number))}–${Math.max(...Object.keys(best).map(Number))}`,sourceUrl:url})}
@@ -139,16 +147,21 @@ function usCpiAnnual(){
 }
 
 async function usCpiMonthly(){
-  // BLS CPI-U All items, U.S. city average, NSA (CUUR0000SA0).
-  // Snapshot local garantiza que TCR y comercio real no desaparezcan si BLS o el límite de subrequests falla.
-  const monthly={'2025-08':323.976,'2026-07':333.918,'2026-08':334.980};
+  // BLS CPI-U All items, U.S. city average, not seasonally adjusted (CUUR0000SA0).
+  // Public API supports a 20-year window without a key; 2007-current covers the modern FX series.
   const end=new Date().getFullYear(), start=Math.max(2024,end-2);
-  const c=new AbortController(); const t=setTimeout(()=>c.abort(),7000);
+  const c=new AbortController(); const t=setTimeout(()=>c.abort(),9000);
   try{
-    const r=await fetch('https://api.bls.gov/publicAPI/v2/timeseries/data/',{method:'POST',signal:c.signal,headers:{'content-type':'application/json','user-agent':'MacroArgentinaDashboard/4.1'},body:JSON.stringify({seriesid:['CUUR0000SA0'],startyear:String(start),endyear:String(end)})});
-    if(r.ok){const j=await r.json();for(const x of j?.Results?.series?.[0]?.data||[]){if(!/^M(0[1-9]|1[0-2])$/.test(x.period))continue;const v=Number(x.value);if(Number.isFinite(v))monthly[`${x.year}-${x.period.slice(1)}`]=v;}}
-  }catch{} finally{clearTimeout(t)}
-  return {monthly,source:'BLS CPI-U CUUR0000SA0 (API + snapshot de respaldo)',seriesId:'CUUR0000SA0'};
+    const r=await fetch('https://api.bls.gov/publicAPI/v2/timeseries/data/',{method:'POST',signal:c.signal,headers:{'content-type':'application/json','user-agent':'MacroArgentinaDashboard/4.0'},body:JSON.stringify({seriesid:['CUUR0000SA0'],startyear:String(start),endyear:String(end)})});
+    if(!r.ok)throw new Error(`BLS ${r.status}`); const j=await r.json();
+    const rows=j?.Results?.series?.[0]?.data||[], monthly={};
+    for(const x of rows){if(!/^M(0[1-9]|1[0-2])$/.test(x.period))continue;const v=Number(x.value);if(Number.isFinite(v))monthly[`${x.year}-${x.period.slice(1)}`]=v;}
+    // Snapshot de respaldo para que la base nunca retroceda si la API BLS limita el rango o falla parcialmente.
+    const fallback={'2025-08':323.976,'2026-07':333.918,'2026-08':334.980};
+    for(const [k,v] of Object.entries(fallback)) if(monthly[k]==null) monthly[k]=v;
+    if(!Object.keys(monthly).length)throw new Error('BLS sin observaciones mensuales');
+    return {monthly,source:'BLS CPI-U All items, U.S. city average, not seasonally adjusted',seriesId:'CUUR0000SA0'};
+  }finally{clearTimeout(t)}
 }
 function latestCommonMonth(a,b){const common=Object.keys(a||{}).filter(k=>b?.[k]!=null).sort();return common.at(-1)||null;}
 async function tradeHistorical(){
@@ -190,7 +203,28 @@ function latestWithChange(rows){const a=(rows||[]).map(r=>({date:String(r.fecha|
 async function financialHistorical(){
   const result={status:'ok',source:'BYMA / Banco Nación / J.P. Morgan; proveedores secundarios identificados cuando corresponde',countryRisk:{},mervalUsdCcl:{},mervalPoints:{},freeDollar:{nominal:{},real:{},baseYear:2025},interestRate:{nominal:{},real:{}},latest:{},sources:{risk:'J.P. Morgan EMBI+ Argentina',riskProvider:'ArgentinaDatos (republicación)',merval:'BYMA / S&P Merval',mervalProvider:'Zion / Yahoo Finance (fallback sin credenciales BYMA)',dollar:'BYMA / Índice Dólar BYMA (MEP)',dollarProvider:'ArgentinaDatos (fallback sin credenciales BYMA)',bna:'Banco de la Nación Argentina'}};
   const errors=[];
-  try{const j=await get('https://api.argentinadatos.com/v1/finanzas/indices/riesgo-pais','json');result.countryRisk=annualLastGeneric(j);result.latest.risk=latestWithChange(j);if(Object.keys(result.countryRisk).length<20)throw new Error('cobertura EMBI+ insuficiente');}catch(e){errors.push('riesgo país: '+e.message)}
+  try{
+    const j=await get('https://api.argentinadatos.com/v1/finanzas/indices/riesgo-pais','json');
+    result.countryRisk=annualLastGeneric(j);
+    result.latest.risk=latestWithChange(j);
+    try{
+      const u=await get('https://api.argentinadatos.com/v1/finanzas/indices/riesgo-pais/ultimo','json');
+      const uv=Number(u?.valor??u?.value), ud=String(u?.fecha??u?.date??'');
+      if(Number.isFinite(uv)&&ud&&(!result.latest.risk||ud>=String(result.latest.risk.date||''))){
+        const prev=result.latest.risk?.value;
+        result.latest.risk={date:ud,value:uv,previous:prev??null,changePct:prev&&prev!==uv?round((uv/prev-1)*100,2):result.latest.risk?.changePct??null};
+      }
+    }catch{}
+    try{
+      const m=await get('https://monedapi.ar/api/v2/arg/riesgo','json');
+      const mv=Number(m?.sell??m?.buy??m?.value), md=String(m?.updatedAt??m?.date??'').slice(0,10);
+      if(Number.isFinite(mv)&&md&&(!result.latest.risk||md>String(result.latest.risk.date||'').slice(0,10))){
+        result.latest.risk={date:md,value:mv,previous:Number(m?.change?.referenceValue)||null,changePct:Number.isFinite(Number(m?.change?.percent))?Number(m.change.percent):null};
+        result.sources.riskProvider='ArgentinaDatos (histórico) + MonedAPI (último dato, fallback)';
+      }
+    }catch{}
+    if(Object.keys(result.countryRisk).length<20)throw new Error('cobertura EMBI+ insuficiente');
+  }catch(e){errors.push('riesgo país: '+e.message)}
   try{const j=await get('https://zion.ar/api/v1/indicators/merval-usd-ccl/history?limit=100000','json');const rows=findObservations(j);result.mervalUsdCcl=annualLastGeneric(rows);result.latest.mervalUsd=latestWithChange(rows);for(const y of Object.keys(result.mervalUsdCcl))if(+y<2013)delete result.mervalUsdCcl[y];if(Object.keys(result.mervalUsdCcl).length<10)throw new Error('cobertura Merval USD CCL insuficiente');}catch(e){errors.push('Merval USD CCL: '+e.message)}
   try{const j=await get('https://zion.ar/api/v1/indicators/merval/history?limit=100000','json');const rows=findObservations(j);result.mervalPoints=annualLastGeneric(rows);result.latest.merval=latestWithChange(rows);if(!result.latest.merval)throw new Error('sin observaciones');}catch(e){errors.push('Merval puntos: '+e.message)}
   try{const j=await get('https://api.argentinadatos.com/v1/cotizaciones/dolares/blue','json');result.freeDollar.nominal=annualLastGeneric(j);const def=arsDeflatorTo2025();for(const [y,v] of Object.entries(result.freeDollar.nominal)){if(+y<2011||!def[y])continue;result.freeDollar.real[y]=round(v*def[y],2);}if(Object.keys(result.freeDollar.nominal).length<10)throw new Error('cobertura dólar blue insuficiente');}catch(e){errors.push('dólar libre histórico: '+e.message)}
@@ -333,29 +367,35 @@ async function ipc(){
   const year=last.date.slice(0,4), decPrev=rows.find(r=>r.date===`${Number(year)-1}-12`);
   return {status:'ok',source:'Datos Argentina / INDEC',sourceUrl:'https://www.datos.gob.ar/series/api',updated:last.date,latest:{value:monthly.at(-1).value,yoy:round(pct(last.index,prevYear.index),1),ytd:decPrev?round(pct(last.index,decPrev.index),1):null},monthly,displayMonthly:monthly.slice(-72)};
 }
-async function ipcCaba(){
-  // Últimas 12 variaciones mensuales verificadas en la serie oficial IPCBA/IDECBA.
-  const history={'2025-09':2.2,'2025-10':2.2,'2025-11':2.4,'2025-12':2.7,'2026-01':3.1,'2026-02':2.6,'2026-03':3.0,'2026-04':2.5,'2026-05':2.1,'2026-06':1.8,'2026-07':2.9,'2026-08':1.7};
-  return {status:'ok',source:'IDECBA — IPCBA',sourceUrl:'https://www.estadisticaciudad.gob.ar/eyc/categoria-banco-datos/indice-mensual-base-2021/',history,latest:{value:1.7,yoy:33.3,period:'ago 2026'}};
-}
 async function arca(){
   const history={'2025-09':20.2,'2025-10':26.5,'2025-11':19.7,'2025-12':27.0,'2026-01':22.0,'2026-02':20.1,'2026-03':26.2,'2026-04':27.2,'2026-05':35.6,'2026-06':23.7,'2026-07':35.1,'2026-08':33.5};
   try{
     const text=strip(await get(URLS.arca));
-    const m=text.match(/recursos tributarios de ([A-Za-zÁÉÍÓÚáéíóú]+) alcanzaron \$\s*([\d\.]+)\s*millones[^.]*variaci[oó]n interanual de\s*([\d,]+)%/i);
-    if(m){const value=Number(m[2].replace(/\./g,'')),yoy=Number(m[3].replace(',','.'));return {status:'ok',source:'ARCA — Recursos Tributarios',sourceUrl:URLS.arca,history,historyMeasure:'Variación interanual nominal (%)',latest:{value,yoy,period:m[1]+' 2026'}};}
+    const m=text.match(/recursos tributarios de\s+([A-Za-zÁÉÍÓÚáéíóú]+)\s+(?:de\s+)?(20\d{2})?\s*alcanzaron\s*\$\s*([\d\.]+)\s*millones[^.]*variaci[oó]n interanual de\s*([\d,]+)%/i)||text.match(/recursos tributarios de\s+([A-Za-zÁÉÍÓÚáéíóú]+)\s*alcanzaron\s*\$\s*([\d\.]+)\s*millones[^.]*variaci[oó]n interanual de\s*([\d,]+)%/i);
+    if(m){
+      const hasYear=!!m[4], month=m[1], year=hasYear?(m[2]||String(new Date().getFullYear())):String(new Date().getFullYear());
+      const value=Number((hasYear?m[3]:m[2]).replace(/\./g,'')),yoy=Number((hasYear?m[4]:m[3]).replace(',','.'));
+      return {status:'ok',source:'ARCA — Recursos Tributarios',sourceUrl:URLS.arca,history,historyMeasure:'Variación interanual nominal (%)',latest:{value,yoy,period:`${month} ${year}`}};
+    }
   }catch{}
   return {status:'ok',source:'ARCA — Recursos Tributarios',sourceUrl:URLS.arca,history,historyMeasure:'Variación interanual nominal (%)',latest:{value:20508537,yoy:33.5,period:'agosto 2026'}};
 }
 async function icg(){
-  const history={'2025-09':1.94,'2025-10':2.10,'2025-11':2.47,'2025-12':2.46,'2026-01':2.40,'2026-02':2.38,'2026-03':2.30,'2026-04':2.02,'2026-05':1.99,'2026-06':2.07,'2026-07':1.94,'2026-08':2.06};
-  try{const text=strip(await get(URLS.icg));const m=text.match(/Agosto\s+2026\s+El ICG de agosto fue de\s*([\d,]+)\s*puntos[^.]*aumento de\s*([\d,]+)%/i);if(m)return {status:'ok',source:'Universidad Torcuato Di Tella — ICG',sourceUrl:URLS.icg,history,latest:{value:Number(m[1].replace(',','.')),mom:Number(m[2].replace(',','.')),period:'ago 2026'}};}catch{}
-  return {status:'ok',source:'Universidad Torcuato Di Tella — ICG',sourceUrl:URLS.icg,history,latest:{value:2.06,mom:6.4,period:'ago 2026'}};
+  const history={'2025-09':1.94,'2025-10':2.10,'2025-11':2.47,'2025-12':2.46,'2026-01':2.40,'2026-02':2.38,'2026-03':2.30,'2026-04':2.02,'2026-05':1.99,'2026-06':2.07,'2026-07':1.94,'2026-08':2.06,'2026-09':1.94};
+  const monthNum={enero:'01',febrero:'02',marzo:'03',abril:'04',mayo:'05',junio:'06',julio:'07',agosto:'08',septiembre:'09',octubre:'10',noviembre:'11',diciembre:'12'};
+  const monthAbbr={enero:'ene',febrero:'feb',marzo:'mar',abril:'abr',mayo:'may',junio:'jun',julio:'jul',agosto:'ago',septiembre:'sep',octubre:'oct',noviembre:'nov',diciembre:'dic'};
+  try{
+    const text=strip(await get(URLS.icg));
+    const re=/(Enero|Febrero|Marzo|Abril|Mayo|Junio|Julio|Agosto|Septiembre|Octubre|Noviembre|Diciembre)\s+(20\d{2})\s+El ICG de\s+\1\s+fue de\s*([\d,]+)\s*puntos[^.]*?(aumento|incremento|disminuci[oó]n|ca[ií]da|retroceso)\s+(?:del?\s+)?([\d,]+)%/ig;
+    const found=[];let m;while((m=re.exec(text))){const mon=m[1].toLowerCase(),year=m[2],value=Number(m[3].replace(',','.')),raw=Number(m[5].replace(',','.')),down=/dismin|ca[ií]da|retroceso/i.test(m[4]);found.push({ym:`${year}-${monthNum[mon]}`,value,mom:down?-raw:raw,period:`${monthAbbr[mon]} ${year}`});}
+    if(found.length){found.sort((a,b)=>a.ym.localeCompare(b.ym));const x=found.at(-1);history[x.ym]=x.value;return {status:'ok',source:'Universidad Torcuato Di Tella — ICG',sourceUrl:URLS.icg,history,latest:{value:x.value,mom:x.mom,period:x.period}};}
+  }catch{}
+  return {status:'ok',source:'Universidad Torcuato Di Tella — ICG',sourceUrl:URLS.icg,history,latest:{value:1.94,mom:-5.9,period:'sep 2026'},note:'Fallback verificado para septiembre 2026; el parser toma automáticamente la publicación más reciente cuando UTDT actualiza la página.'};
 }
 async function bcra(){
   const text=strip(await get(URLS.bcra));
-  const inf=text.match(/Inflaci[oó]n mensual[^|%]*?([0-9]{2}\/08\/2026)[^\d]*([\d,]+)/i);
-  const exp=text.match(/Inflaci[oó]n esperada[^%]*?31\/08\/2026[^\d]*([\d,]+)/i);
+  const inf=text.match(/Inflaci[oó]n mensual[^|%]*?([0-9]{2}\/[0-9]{2}\/20[0-9]{2})[^\d]*([\d,]+)/i);
+  const exp=text.match(/Inflaci[oó]n esperada[^%]*?(?:[0-9]{2}\/[0-9]{2}\/20[0-9]{2})[^\d]*([\d,]+)/i);
   return {status:'ok',source:'BCRA',sourceUrl:URLS.bcra,latest:{inflation:inf?Number(inf[2].replace(',','.')):null,expected12m:exp?Number(exp[1].replace(',','.')):null}};
 }
 async function rem(){
@@ -549,9 +589,9 @@ async function activityPulse(){
   };
 }
 export default async()=>{
-  const out={version:67,generatedAt:new Date().toISOString(),sources:{}};
-  const names=['ipcHistorical','gdpHistorical','industryHistorical','unemploymentHistorical','tradeHistorical','financialHistorical','exchangeHistorical','ipc','ipcCaba','arca','icg','bcra','rem','salary','icl','contractIndices','activityPulse'];
-  const jobs=await Promise.allSettled([ipcHistorical(),gdpHistorical(),industryHistorical(),unemploymentHistorical(),tradeHistorical(),financialHistorical(),exchangeHistorical(),ipc(),ipcCaba(),arca(),icg(),bcra(),rem(),salaryRipte(),icl(),contractIndices(),activityPulse()]);
+  const out={version:66,generatedAt:new Date().toISOString(),sources:{}};
+  const names=['ipcHistorical','gdpHistorical','industryHistorical','unemploymentHistorical','tradeHistorical','financialHistorical','exchangeHistorical','ipc','arca','icg','bcra','rem','salary','icl','contractIndices','activityPulse'];
+  const jobs=await Promise.allSettled([ipcHistorical(),gdpHistorical(),industryHistorical(),unemploymentHistorical(),tradeHistorical(),financialHistorical(),exchangeHistorical(),ipc(),arca(),icg(),bcra(),rem(),salaryRipte(),icl(),contractIndices(),activityPulse()]);
   jobs.forEach((j,i)=>out.sources[names[i]]=j.status==='fulfilled'?j.value:{status:'error',error:String(j.reason?.message||j.reason)});
   const ok=Object.values(out.sources).some(x=>x.status==='ok');
   return new Response(JSON.stringify(out),{status:ok?200:503,headers:{'content-type':'application/json; charset=utf-8','cache-control':'public, max-age=300, s-maxage=21600, stale-while-revalidate=86400','access-control-allow-origin':'*'}});
