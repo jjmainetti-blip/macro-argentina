@@ -402,11 +402,11 @@ async function icg(){
       // verificado más reciente por el último mes que todavía figure en esa página.
       if(!knownYm || x.ym>=knownYm){
         history[x.ym]=x.value;
-        return {status:'ok',source:'Universidad Torcuato Di Tella — ICG',sourceUrl:URLS.icg,history,latest:{value:x.value,mom:x.mom,period:x.period}};
+        return {status:'ok',source:'Universidad Torcuato Di Tella — ICG',sourceUrl:URLS.icg,publicationDate:'2026-09-28',history,latest:{value:x.value,mom:x.mom,period:x.period}};
       }
     }
   }catch{}
-  return {status:'ok',source:'Universidad Torcuato Di Tella — ICG',sourceUrl:URLS.icg,history,latest:{value:1.94,mom:-5.9,period:'sep 2026'},note:'Fallback verificado para septiembre 2026; el parser toma automáticamente la publicación más reciente cuando UTDT actualiza la página.'};
+  return {status:'ok',source:'Universidad Torcuato Di Tella — ICG',sourceUrl:URLS.icg,publicationDate:'2026-09-28',history,latest:{value:1.94,mom:-5.9,period:'sep 2026'},note:'Fallback verificado para septiembre 2026; el parser toma automáticamente la publicación más reciente cuando UTDT actualiza la página.'};
 }
 async function bcra(){
   const text=strip(await get(URLS.bcra));
@@ -605,7 +605,7 @@ async function activityPulse(){
   };
 }
 export default async()=>{
-  const out={version:72,generatedAt:new Date().toISOString(),sources:{}};
+  const out={version:73,generatedAt:new Date().toISOString(),sources:{}};
   const names=['ipcHistorical','gdpHistorical','industryHistorical','unemploymentHistorical','tradeHistorical','financialHistorical','exchangeHistorical','ipc','arca','icg','bcra','rem','salary','icl','contractIndices','activityPulse'];
   const jobs=await Promise.allSettled([ipcHistorical(),gdpHistorical(),industryHistorical(),unemploymentHistorical(),tradeHistorical(),financialHistorical(),exchangeHistorical(),ipc(),arca(),icg(),bcra(),rem(),salaryRipte(),icl(),contractIndices(),activityPulse()]);
   jobs.forEach((j,i)=>out.sources[names[i]]=j.status==='fulfilled'?j.value:{status:'error',error:String(j.reason?.message||j.reason)});

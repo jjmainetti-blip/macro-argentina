@@ -423,6 +423,22 @@ function hydrateCalculatorSources(S){
   if(S.contractIndices?.uva?.status==='ok'){for(const [k,v0] of Object.entries(S.contractIndices.uva.monthly||{})){const v=Number(v0);if(/^\d{4}-\d{2}$/.test(k)&&Number.isFinite(v)&&v>0)uvaMonthly[k]=v;}for(const [k,v0] of Object.entries(S.contractIndices.uva.daily||{})){const v=Number(v0);if(/^\d{4}-\d{2}-\d{2}$/.test(k)&&Number.isFinite(v)&&v>0)uvaDaily[k]=v;}}
   syncUpdateIndexAvailability();updateCalcMeta();
 }
+function releaseSortKey(raw){
+  const s=String(raw||'').trim().toLowerCase();
+  if(/^\d{4}-\d{2}-\d{2}/.test(s))return s.slice(0,10);
+  if(/^\d{4}-\d{2}$/.test(s))return `${s}-01`;
+  const months={ene:'01',feb:'02',mar:'03',abr:'04',may:'05',jun:'06',jul:'07',ago:'08',sep:'09',oct:'10',nov:'11',dic:'12'};
+  const m=s.match(/(ene|feb|mar|abr|may|jun|jul|ago|sep|oct|nov|dic)[a-záéíóú.]*\s+(20\d{2})/i);
+  return m?`${m[2]}-${months[m[1].slice(0,3)]}-01`:'';
+}
+function renderLatestRelease(releases){
+  const valid=(releases||[]).map(x=>({...x,sortKey:x.releaseDate||releaseSortKey(x.date)})).filter(x=>x.title&&x.value&&x.sortKey).sort((a,b)=>a.sortKey.localeCompare(b.sortKey));
+  const last=valid.at(-1); if(!last)return;
+  const t=document.getElementById('latestReleaseTitle'),v=document.getElementById('latestReleaseValue'),d=document.getElementById('latestReleaseDate');
+  if(t)t.textContent=last.title;if(v)v.textContent=last.value;if(d)d.textContent=last.displayDate||last.date||last.releaseDate||'';
+}
+// Respaldo inmediato: este bloque no debe depender de que termine /api/macro-data.
+renderLatestRelease([{releaseDate:'2026-09-28',date:'sep 2026',displayDate:'Publicado 28 sep 2026 · período sep 2026',title:'ICG UTDT',value:'1,94 puntos · −5,9% mensual'}]);
 async function loadAutomaticData(){
   const status=document.getElementById('autoStatus');
   try{
@@ -477,7 +493,7 @@ async function loadAutomaticData(){
     if(S.activityPulse?.status==='ok'){const A=S.activityPulse;const sign=n=>Number(n)>0?'+':'';if(A.fiscal)setKpi('fiscal',`${sign(A.fiscal.financial)}$${fmt.format(Math.abs(A.fiscal.financial))} mil M`,`${A.fiscal.period} · resultado financiero`,`Primario: ${sign(A.fiscal.primary)}$${fmt.format(Math.abs(A.fiscal.primary))} mil M`);if(A.cement)setKpi('cement',`${fmt.format(A.cement.tons/1000)} mil t`,`${A.cement.period} · total`,`${sign(A.cement.yoy)}${fmt.format(A.cement.yoy)}% interanual`);if(A.isac)setKpi('isac',`${sign(A.isac.yoy)}${fmt.format(A.isac.yoy)}%`,`${A.isac.period} · interanual`,`${sign(A.isac.mom)}${fmt.format(A.isac.mom)}% mensual s.e.`);if(A.autos)setKpi('autos',new Intl.NumberFormat('es-AR').format(A.autos.units),`${A.autos.period} · unidades`,`${sign(A.autos.yoy)}${fmt.format(A.autos.yoy)}% interanual`);if(A.credit)setKpi('credit',`${sign(A.credit.arsRealMom)}${fmt.format(A.credit.arsRealMom)}%`,`${A.credit.period} · pesos, real mensual s.e.`,`USD: ${new Intl.NumberFormat('es-AR').format(A.credit.usdBalance)} M · ${sign(A.credit.usdMom)}USD ${new Intl.NumberFormat('es-AR').format(Math.abs(A.credit.usdMom))} M mensual`);if(A.arrears)setKpi('arrears',`${fmt.format(A.arrears.total)}%`,`${A.arrears.period} · irregularidad total`,`Familias ${fmt.format(A.arrears.families)}% · empresas ${fmt.format(A.arrears.companies)}%`);}
 
     if(S.salary?.status==='ok'&&currentSeries==='salary'&&window.Chart)safeApply('salaryRender',()=>renderHistory('salary'));
-    const releases=[];if(S.ipc?.status==='ok')releases.push({date:S.ipc.updated||'',title:'IPC Nacional',value:`${fmt.format(S.ipc.latest.value)}% mensual · ${fmt.format(S.ipc.latest.yoy)}% interanual`});if(S.salary?.status==='ok'&&S.salary.latest)releases.push({date:S.salary.latest.period,title:'RIPTE',value:money.format(S.salary.latest.value)});if(S.arca?.status==='ok')releases.push({date:S.arca.latest.period||'',title:'Recaudación ARCA',value:moneyMillionsToBillions(S.arca.latest.value)});if(S.icg?.status==='ok')releases.push({date:S.icg.latest.period||'',title:'ICG UTDT',value:`${fmt.format(S.icg.latest.value)} puntos`});const lastRel=releases.sort((a,b)=>String(a.date).localeCompare(String(b.date))).at(-1);if(lastRel){document.getElementById('latestReleaseTitle').textContent=lastRel.title;document.getElementById('latestReleaseValue').textContent=lastRel.value;document.getElementById('latestReleaseDate').textContent=lastRel.date;}
+    const releases=[{releaseDate:'2026-09-28',date:'sep 2026',displayDate:'Publicado 28 sep 2026 · período sep 2026',title:'ICG UTDT',value:'1,94 puntos · −5,9% mensual'}];if(S.ipc?.status==='ok')releases.push({date:S.ipc.updated||'',title:'IPC Nacional',value:`${fmt.format(S.ipc.latest.value)}% mensual · ${fmt.format(S.ipc.latest.yoy)}% interanual`});if(S.salary?.status==='ok'&&S.salary.latest)releases.push({date:S.salary.latest.period,title:'RIPTE',value:money.format(S.salary.latest.value)});if(S.arca?.status==='ok')releases.push({date:S.arca.latest.period||'',title:'Recaudación ARCA',value:moneyMillionsToBillions(S.arca.latest.value)});if(S.icg?.status==='ok')releases.push({releaseDate:S.icg.publicationDate||'',date:S.icg.latest.period||'',title:'ICG UTDT',value:`${fmt.format(S.icg.latest.value)} puntos${Number.isFinite(Number(S.icg.latest.mom))?` · ${Number(S.icg.latest.mom)>0?'+':''}${fmt.format(S.icg.latest.mom)}% mensual`:''}`});renderLatestRelease(releases);
     const when=new Date(data.generatedAt).toLocaleString('es-AR',{dateStyle:'medium',timeStyle:'short'});
     if(status){
       const ok=Object.entries(S).filter(([,v])=>v?.status==='ok').length, errors=Object.entries(S).filter(([,v])=>v?.status==='error').map(([k])=>k);
