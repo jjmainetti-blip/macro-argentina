@@ -111,15 +111,14 @@ async function gdpHistorical(){
   if(Object.keys(annual).length<10)throw new Error('series históricas de PIB no disponibles en CSV');
   const quarterlyYoy={};
   try{
-    const q=await bestCsv('sspm_6',r=>/trimestral/i.test(`${r.name||''} ${r.description||''}`)?10:0);
-    const rows=parseCsv(q.text),h=rows[0].map(norm),dc=h.findIndex(x=>/indice_tiempo|fecha|periodo/.test(x));
-    let vc=h.findIndex(x=>/producto_interno_bruto_precios_mercado|^pib$/.test(x));
-    if(vc<0)vc=h.findIndex(x=>/producto.*interno.*bruto/.test(x)&&!/(corriente|variacion|porcentaje)/.test(x));
-    const qrows=[];
-    if(dc>=0&&vc>=0)for(const r of rows.slice(1)){const d=String(r[dc]||'').slice(0,10),v=numberAR(r[vc]);if(/^\d{4}-\d{2}/.test(d)&&Number.isFinite(v))qrows.push([d,v]);}
-    qrows.sort((a,b)=>a[0].localeCompare(b[0]));
-    for(let i=4;i<qrows.length;i++){const [d,v]=qrows[i],[pd,pv]=qrows[i-4];if(d.slice(5,7)!==pd.slice(5,7)||!pv)continue;const m=Number(d.slice(5,7)),qtr=Math.floor((m-1)/3)+1;quarterlyYoy[`${d.slice(0,4)}-T${qtr}`]=round(pct(v,pv),1);}
-    if(Object.keys(quarterlyYoy).length)segments.push({query:'PIB trimestral a precios constantes, base 2004',range:'serie trimestral',sourceUrl:q.url});
+    const x=await seriesRows('6.2_PIBPM_2004_T_38',{start:'2020-01-01'});
+    const qrows=x.rows.filter(r=>r?.date&&Number.isFinite(Number(r.value))).map(r=>[String(r.date).slice(0,10),Number(r.value)]).sort((a,b)=>a[0].localeCompare(b[0]));
+    for(let i=4;i<qrows.length;i++){
+      const [d,v]=qrows[i],[pd,pv]=qrows[i-4]; if(!pv)continue;
+      const m=Number(d.slice(5,7)),qtr=Math.floor((m-1)/3)+1;
+      quarterlyYoy[`${d.slice(0,4)}-T${qtr}`]=round(pct(v,pv),1);
+    }
+    if(Object.keys(quarterlyYoy).length)segments.push({query:'PIB trimestral a precios constantes, base 2004',range:'2020–presente',sourceUrl:x.url});
   }catch{}
   Object.assign(quarterlyYoy,{'2025-T3':3.3,'2025-T4':2.1,'2026-T1':2.3,'2026-T2':2.0});
   return {status:'ok',source:'INDEC / Datos Argentina — Cuentas Nacionales históricas',annual,quarterlyYoy,segments};
@@ -391,6 +390,14 @@ async function ipc(){
 async function arca(){
   const history={'2025-09':20.2,'2025-10':26.5,'2025-11':19.7,'2025-12':27.0,'2026-01':22.0,'2026-02':20.1,'2026-03':26.2,'2026-04':27.2,'2026-05':35.6,'2026-06':23.7,'2026-07':35.1,'2026-08':33.5};
   try{
+    const x=await bestCsv('sspm-recursos-tributarios-totales-por-tributo',r=>/mensual/i.test(`${r.name||''} ${r.description||''}`)?10:0);
+    const rows=parseCsv(x.text),h=rows[0].map(norm),dc=h.findIndex(v=>/indice_tiempo|fecha|periodo/.test(v));
+    let vc=h.findIndex(v=>/^total_recaudacion$|^total$|recursos_tributarios_totales/.test(v));
+    if(vc<0)vc=h.findIndex(v=>/total/.test(v)&&!/iva|ganancias|seguridad|aduan/.test(v));
+    const levels={}; if(dc>=0&&vc>=0)for(const r of rows.slice(1)){const d=String(r[dc]||'').slice(0,7),v=numberAR(r[vc]);if(/^\d{4}-\d{2}$/.test(d)&&Number.isFinite(v))levels[d]=v;}
+    for(const [d,v] of Object.entries(levels)){const y=Number(d.slice(0,4)),prev=`${y-1}${d.slice(4)}`;if(levels[prev])history[d]=round(pct(v,levels[prev]),1);}
+  }catch{}
+  try{
     const text=strip(await get(URLS.arca));
     const m=text.match(/recursos tributarios de\s+([A-Za-zÁÉÍÓÚáéíóú]+)\s+(?:de\s+)?(20\d{2})?\s*alcanzaron\s*\$\s*([\d\.]+)\s*millones[^.]*variaci[oó]n interanual de\s*([\d,]+)%/i)||text.match(/recursos tributarios de\s+([A-Za-zÁÉÍÓÚáéíóú]+)\s*alcanzaron\s*\$\s*([\d\.]+)\s*millones[^.]*variaci[oó]n interanual de\s*([\d,]+)%/i);
     if(m){
@@ -405,9 +412,9 @@ async function icg(){
   const history={'2025-09':1.94,'2025-10':2.10,'2025-11':2.47,'2025-12':2.46,'2026-01':2.40,'2026-02':2.38,'2026-03':2.30,'2026-04':2.02,'2026-05':1.99,'2026-06':2.07,'2026-07':1.94,'2026-08':2.06,'2026-09':1.94};
   // Backfill histórico público (fuente primaria UTDT) para que el gráfico no quede limitado al último año.
   try{
-    const x=await bestCsv('sspm_370',r=>/confianza|gobierno|mensual/i.test(`${r.name||''} ${r.description||''}`)?10:0);
+    const x=await bestCsv('sspm-indice-confianza-gobierno',r=>/confianza|gobierno|mensual/i.test(`${r.name||''} ${r.description||''}`)?10:0);
     const rows=parseCsv(x.text),h=rows[0].map(norm),dc=h.findIndex(v=>/indice_tiempo|fecha|periodo/.test(v));
-    let vc=h.findIndex(v=>/(indice.*confianza.*gobierno|^icg$)/.test(v));if(vc<0)vc=h.findIndex(v=>/confianza.*gobierno/.test(v));
+    let vc=h.findIndex(v=>/(indice.*confianza.*gobierno|^icg$|confianza_gobierno|nivel_general)/.test(v));if(vc<0)vc=h.findIndex(v=>/confianza|gobierno/.test(v)&&!/(region|variacion)/.test(v));if(vc<0&&h.length===2)vc=1;
     if(dc>=0&&vc>=0)for(const r of rows.slice(1)){const d=String(r[dc]||'').slice(0,7),v=numberAR(r[vc]);if(/^\d{4}-\d{2}$/.test(d)&&Number.isFinite(v))history[d]=round(v,2);}
   }catch{}
   const monthNum={enero:'01',febrero:'02',marzo:'03',abril:'04',mayo:'05',junio:'06',julio:'07',agosto:'08',septiembre:'09',octubre:'10',noviembre:'11',diciembre:'12'};
@@ -601,9 +608,13 @@ async function calendar(){
 }
 
 async function isacHistorical(){
-  const x=await seriesRows('33.2_I_2004_M_4',{start:'2012-01-01'});
-  const monthly={};for(const r of x.rows){const k=String(r.date).slice(0,7);if(/^\d{4}-\d{2}$/.test(k))monthly[k]=round(r.value,1);}
-  return {status:'ok',source:'INDEC / Datos Argentina — ISAC variación interanual',sourceUrl:x.url,monthlyYoy:monthly};
+  const monthly={}; let sourceUrl='';
+  try{const x=await seriesRows('33.2_I_2004_M_4',{start:'2012-01-01'});sourceUrl=x.url;for(const r of x.rows){const k=String(r.date).slice(0,7);if(/^\d{4}-\d{2}$/.test(k)&&Number.isFinite(Number(r.value)))monthly[k]=round(r.value,1);}}catch{}
+  if(Object.keys(monthly).length<24){
+    try{const x=await bestCsv('sspm-indicador-sintetico-actividad-construccion-isac-base-2004',r=>/valores mensuales|nivel general|isac/i.test(`${r.name||''} ${r.description||''}`)?10:0);sourceUrl=x.url;const rows=parseCsv(x.text),h=rows[0].map(norm),dc=h.findIndex(v=>/indice_tiempo|fecha|periodo/.test(v)),vc=h.findIndex(v=>/isac_variacion_interanual/.test(v));if(dc>=0&&vc>=0)for(const r of rows.slice(1)){const d=String(r[dc]||'').slice(0,7),v=numberAR(r[vc]);if(/^\d{4}-\d{2}$/.test(d)&&Number.isFinite(v))monthly[d]=round(v,1);}}catch{}
+  }
+  if(!Object.keys(monthly).length)throw new Error('serie ISAC interanual no disponible');
+  return {status:'ok',source:'INDEC / Datos Argentina — ISAC variación interanual',sourceUrl,monthlyYoy:monthly};
 }
 async function creditHistorical(){
   const x=await seriesRows('91.1_PEFPC_0_0_35',{start:'2024-01-01'});
@@ -616,14 +627,14 @@ async function activityPulse(){
       'Resultado primario':{'2025-08':1556.865,'2025-09':696.965,'2025-10':823.925,'2025-11':2128.010,'2026-01':3125.737,'2026-02':1410.639,'2026-03':930.284,'2026-04':632.844,'2026-05':1924.367,'2026-06':-696.843,'2026-07':2960.333,'2026-08':1990.322},
       'Resultado financiero':{'2025-08':390.301,'2025-09':309.623,'2025-10':517.672,'2025-11':599.954,'2026-01':1105.159,'2026-02':144.421,'2026-03':484.789,'2026-04':268.103,'2026-05':478.613,'2026-06':-1024.891,'2026-07':244.897,'2026-08':635.529}
     }},
-    cement:{period:'ago 2026',tons:817082,yoy:-8.1,mom:-0.1,sourceUrl:'https://www.afcp.org.ar/copia-de-produccion-de-cemento-y-cl',historyYoy:{'2026-01':-5.3,'2026-02':-5.3,'2026-03':11.0,'2026-04':-13.2,'2026-05':-1.5,'2026-06':-1.4,'2026-07':-8.2,'2026-08':-8.1},history:{
+    cement:{period:'ago 2026',tons:817082,yoy:-8.1,mom:-0.1,sourceUrl:'https://www.afcp.org.ar/copia-de-produccion-de-cemento-y-cl',historyYoy:{'2026-01':-5.3,'2026-02':-5.3,'2026-03':11.0,'2026-04':-13.2,'2026-05':-1.5,'2026-06':-1.4,'2026-07':-8.2,'2026-08':-8.1},annualYoy:{'2022':7.0,'2023':-3.2,'2024':-23.9,'2025':5.6,'2026 YTD':-4.4},history:{
       'Despacho nacional (t)':{'2025-09':917330,'2025-10':944216,'2025-11':829590,'2025-12':776185,'2026-01':742456,'2026-02':750305,'2026-03':846616,'2026-04':837659,'2026-05':843563,'2026-06':811474,'2026-07':817901,'2026-08':817082}
     }},
     isac:{period:'jul 2026',yoy:-4.5,mom:-4.6,sourceUrl:'https://www.indec.gob.ar/indec/web/Institucional-Indec-InformesTecnicos-47',history:{
       'ISAC nivel general (2004=100)':{'2025-08':153.6,'2025-09':160.5,'2025-10':168.4,'2025-11':142.4,'2025-12':136.4,'2026-01':133.0,'2026-02':123.8,'2026-03':149.5,'2026-04':142.2,'2026-05':147.1,'2026-06':154.5,'2026-07':147.38}
     }},
     autos:{period:'ago 2026',units:44415,yoy:-19.1,mom:-1.5,sourceUrl:'https://www.acara.org.ar/',historyYoy:{'2026-01':-5.0,'2026-02':-5.7,'2026-03':1.2,'2026-04':-13.6,'2026-05':-25.6,'2026-06':-8.2,'2026-07':-27.5,'2026-08':-18.8},history:{
-      'Patentamientos (unidades)':{'2025-01':69521,'2025-02':44569,'2025-03':48389,'2025-04':55027,'2025-05':56320,'2025-06':52730,'2025-07':62821,'2025-08':54664,'2025-09':56240,'2025-10':52259,'2025-11':35424,'2025-12':23997,'2026-01':66080,'2026-02':42026,'2026-03':48972,'2026-04':47564,'2026-05':41921,'2026-06':48414,'2026-07':45075,'2026-08':44415}
+      'Patentamientos (unidades)':{'2022-01':43505,'2022-02':29103,'2022-03':34527,'2022-04':31868,'2022-05':35327,'2022-06':35385,'2022-07':38892,'2022-08':38342,'2022-09':34815,'2022-10':32436,'2022-11':33698,'2022-12':19635,'2023-01':50362,'2023-02':30509,'2023-03':39877,'2023-04':34768,'2023-05':40164,'2023-06':40114,'2023-07':44119,'2023-08':39465,'2023-09':33636,'2023-10':41945,'2023-11':35981,'2023-12':18498,'2024-01':33917,'2024-02':25050,'2024-03':25813,'2024-04':32941,'2024-05':34796,'2024-06':30905,'2024-07':43149,'2024-08':41507,'2024-09':43679,'2024-10':44467,'2024-11':36220,'2024-12':21761,'2025-01':69521,'2025-02':44569,'2025-03':48389,'2025-04':55026,'2025-05':56320,'2025-06':52730,'2025-07':62818,'2025-08':54889,'2025-09':56240,'2025-10':52259,'2025-11':35424,'2025-12':23997,'2026-01':66080,'2026-02':42026,'2026-03':48972,'2026-04':47564,'2026-05':41921,'2026-06':47415,'2026-07':43758,'2026-08':44415}
     }},
     credit:{period:'ago 2026',arsRealMom:-1.0,usdBalance:25241,usdMom:258,sourceUrl:'https://www.bcra.gob.ar/informe-monetario-mensual/',history:{
       'Crédito en pesos — var. real mensual (%)':{'2025-09':-1.8,'2025-10':1.1,'2025-11':-1.6,'2025-12':1.1,'2026-01':-1.9,'2026-02':0.0,'2026-03':-0.4,'2026-04':0.6,'2026-05':-0.3,'2026-06':0.3,'2026-07':1.2,'2026-08':-1.0}
@@ -636,7 +647,7 @@ async function activityPulse(){
   };
 }
 export default async()=>{
-  const out={version:75,generatedAt:new Date().toISOString(),sources:{}};
+  const out={version:76,generatedAt:new Date().toISOString(),sources:{}};
   const names=['ipcHistorical','gdpHistorical','industryHistorical','unemploymentHistorical','tradeHistorical','financialHistorical','exchangeHistorical','ipc','arca','icg','bcra','rem','salary','icl','contractIndices','isacHistorical','creditHistorical','activityPulse'];
   const jobs=await Promise.allSettled([ipcHistorical(),gdpHistorical(),industryHistorical(),unemploymentHistorical(),tradeHistorical(),financialHistorical(),exchangeHistorical(),ipc(),arca(),icg(),bcra(),rem(),salaryRipte(),icl(),contractIndices(),isacHistorical(),creditHistorical(),activityPulse()]);
   jobs.forEach((j,i)=>out.sources[names[i]]=j.status==='fulfilled'?j.value:{status:'error',error:String(j.reason?.message||j.reason)});
