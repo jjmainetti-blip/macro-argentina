@@ -465,19 +465,19 @@ async function loadTradeMonthlyFast(){
 
 async function loadCementMonthlyFast(){
   try{
-    // 60 meses: sep-2021..ago-2026. Dividido por año para mantener cada
-    // invocación del Worker por debajo del límite de subrequests.
-    const years=[2021,2022,2023,2024,2025,2026];
-    const parts=await Promise.all(years.map(async y=>{
-      const r=await fetch(`/api/cement-monthly?year=${y}`,{headers:{accept:'application/json'}});
-      if(!r.ok)throw new Error(`cement monthly ${y} ${r.status}`);
-      return r.json();
-    }));
-    const merged={}; for(const d of parts)Object.assign(merged,d.monthlyYoy||{});
-    const valid=Object.fromEntries(Object.entries(merged)
-      .filter(([k,v])=>/^\d{4}-(0[1-9]|1[0-2])$/.test(k)&&Number.isFinite(Number(v)))
-      .sort(([a],[b])=>a.localeCompare(b)).slice(-60));
-    if(Object.keys(valid).length<60)throw new Error(`cement monthly incompleto: ${Object.keys(valid).length}/60`);
+    // El histórico vive dentro del proyecto: el gráfico nunca depende de AFCP para arrancar.
+    const h=await fetch('/cement-history.json?v=95',{headers:{accept:'application/json'}});
+    if(!h.ok)throw new Error(`cement history ${h.status}`);
+    const local=await h.json(), merged={};
+    for(const o of local.observations||[])if(/^\d{4}-(0[1-9]|1[0-2])$/.test(o.period)&&Number.isFinite(Number(o.yoy)))merged[o.period]=Number(o.yoy);
+    if(Object.keys(merged).length!==60)throw new Error(`cement history local: ${Object.keys(merged).length}/60`);
+    // AFCP sólo se usa para incorporar automáticamente publicaciones posteriores.
+    const last=Object.keys(merged).sort().at(-1);
+    try{
+      const r=await fetch(`/api/cement-monthly?after=${encodeURIComponent(last)}`,{headers:{accept:'application/json'}});
+      if(r.ok){const d=await r.json();for(const o of d.fresh||[])if(/^\d{4}-(0[1-9]|1[0-2])$/.test(o.period)&&Number.isFinite(Number(o.yoy)))merged[o.period]=Number(o.yoy);}
+    }catch(e){console.warn('cement latest AFCP',e);}
+    const valid=Object.fromEntries(Object.entries(merged).sort(([a],[b])=>a.localeCompare(b)).slice(-60));
     for(const k of Object.keys(cementMonthlyYoy))delete cementMonthlyYoy[k];
     Object.assign(cementMonthlyYoy,valid);
     if(currentSeries==='cement'&&window.Chart)renderHistory('cement');

@@ -1,28 +1,22 @@
 const AFCP='https://afcp.info/ESTADISTICAS/DATOS-DEFINITIVOS';
-function urlFor(y,m){
-  const ym=`${y}${String(m).padStart(2,'0')}`;
-  return `${AFCP}/${ym}${y>=2022?'-ProDesp':''}/estadistica02.html`;
-}
+function urlFor(y,m){const ym=`${y}${String(m).padStart(2,'0')}`;return `${AFCP}/${ym}${y>=2022?'-ProDesp':''}/estadistica02.html`;}
 function textify(html){return String(html).replace(/<script[\s\S]*?<\/script>/gi,' ').replace(/<style[\s\S]*?<\/style>/gi,' ').replace(/<[^>]+>/g,' ').replace(/&nbsp;|&#160;/gi,' ').replace(/&[a-z]+;/gi,' ').replace(/\s+/g,' ');}
 function pct(s){const n=Number(String(s).replace(',','.'));return Number.isFinite(n)?n:null;}
-function yoyFromPage(text,y){
-  // La primera tasa después de "AAAA / AAAA-1" corresponde a Despacho Nacional · Del Mes.
-  const re=new RegExp(`${y}\\s*\\/\\s*${y-1}\\s+([+-]?\\d+(?:[.,]\\d+)?)\\s*%`,'i');
-  const m=text.match(re); return m?pct(m[1]):null;
-}
+function yoyFromPage(text,y){const re=new RegExp(`${y}\\s*\\/\\s*${y-1}\\s+([+-]?\\d+(?:[.,]\\d+)?)\\s*%`,'i');const m=text.match(re);return m?pct(m[1]):null;}
+function nextMonth(period){let [y,m]=period.split('-').map(Number);m++;if(m===13){m=1;y++;}return [y,m];}
+function monthKey(y,m){return `${y}-${String(m).padStart(2,'0')}`;}
 async function one(y,m){
-  const u=urlFor(y,m),r=await fetch(u,{headers:{'user-agent':'MacroArgentinaDashboard/6.0'},cf:{cacheTtl:86400,cacheEverything:true}});
-  if(!r.ok)throw new Error(`${r.status} ${u}`);
-  const v=yoyFromPage(textify(await r.text()),y); if(!Number.isFinite(v))throw new Error(`sin variación ${y}-${m}`);
-  return [`${y}-${String(m).padStart(2,'0')}`,v];
+  const u=urlFor(y,m); const r=await fetch(u,{headers:{'user-agent':'MacroArgentinaDashboard/7.0'},cf:{cacheTtl:1800,cacheEverything:true}});
+  if(r.status===404)return null; if(!r.ok)throw new Error(`${r.status} ${u}`);
+  const v=yoyFromPage(textify(await r.text()),y); return Number.isFinite(v)?{period:monthKey(y,m),yoy:v,source:'AFCP',sourceUrl:u}:null;
 }
 export default async(request)=>{
-  const u=new URL(request.url),year=Number(u.searchParams.get('year'));
-  if(!Number.isInteger(year)||year<2021||year>2026)return new Response(JSON.stringify({status:'error',error:'year inválido'}),{status:400,headers:{'content-type':'application/json'}});
-  const first=year===2021?9:1,last=year===2026?8:12;
-  const jobs=[];for(let m=first;m<=last;m++)jobs.push(one(year,m));
-  const settled=await Promise.allSettled(jobs),monthlyYoy={};
-  for(const x of settled)if(x.status==='fulfilled')monthlyYoy[x.value[0]]=x.value[1];
-  const expected=last-first+1,observations=Object.keys(monthlyYoy).length;
-  return new Response(JSON.stringify({status:observations===expected?'ok':'partial',year,monthlyYoy,observations,expected,failed:expected-observations,source:'AFCP — Despacho Nacional de Cemento, variación interanual mensual',sourceUrl:'https://www.afcp.org.ar/copia-de-produccion-de-cemento-y-cl'}),{status:200,headers:{'content-type':'application/json; charset=utf-8','cache-control':'public, max-age=21600, s-maxage=21600, stale-while-revalidate=86400','access-control-allow-origin':'*'}});
+  const u=new URL(request.url),after=/^\d{4}-(0[1-9]|1[0-2])$/.test(u.searchParams.get('after')||'')?u.searchParams.get('after'):'2026-08';
+  let [y,m]=nextMonth(after); const now=new Date(); const maxY=now.getUTCFullYear(),maxM=now.getUTCMonth()+1; const fresh=[];
+  // Sólo meses posteriores al histórico local; máximo 3 subrequests por visita.
+  for(let i=0;i<3 && (y<maxY || (y===maxY&&m<=maxM));i++){
+    try{const x=await one(y,m);if(x)fresh.push(x);else break;}catch{break;}
+    m++;if(m===13){m=1;y++;}
+  }
+  return new Response(JSON.stringify({status:'ok',after,fresh,observations:fresh.length,source:'AFCP — Despacho Nacional de Cemento'}),{headers:{'content-type':'application/json; charset=utf-8','cache-control':'public, max-age=900, s-maxage=900, stale-while-revalidate=1800','access-control-allow-origin':'*'}});
 };
