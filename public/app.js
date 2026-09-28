@@ -35,7 +35,7 @@ const fxOfficialNominal={}, fxOfficialReal={}, fxOfficialTcr={}, fxFreeTcr={}, f
 let dollarPriceMode='real'; // real | nominal
 let interestMode='real'; // real | nominal
 let salaryMode='arsNominal'; // arsReal | arsNominal | usdReal | usdNominal
-const tradeBalance = {}, exportsSeries = {}, importsSeries = {}, tradeBalanceMonthly = {};
+const tradeBalance = {}, exportsSeries = {}, importsSeries = {}, tradeBalanceMonthly = {}, cementMonthlyYoy = {};
 let tradePriceMode='real'; // real | nominal
 let tradeBasePeriod='';
 const US_CPI_BASE_YEAR=2025;
@@ -462,6 +462,17 @@ async function loadTradeMonthlyFast(){
     if(currentSeries==='trade'&&window.Chart)renderHistory('trade');
   }catch(e){console.warn('trade monthly fast',e);}
 }
+
+async function loadCementMonthlyFast(){
+  try{
+    const r=await fetch('/api/cement-monthly',{headers:{accept:'application/json'}}); if(!r.ok)throw new Error(`cement monthly ${r.status}`);
+    const d=await r.json(); if(!d.monthlyYoy)return;
+    for(const k of Object.keys(cementMonthlyYoy))delete cementMonthlyYoy[k];
+    Object.assign(cementMonthlyYoy,d.monthlyYoy);
+    if(currentSeries==='cement'&&window.Chart)renderHistory('cement');
+  }catch(e){console.warn('cement monthly fast',e);}
+}
+
 async function loadAutomaticData(){
   const status=document.getElementById('autoStatus');
   try{
@@ -532,6 +543,7 @@ window.addEventListener('load',()=>{
   loadAgenda();
   loadMarketsFast();
 loadTradeMonthlyFast();
+loadCementMonthlyFast();
   Promise.allSettled([loadAutomaticData(),loadPublicHistorical()]).then(()=>{
     updateCoverage();
     if(window.Chart){ renderHistory(currentSeries); renderFx(); }
@@ -605,7 +617,7 @@ function kpiSeries(key){const S=kpiSourceCache||{},A=S.activityPulse||{};
   if(key==='isac'&&S.isacHistorical?.monthlyYoy){const x=recentEntries(S.isacHistorical.monthlyYoy,60);return {chartType:'bar',labels:x.map(([d])=>displayMonth(d)),datasets:[{label:'ISAC · variación interanual (%)',data:x.map(([,v])=>Number(v))}],source:'INDEC',legend:'Últimos 5 años de variaciones interanuales mensuales.'};}
   if(key==='credit'&&S.creditHistorical?.monthlyYoy){const x=recentEntries(S.creditHistorical.monthlyYoy,60);return {labels:x.map(([d])=>displayMonth(d)),datasets:[{label:'Crédito privado · variación interanual nominal (%)',data:x.map(([,v])=>Number(v))}],source:'BCRA / Datos Argentina'};}
   if(key==='autos'&&A.autos?.history?.['Patentamientos (unidades)']){const h=A.autos.history['Patentamientos (unidades)'],years=[2022,2023,2024,2025,2026],months=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];const palette=['#2563eb','#7c3aed','#0891b2','#ea580c','#16a34a'];const datasets=years.map((y,j)=>({label:String(y),backgroundColor:palette[j],borderColor:palette[j],preserveColor:true,data:months.map((_,i)=>{const v=h[`${y}-${String(i+1).padStart(2,'0')}`];return v==null?null:Number(v);})}));return {chartType:'bar',labels:months,datasets,source:'ACARA / SIOMAA',legend:'Patentamientos mensuales por año (2022–2026). Cada año conserva un color propio.'};}
-  if(key==='cement'&&A.cement){const x=recentEntries(A.cement.annualYoy||{},5);if(x.length)return {chartType:'bar',labels:x.map(([d])=>String(d)),datasets:[{label:'Despachos de cemento · variación anual (%)',data:x.map(([,v])=>Number(v))}],source:'AFCP',legend:'Últimos 5 años/períodos disponibles. 2026 corresponde al acumulado disponible del año.'};}
+  if(key==='cement'){const monthly=Object.fromEntries(Object.entries(cementMonthlyYoy).filter(([d,v])=>/^\d{4}-(0[1-9]|1[0-2])$/.test(d)&&Number.isFinite(Number(v))));const x=recentEntries(monthly,60);if(x.length)return {chartType:'bar',labels:x.map(([d])=>displayMonth(d)),datasets:[{label:'Despachos de cemento · variación interanual mensual (%)',data:x.map(([,v])=>Number(v))}],source:'AFCP',legend:`Últimos 5 años: ${x.length} observaciones mensuales de variación interanual.`};}
   const cached=kpiHistoryCache[key],h=cached?.history||A[key]?.history;if(h){const keys=Object.keys(h);if(keys.length&&h[keys[0]]&&typeof h[keys[0]]==='object'&&!Array.isArray(h[keys[0]])){const labels=[...new Set(keys.flatMap(k=>Object.keys(h[k]||{})))].sort().slice(-60);const datasets=keys.map(k=>({label:k,data:labels.map(d=>{const v=h[k]?.[d];return v===null||v===undefined?null:Number(v);})})).filter(ds=>ds.data.some(v=>Number.isFinite(v)));if(labels.length&&datasets.length)return {labels:labels.map(displayMonth),datasets,source:cached?.source||A[key]?.source||A[key]?.sourceUrl||A.source};}const x=recentEntries(h);if(x.length)return {labels:x.map(([d])=>displayMonth(d)),datasets:[{label:KPI_META[key]?.title||key,data:x.map(([,v])=>Number(v))}],source:cached?.source||A[key]?.source||A[key]?.sourceUrl||A.source};}
   if(key==='trade'){const monthly=Object.fromEntries(Object.entries(tradeBalanceMonthly||{}).filter(([d,v])=>/^\d{4}-(0[1-9]|1[0-2])$/.test(String(d))&&Number.isFinite(Number(v))));const x=recentEntries(monthly,60);if(x.length)return {chartType:'bar',labels:x.map(([d])=>displayMonth(d)),rawPeriods:x.map(([d])=>d),tradeArrow:true,datasets:[{label:'Saldo comercial mensual (M USD)',data:x.map(([,v])=>Number(v))}],source:'INDEC',legend:'Saldo comercial mensual. La flecha une el último mes con el mismo mes del año anterior y muestra la variación porcentual interanual del saldo.'};return null;}const maps={poverty:poverty};if(maps[key]){const x=recentEntries(maps[key],12);if(x.length)return {chartType:'line',labels:x.map(([d])=>String(d)),datasets:[{label:KPI_META[key]?.title||key,data:x.map(([,v])=>v)}],source:KPI_META[key]?.agency};}
   return null;

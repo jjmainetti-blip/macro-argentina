@@ -2,6 +2,7 @@ import macroData from './api/macro-data.mjs';
 import calendarData from './api/calendar-data.mjs';
 import marketsData from './api/markets.mjs';
 import tradeMonthly from './api/trade-monthly.mjs';
+import cementMonthly from './api/cement-monthly.mjs';
 
 const jsonHeaders = {
   'X-Content-Type-Options': 'nosniff',
@@ -30,6 +31,9 @@ export default {
     }
     if (request.method === 'GET' && url.pathname === '/api/trade-monthly') {
       return withHeaders(await tradeMonthly());
+    }
+    if (request.method === 'GET' && url.pathname === '/api/cement-monthly') {
+      return withHeaders(await cementMonthly());
     }
     if (request.method === 'GET' && url.pathname === '/api/macro-data') {
       return withHeaders(await macroData());
