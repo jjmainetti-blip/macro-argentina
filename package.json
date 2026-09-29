@@ -1,11 +1,12 @@
 {
   "name": "macro-argentina-dashboard-cloudflare",
   "private": true,
-  "version": "103.0.0",
+  "version": "104.0.0",
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy"
+    "deploy": "wrangler deploy",
+    "validate:snapshot": "node scripts/validate-snapshot.mjs"
   },
   "devDependencies": {
     "wrangler": "^4.0.0"

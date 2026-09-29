@@ -1,3 +1,4 @@
+import { BUNDLED_SOURCES } from './bundled-history.mjs';
 /* Macro Argentina v8 — stable server-side data contract.
    Each adapter fails independently. The browser keeps its bundled last-known value
    when a source is temporarily unavailable or changes format. */
@@ -688,11 +689,17 @@ async function activityPulse(){
 // MACRO_STORE es un KV opcional. Si está vinculado, el snapshot sobrevive despliegues;
 // sin KV se conserva al menos durante la vida del isolate y el frontend mantiene otra copia local.
 let MEMORY_SNAPSHOT=null;
-const SNAPSHOT_KEY='macro:snapshot:v102';
+const SNAPSHOT_KEY='macro:snapshot:v104';
 function isPlainObject(v){return !!v&&typeof v==='object'&&!Array.isArray(v);}
 function mergeSnapshot(oldValue,newValue){
   if(Array.isArray(oldValue)||Array.isArray(newValue)){
     const a=Array.isArray(oldValue)?oldValue:[],b=Array.isArray(newValue)?newValue:[];
+    // Series [{date,...}]: merge by month/date so a shorter refresh can never truncate the baseline.
+    if([...a,...b].every(x=>x&&typeof x==='object'&&!Array.isArray(x)&&x.date)){
+      const by=new Map(a.map(x=>[String(x.date).slice(0,7),x]));
+      for(const x of b)by.set(String(x.date).slice(0,7),{...(by.get(String(x.date).slice(0,7))||{}),...x});
+      return [...by.values()].sort((x,y)=>String(x.date).localeCompare(String(y.date)));
+    }
     return b.length>=a.length?b:a;
   }
   if(isPlainObject(oldValue)||isPlainObject(newValue)){
@@ -714,8 +721,9 @@ async function writeSnapshot(env,ctx,snapshot){
   if(env?.MACRO_STORE?.put){const job=env.MACRO_STORE.put(SNAPSHOT_KEY,JSON.stringify(snapshot));if(ctx?.waitUntil)ctx.waitUntil(job);else try{await job}catch{}}
 }
 export default async(env={},ctx=null)=>{
-  const previous=await readSnapshot(env);
-  const out={version:103,generatedAt:new Date().toISOString(),snapshotMode:env?.MACRO_STORE?.get?'kv+bundled':'bundled+isolate',sources:{}};
+  const stored=await readSnapshot(env);
+  const previous=mergeSnapshot({version:104,sources:BUNDLED_SOURCES},stored||{});
+  const out={version:104,generatedAt:new Date().toISOString(),snapshotMode:env?.MACRO_STORE?.get?'kv+bundled':'bundled+isolate',sources:{}};
   const names=['ipcHistorical','gdpHistorical','industryHistorical','unemploymentHistorical','tradeHistorical','financialHistorical','exchangeHistorical','ipc','arca','icg','bcra','rem','salary','icl','contractIndices','isacHistorical','creditHistorical','activityPulse'];
   const jobs=await Promise.allSettled([ipcHistorical(),gdpHistorical(),industryHistorical(),unemploymentHistorical(),tradeHistorical(),financialHistorical(),exchangeHistorical(),ipc(),arca(),icg(),bcra(),rem(),salaryRipte(),icl(),contractIndices(),isacHistorical(),creditHistorical(),activityPulse()]);
   jobs.forEach((j,i)=>{

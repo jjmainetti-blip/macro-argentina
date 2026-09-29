@@ -53,3 +53,7 @@ Persistencia:
 - Los mercados intradiarios continúan fuera de este snapshot y se consultan por `/api/markets`.
 
 Para activar persistencia durable, crear un namespace KV en Cloudflare y vincularlo al Worker con el nombre de binding exacto `MACRO_STORE`. No se incluye un `namespace_id` ficticio en `wrangler.jsonc` porque impediría desplegar el proyecto en otra cuenta.
+
+
+## v104 — snapshot histórico completo
+IPC, IPI, ISAC, balanza comercial, recaudación e ICG se incluyen localmente. Las fuentes remotas sólo refrescan o agregan períodos nuevos; una respuesta más corta no elimina historia local.
