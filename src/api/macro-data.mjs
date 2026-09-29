@@ -232,11 +232,6 @@ async function financialHistorical(){
     result.latest.risk=latestWithChange(j);
     // Último cierre verificado: evita que una API rezagada deje la portada un día atrás.
     // Sólo actúa mientras la fuente primaria no tenga una fecha igual o posterior.
-    const verifiedRiskClose={date:'2026-09-28',value:628,previous:609,changePct:round((628/609-1)*100,2),changeBp:19};
-    if(!result.latest.risk || String(result.latest.risk.date||'').slice(0,10)<verifiedRiskClose.date){
-      result.latest.risk=verifiedRiskClose;
-      result.sources.riskProvider='ArgentinaDatos (histórico) + último cierre verificado';
-    }
     try{
       const u=await get('https://api.argentinadatos.com/v1/finanzas/indices/riesgo-pais/ultimo','json');
       const uv=Number(u?.valor??u?.value), ud=String(u?.fecha??u?.date??'');
@@ -690,7 +685,7 @@ async function activityPulse(){
   };
 }
 export default async()=>{
-  const out={version:99,generatedAt:new Date().toISOString(),sources:{}};
+  const out={version:100,generatedAt:new Date().toISOString(),sources:{}};
   const names=['ipcHistorical','gdpHistorical','industryHistorical','unemploymentHistorical','tradeHistorical','financialHistorical','exchangeHistorical','ipc','arca','icg','bcra','rem','salary','icl','contractIndices','isacHistorical','creditHistorical','activityPulse'];
   const jobs=await Promise.allSettled([ipcHistorical(),gdpHistorical(),industryHistorical(),unemploymentHistorical(),tradeHistorical(),financialHistorical(),exchangeHistorical(),ipc(),arca(),icg(),bcra(),rem(),salaryRipte(),icl(),contractIndices(),isacHistorical(),creditHistorical(),activityPulse()]);
   jobs.forEach((j,i)=>out.sources[names[i]]=j.status==='fulfilled'?j.value:{status:'error',error:String(j.reason?.message||j.reason)});
