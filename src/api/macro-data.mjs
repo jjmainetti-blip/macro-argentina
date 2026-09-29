@@ -722,8 +722,8 @@ async function writeSnapshot(env,ctx,snapshot){
 }
 export default async(env={},ctx=null)=>{
   const stored=await readSnapshot(env);
-  const previous=mergeSnapshot({version:107,sources:BUNDLED_SOURCES},stored||{});
-  const out={version:107,generatedAt:new Date().toISOString(),snapshotMode:env?.MACRO_STORE?.get?'kv+bundled':'bundled+isolate',sources:{}};
+  const previous=mergeSnapshot({version:108,sources:BUNDLED_SOURCES},stored||{});
+  const out={version:108,generatedAt:new Date().toISOString(),snapshotMode:env?.MACRO_STORE?.get?'kv+bundled':'bundled+isolate',sources:{}};
   const names=['ipcHistorical','gdpHistorical','industryHistorical','unemploymentHistorical','tradeHistorical','financialHistorical','exchangeHistorical','ipc','arca','icg','bcra','rem','salary','icl','contractIndices','isacHistorical','creditHistorical','activityPulse'];
   const jobs=await Promise.allSettled([ipcHistorical(),gdpHistorical(),industryHistorical(),unemploymentHistorical(),tradeHistorical(),financialHistorical(),exchangeHistorical(),ipc(),arca(),icg(),bcra(),rem(),salaryRipte(),icl(),contractIndices(),isacHistorical(),creditHistorical(),activityPulse()]);
   jobs.forEach((j,i)=>{

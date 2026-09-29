@@ -637,10 +637,17 @@ function recentAnnualEntries(obj,n=12){return Object.entries(obj||{}).filter(([d
 function normalizedMonthlyRows(rows,valueField='value',n=60){const byMonth=new Map();for(const r of (Array.isArray(rows)?rows:[])){const d=String(r?.date||'').slice(0,7),v=Number(r?.[valueField]);if(/^\d{4}-\d{2}$/.test(d)&&Number.isFinite(v))byMonth.set(d,v);}return [...byMonth.entries()].sort(([a],[b])=>a.localeCompare(b)).slice(-n);}
 async function loadBundledMacroHistory(){
   try{
-    const r=await fetch('/macro-history.json?v=107',{cache:'no-store'}); if(!r.ok)return;
+    const r=await fetch('/macro-history.json?v=108',{cache:'no-store'}); if(!r.ok)return;
     const h=await r.json();
     if(h.povertyAnnual)Object.assign(poverty,h.povertyAnnual);
     if(h.tradeMonthly)Object.assign(tradeBalanceMonthly,h.tradeMonthly);
+    // v108: IPC CABA must be hydrated from the bundled snapshot itself, not only from /api/macro-data.
+    // This keeps the modal working even if the API/KV path fails or resolves later.
+    if(h.ipcCabaMonthly){
+      kpiSourceCache=kpiSourceCache||{sources:{}}; kpiSourceCache.sources=kpiSourceCache.sources||{};
+      const prev=kpiSourceCache.sources.ipcCaba?.history||{};
+      kpiSourceCache.sources.ipcCaba={...(kpiSourceCache.sources.ipcCaba||{}),status:'ok',source:'IDECBA — IPCBA Nivel General',history:{...h.ipcCabaMonthly,...prev}};
+    }
     kpiSourceCache=kpiSourceCache||{sources:{}}; kpiSourceCache.sources=kpiSourceCache.sources||{};
     const S=kpiSourceCache.sources;
     if(h.icgMonthly)S.icg={...(S.icg||{}),status:'ok',history:{...h.icgMonthly,...(S.icg?.history||{})}};
