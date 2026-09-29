@@ -43,7 +43,7 @@ Las URLs del navegador permanecen iguales: `/api/macro-data` y `/api/calendar-da
 ## v66
 Tarjetas: últimas 12 observaciones disponibles. Se incorporan históricos de resultado fiscal, cemento AFCP, ISAC INDEC, patentamientos ACARA, crédito BCRA y mora bancaria.
 
-## v102 — históricos snapshot-first
+## v103 — históricos snapshot-first
 
 La API `/api/macro-data` conserva el último snapshot válido por fuente y fusiona las actualizaciones sin permitir que una respuesta parcial recorte una serie histórica ya almacenada.
 
