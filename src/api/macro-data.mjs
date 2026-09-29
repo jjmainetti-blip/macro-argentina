@@ -1,3 +1,4 @@
+import * as XLSX from 'xlsx';
 import { BUNDLED_SOURCES } from './bundled-history.mjs';
 /* Macro Argentina v8 — stable server-side data contract.
    Each adapter fails independently. The browser keeps its bundled last-known value
@@ -668,58 +669,31 @@ async function creditHistorical(){
   const x=await seriesRows('91.1_PEFPC_0_0_35',{start:'2019-01-01'});
   return {status:'ok',source:'BCRA / Datos Argentina — préstamos al sector privado',sourceUrl:x.url,monthlyYoy:yoyFromRows(x.rows)};
 }
+async function arrearsFromOfficialWorkbook(){
+  const url='https://www.bcra.gob.ar/archivos/Pdfs/PublicacionesEstadisticas/informes/informe-bancos-anexo.xlsx';
+  const c=new AbortController(),t=setTimeout(()=>c.abort(),18000);
+  try{
+    const r=await fetch(url,{signal:c.signal}); if(!r.ok)throw new Error(`anexo BCRA ${r.status}`);
+    const wb=XLSX.read(await r.arrayBuffer(),{type:'array',cellDates:true});
+    const monthKey=v=>{if(v instanceof Date&&!isNaN(v))return `${v.getUTCFullYear()}-${String(v.getUTCMonth()+1).padStart(2,'0')}`;const z=String(v??'').trim();let m=z.match(/(20\d{2})[-\/.](0?[1-9]|1[0-2])/);if(m)return `${m[1]}-${String(+m[2]).padStart(2,'0')}`;m=z.match(/(0?[1-9]|1[0-2])[-\/.](20\d{2})/);if(m)return `${m[2]}-${String(+m[1]).padStart(2,'0')}`;return null;};
+    const nt=v=>String(v??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+    const score=v=>{const z=nt(v);let n=0;if(/irregular|moros/.test(z))n+=4;if(/sector privado|total/.test(z))n+=3;if(/famil|empresa|grupo|entidad/.test(z))n-=2;return n;};
+    const extract=rows=>{const out={};if(!rows.length)return out;const cols=Math.max(...rows.map(r=>r.length),0),hs=Array(cols).fill(0);for(let r=0;r<Math.min(rows.length,25);r++)for(let c=0;c<cols;c++)hs[c]=Math.max(hs[c],score(rows[r]?.[c]));for(const row of rows){let d=null;for(const cell of row){d=monthKey(cell);if(d)break;}if(!d)continue;let best=null,bs=-99;for(let c=0;c<row.length;c++){const v=Number(String(row[c]??'').replace(',','.').replace('%','').trim());if(!Number.isFinite(v)||v<0||v>30)continue;if(hs[c]>bs){bs=hs[c];best=v;}}if(bs>=4)out[d]=round(best,1);}return out;};
+    let best={};for(const name of wb.SheetNames){const rows=XLSX.utils.sheet_to_json(wb.Sheets[name],{header:1,raw:true,defval:null}),a=extract(rows);if(Object.keys(a).length>Object.keys(best).length)best=a;const cols=Math.max(...rows.map(r=>r.length),0),tr=[];for(let c=0;c<cols;c++)tr.push(rows.map(r=>r[c]));const b=extract(tr);if(Object.keys(b).length>Object.keys(best).length)best=b;}
+    if(Object.keys(best).length<36)throw new Error(`anexo BCRA: serie de mora no identificada (${Object.keys(best).length})`);return {url,monthlyTotal:best};
+  }finally{clearTimeout(t)}
+}
 async function arrearsHistorical(){
-  // Baseline verificado en informes BCRA. El refresco completa meses posteriores leyendo
-  // las páginas mensuales oficiales; si alguna falla, mergeSnapshot conserva el histórico.
   const total={'2021-08':5.3,'2021-09':5.0,'2021-10':4.9,'2021-11':4.5,'2021-12':4.3,'2022-01':4.3,'2022-02':4.2,'2022-03':3.9,'2022-04':3.6,'2022-05':3.4,'2022-06':3.2,'2022-07':3.1};
-  const months=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
-  const targets=[]; for(let y=2022;y<=2026;y++)for(let m=1;m<=12;m++){const k=`${y}-${String(m).padStart(2,'0')}`;if(k>'2022-07'&&k<='2026-07')targets.push([k,months[m-1],y]);}
-  const batches=[]; for(let i=0;i<targets.length;i+=12)batches.push(targets.slice(i,i+12));
-  for(const batch of batches){
-    const rs=await Promise.allSettled(batch.map(async([k,mon,y])=>{
-      const url=`https://www.bcra.gob.ar/publicaciones/informe-sobre-bancos-${mon}-de-${y}/`;
-      const html=strip(await get(url));
-      const patterns=[/ratio de irregularidad del cr[eé]dito al sector privado[^%]{0,240}?(?:ubic[oó]|ubicarse|situ[oó]|situarse|alcanz[oó]|alcanzar|totaliz[oó]|totalizar|hasta|en torno a|en el entorno de)[^0-9]{0,60}(\d{1,2}(?:[,.]\d+)?)%/i,/irregularidad del cr[eé]dito al sector privado[^%]{0,180}?(\d{1,2}(?:[,.]\d+)?)%/i];
-      let v=NaN; for(const re of patterns){const m=html.match(re);if(m){v=Number(m[1].replace(',','.'));if(Number.isFinite(v))break;}}
-      if(!Number.isFinite(v))throw new Error(`mora no encontrada ${k}`); return [k,round(v,1)];
-    }));
-    for(const r of rs)if(r.status==='fulfilled')total[r.value[0]]=r.value[1];
-  }
-  if(Object.keys(total).length<24)throw new Error(`histórico de mora insuficiente: ${Object.keys(total).length}`);
-  return {status:'ok',source:'BCRA — Informe sobre Bancos',sourceUrl:'https://www.bcra.gob.ar/informe-sobre-bancos/',monthlyTotal:total};
+  let sourceUrl='https://www.bcra.gob.ar/informe-sobre-bancos/';try{const x=await arrearsFromOfficialWorkbook();Object.assign(total,x.monthlyTotal);sourceUrl=x.url;}catch(e){console.warn('anexo BCRA mora',e);}
+  const recent=[['2025-12','diciembre',2025],['2026-01','enero',2026],['2026-02','febrero',2026],['2026-03','marzo',2026],['2026-04','abril',2026],['2026-05','mayo',2026],['2026-06','junio',2026],['2026-07','julio',2026]];
+  const rs=await Promise.allSettled(recent.map(async([k,mon,y])=>{const url=`https://www.bcra.gob.ar/publicaciones/informe-sobre-bancos-${mon}-de-${y}/`;const html=strip(await get(url));const re=/(?:ratio de )?irregularidad (?:del cr[eé]dito|de las financiaciones) al sector privado[^%]{0,300}?(?:ubic[oó]|ubicarse|alcanz[oó]|ascendi[oó]|totaliz[oó])[^0-9]{0,80}(\d{1,2}(?:[,.]\d+)?)%/i;const m=html.match(re);if(!m)throw new Error(`mora ${k}`);return[k,Number(m[1].replace(',','.'))];}));for(const r of rs)if(r.status==='fulfilled')total[r.value[0]]=round(r.value[1],1);
+  if(Object.keys(total).length<24)throw new Error(`histórico de mora insuficiente: ${Object.keys(total).length}`);return {status:'ok',source:'BCRA — Anexo Estadístico / Informe sobre Bancos',sourceUrl,monthlyTotal:total};
 }
 
-async function activityPulse(){
-  // Últimos valores publicados y verificados. El adaptador queda aislado para que una fuente sectorial no bloquee el resto del tablero.
-  return {status:'ok',source:'Economía / INDEC / AFCP / ACARA / BCRA',
-    fiscal:{period:'ago 2026',financial:635.529,primary:1990.322,unit:'miles de millones ARS',yoyPp:{primary:-0.2,financial:-0.2},sourceUrl:'https://www.argentina.gob.ar/economia/hacienda',historyPctGDP:{primary:{'2024-01':0.2,'2024-02':0.5,'2024-03':0.6,'2024-04':0.6,'2024-05':1.0,'2024-06':1.1,'2024-07':1.4,'2024-08':1.5,'2024-09':1.7,'2024-10':1.8,'2024-11':1.9,'2024-12':1.8,'2025-01':0.3,'2025-02':0.4,'2025-03':0.5,'2025-04':0.6,'2025-05':0.8,'2025-06':0.9,'2025-07':1.1,'2025-08':1.3,'2025-09':1.3,'2025-10':1.4,'2025-11':1.7,'2025-12':1.4,'2026-01':0.3,'2026-02':0.4,'2026-03':0.5,'2026-04':0.5,'2026-05':0.7,'2026-06':0.6,'2026-07':0.9,'2026-08':1.1},financial:{'2024-01':0.2,'2024-02':0.2,'2024-03':0.2,'2024-04':0.2,'2024-05':0.4,'2024-06':0.4,'2024-07':0.4,'2024-08':0.4,'2024-09':0.4,'2024-10':0.5,'2024-11':0.3,'2024-12':0.3,'2025-01':0.1,'2025-02':0.1,'2025-03':0.2,'2025-04':0.2,'2025-05':0.3,'2025-06':0.4,'2025-07':0.3,'2025-08':0.4,'2025-09':0.4,'2025-10':0.5,'2025-11':0.6,'2025-12':0.2,'2026-01':0.1,'2026-02':0.1,'2026-03':0.2,'2026-04':0.2,'2026-05':0.2,'2026-06':0.1,'2026-07':0.1,'2026-08':0.2}},history:{
-      'Resultado primario':{'2025-08':1556.865,'2025-09':696.965,'2025-10':823.925,'2025-11':2128.010,'2026-01':3125.737,'2026-02':1410.639,'2026-03':930.284,'2026-04':632.844,'2026-05':1924.367,'2026-06':-696.843,'2026-07':2960.333,'2026-08':1990.322},
-      'Resultado financiero':{'2025-08':390.301,'2025-09':309.623,'2025-10':517.672,'2025-11':599.954,'2026-01':1105.159,'2026-02':144.421,'2026-03':484.789,'2026-04':268.103,'2026-05':478.613,'2026-06':-1024.891,'2026-07':244.897,'2026-08':635.529}
-    }},
-    cement:{period:'ago 2026',tons:817082,yoy:-8.1,mom:-0.1,sourceUrl:'https://www.afcp.org.ar/copia-de-produccion-de-cemento-y-cl',historyYoy:{'2026-01':-5.3,'2026-02':-5.3,'2026-03':11.0,'2026-04':-13.2,'2026-05':-1.5,'2026-06':-1.4,'2026-07':-8.2,'2026-08':-8.1},annualYoy:{'2022':7.0,'2023':-3.2,'2024':-23.9,'2025':5.6,'2026 YTD':-4.4},history:{
-      'Despacho nacional (t)':{'2025-09':917330,'2025-10':944216,'2025-11':829590,'2025-12':776185,'2026-01':742456,'2026-02':750305,'2026-03':846616,'2026-04':837659,'2026-05':843563,'2026-06':811474,'2026-07':817901,'2026-08':817082}
-    }},
-    isac:{period:'jul 2026',yoy:-4.5,mom:-4.6,sourceUrl:'https://www.indec.gob.ar/indec/web/Institucional-Indec-InformesTecnicos-47',history:{
-      'ISAC nivel general (2004=100)':{'2025-08':153.6,'2025-09':160.5,'2025-10':168.4,'2025-11':142.4,'2025-12':136.4,'2026-01':133.0,'2026-02':123.8,'2026-03':149.5,'2026-04':142.2,'2026-05':147.1,'2026-06':154.5,'2026-07':147.38}
-    }},
-    autos:{period:'ago 2026',units:44415,yoy:-19.1,mom:-1.5,sourceUrl:'https://www.acara.org.ar/',historyYoy:{'2026-01':-5.0,'2026-02':-5.7,'2026-03':1.2,'2026-04':-13.6,'2026-05':-25.6,'2026-06':-8.2,'2026-07':-27.5,'2026-08':-18.8},history:{
-      'Patentamientos (unidades)':{'2022-01':43505,'2022-02':29103,'2022-03':34527,'2022-04':31868,'2022-05':35327,'2022-06':35385,'2022-07':38892,'2022-08':38342,'2022-09':34815,'2022-10':32436,'2022-11':33698,'2022-12':19635,'2023-01':50362,'2023-02':30509,'2023-03':39877,'2023-04':34768,'2023-05':40164,'2023-06':40114,'2023-07':44119,'2023-08':39465,'2023-09':33636,'2023-10':41945,'2023-11':35981,'2023-12':18498,'2024-01':33917,'2024-02':25050,'2024-03':25813,'2024-04':32941,'2024-05':34796,'2024-06':30905,'2024-07':43149,'2024-08':41507,'2024-09':43679,'2024-10':44467,'2024-11':36220,'2024-12':21761,'2025-01':69521,'2025-02':44569,'2025-03':48389,'2025-04':55026,'2025-05':56320,'2025-06':52730,'2025-07':62818,'2025-08':54889,'2025-09':56240,'2025-10':52259,'2025-11':35424,'2025-12':23997,'2026-01':66080,'2026-02':42026,'2026-03':48972,'2026-04':47564,'2026-05':41921,'2026-06':47415,'2026-07':43758,'2026-08':44415}
-    }},
-    credit:{period:'ago 2026',arsRealMom:-1.0,usdBalance:25241,usdMom:258,sourceUrl:'https://www.bcra.gob.ar/informe-monetario-mensual/',history:{
-      'Crédito en pesos — var. real mensual (%)':{'2025-09':-1.8,'2025-10':1.1,'2025-11':-1.6,'2025-12':1.1,'2026-01':-1.9,'2026-02':0.0,'2026-03':-0.4,'2026-04':0.6,'2026-05':-0.3,'2026-06':0.3,'2026-07':1.2,'2026-08':-1.0}
-    }},
-    arrears:{period:'jul 2026',total:7.7,families:12.9,companies:3.6,pde:2.4,sourceUrl:'https://www.bcra.gob.ar/informe-sobre-bancos/',history:{
-      'Total':{'2025-12':5.5,'2026-02':6.7,'2026-03':7.0,'2026-04':7.3,'2026-05':7.7,'2026-06':7.6,'2026-07':7.7},
-      'Familias':{'2025-12':9.3,'2026-02':11.2,'2026-03':11.5,'2026-04':12.1,'2026-05':12.8,'2026-06':12.8,'2026-07':12.9},
-      'Empresas':{'2025-12':2.5,'2026-02':2.9,'2026-03':3.1,'2026-04':3.3,'2026-05':3.5,'2026-06':3.5,'2026-07':3.6}
-    }}
-  };
-}
-// v102: snapshot-first. Cada adaptador puede refrescarse sin destruir el último histórico válido.
-// MACRO_STORE es un KV opcional. Si está vinculado, el snapshot sobrevive despliegues;
 // sin KV se conserva al menos durante la vida del isolate y el frontend mantiene otra copia local.
 let MEMORY_SNAPSHOT=null;
-const SNAPSHOT_KEY='macro:snapshot:v111';
+const SNAPSHOT_KEY='macro:snapshot:v112';
 function isPlainObject(v){return !!v&&typeof v==='object'&&!Array.isArray(v);}
 function mergeSnapshot(oldValue,newValue){
   if(Array.isArray(oldValue)||Array.isArray(newValue)){
@@ -752,8 +726,8 @@ async function writeSnapshot(env,ctx,snapshot){
 }
 export default async(env={},ctx=null)=>{
   const stored=await readSnapshot(env);
-  const previous=mergeSnapshot({version:111,sources:BUNDLED_SOURCES},stored||{});
-  const out={version:111,generatedAt:new Date().toISOString(),snapshotMode:env?.MACRO_STORE?.get?'kv+bundled':'bundled+isolate',sources:{}};
+  const previous=mergeSnapshot({version:112,sources:BUNDLED_SOURCES},stored||{});
+  const out={version:112,generatedAt:new Date().toISOString(),snapshotMode:env?.MACRO_STORE?.get?'kv+bundled':'bundled+isolate',sources:{}};
   const names=['ipcHistorical','gdpHistorical','emaeHistorical','industryHistorical','unemploymentHistorical','tradeHistorical','financialHistorical','exchangeHistorical','ipc','arca','icg','bcra','rem','salary','icl','contractIndices','isacHistorical','creditHistorical','arrearsHistorical','activityPulse'];
   const jobs=await Promise.allSettled([ipcHistorical(),gdpHistorical(),emaeHistorical(),industryHistorical(),unemploymentHistorical(),tradeHistorical(),financialHistorical(),exchangeHistorical(),ipc(),arca(),icg(),bcra(),rem(),salaryRipte(),icl(),contractIndices(),isacHistorical(),creditHistorical(),arrearsHistorical(),activityPulse()]);
   jobs.forEach((j,i)=>{

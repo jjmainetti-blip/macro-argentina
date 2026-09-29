@@ -491,6 +491,22 @@ async function loadCementMonthlyFast(){
   }catch(e){console.warn('cement monthly fast',e);}
 }
 
+async function loadOfficialSeriesFallback(){
+  const S=kpiSourceCache||{};
+  const fetchSeries=async(id,start)=>{
+    const u=`https://apis.datos.gob.ar/series/api/series/?ids=${encodeURIComponent(id)}&start_date=${start}&limit=1000&format=json&metadata=none`;
+    const r=await fetch(u,{headers:{accept:'application/json'}}); if(!r.ok)throw new Error(`Datos Argentina ${r.status}`);
+    const j=await r.json(); return (j.data||[]).map(x=>({date:String(x[0]).slice(0,7),value:Number(x[1])})).filter(x=>/^\d{4}-\d{2}$/.test(x.date)&&Number.isFinite(x.value));
+  };
+  if(!S.emaeHistorical?.monthlyYoy||Object.keys(S.emaeHistorical.monthlyYoy).length<60){
+    try{const rows=await fetchSeries('143.3_ICE_SERVIA_2004_A_25','2020-01-01'),monthlyYoy={};for(const x of rows)monthlyYoy[x.date]=Number(x.value.toFixed(1));if(Object.keys(monthlyYoy).length>=60)S.emaeHistorical={...(S.emaeHistorical||{}),status:'ok',source:'INDEC / Datos Argentina — EMAE variación interanual',monthlyYoy:{...(S.emaeHistorical?.monthlyYoy||{}),...monthlyYoy}};}catch(e){console.warn('EMAE fallback',e);}
+  }
+  if(!S.creditHistorical?.monthlyYoy||Object.keys(S.creditHistorical.monthlyYoy).length<60){
+    try{const rows=await fetchSeries('91.1_PEFPC_0_0_35','2019-01-01'),levels={},monthlyYoy={};for(const x of rows)levels[x.date]=x.value;for(const [d,v] of Object.entries(levels)){const [y,m]=d.split('-'),pv=levels[`${Number(y)-1}-${m}`];if(Number.isFinite(pv)&&pv!==0)monthlyYoy[d]=Number(((v/pv-1)*100).toFixed(1));}if(Object.keys(monthlyYoy).length>=60)S.creditHistorical={...(S.creditHistorical||{}),status:'ok',source:'BCRA / Datos Argentina — préstamos al sector privado',monthlyYoy:{...(S.creditHistorical?.monthlyYoy||{}),...monthlyYoy}};}catch(e){console.warn('Crédito fallback',e);}
+  }
+  if(currentSeries==='emae'||currentSeries==='credit')renderHistory(currentSeries);
+}
+
 async function loadAutomaticData(){
   const status=document.getElementById('autoStatus');
   try{
@@ -498,13 +514,14 @@ async function loadAutomaticData(){
     try{
       const r=await fetch('/api/macro-data',{headers:{accept:'application/json'}}); if(!r.ok)throw new Error(`API ${r.status}`);
       data=await r.json();
-      if(data?.sources)try{localStorage.setItem('macroArgentinaSnapshotV111',JSON.stringify(data));}catch{}
+      if(data?.sources)try{localStorage.setItem('macroArgentinaSnapshotV112',JSON.stringify(data));}catch{}
     }catch(networkError){
-      try{data=JSON.parse(localStorage.getItem('macroArgentinaSnapshotV111')||'null');}catch{}
+      try{data=JSON.parse(localStorage.getItem('macroArgentinaSnapshotV112')||'null');}catch{}
       if(!data?.sources)throw networkError;
       console.warn('macro-data: usando snapshot local',networkError);
     }
     const S=data.sources||{}; kpiSourceCache=S; hydrateKpiHistoryCache(S);
+    loadOfficialSeriesFallback();
     safeApply('calculatorHydration',()=>hydrateCalculatorSources(S));
 
     // RIPTE se hidrata primero y de forma independiente. Ningún error posterior de
@@ -638,7 +655,7 @@ function recentAnnualEntries(obj,n=12){return Object.entries(obj||{}).filter(([d
 function normalizedMonthlyRows(rows,valueField='value',n=60){const byMonth=new Map();for(const r of (Array.isArray(rows)?rows:[])){const d=String(r?.date||'').slice(0,7),v=Number(r?.[valueField]);if(/^\d{4}-\d{2}$/.test(d)&&Number.isFinite(v))byMonth.set(d,v);}return [...byMonth.entries()].sort(([a],[b])=>a.localeCompare(b)).slice(-n);}
 async function loadBundledMacroHistory(){
   try{
-    const r=await fetch('/macro-history.json?v=111',{cache:'no-store'}); if(!r.ok)return;
+    const r=await fetch('/macro-history.json?v=112',{cache:'no-store'}); if(!r.ok)return;
     const h=await r.json();
     if(h.povertyAnnual)Object.assign(poverty,h.povertyAnnual);
     if(h.tradeMonthly)Object.assign(tradeBalanceMonthly,h.tradeMonthly);
