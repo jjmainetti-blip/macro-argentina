@@ -494,8 +494,17 @@ async function loadCementMonthlyFast(){
 async function loadAutomaticData(){
   const status=document.getElementById('autoStatus');
   try{
-    const r=await fetch('/api/macro-data',{headers:{accept:'application/json'}}); if(!r.ok)throw new Error(`API ${r.status}`);
-    const data=await r.json(), S=data.sources||{}; kpiSourceCache=S; hydrateKpiHistoryCache(S);
+    let data=null;
+    try{
+      const r=await fetch('/api/macro-data',{headers:{accept:'application/json'}}); if(!r.ok)throw new Error(`API ${r.status}`);
+      data=await r.json();
+      if(data?.sources)try{localStorage.setItem('macroArgentinaSnapshotV102',JSON.stringify(data));}catch{}
+    }catch(networkError){
+      try{data=JSON.parse(localStorage.getItem('macroArgentinaSnapshotV102')||'null');}catch{}
+      if(!data?.sources)throw networkError;
+      console.warn('macro-data: usando snapshot local',networkError);
+    }
+    const S=data.sources||{}; kpiSourceCache=S; hydrateKpiHistoryCache(S);
     safeApply('calculatorHydration',()=>hydrateCalculatorSources(S));
 
     // RIPTE se hidrata primero y de forma independiente. Ningún error posterior de

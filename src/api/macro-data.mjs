@@ -684,11 +684,47 @@ async function activityPulse(){
     }}
   };
 }
-export default async()=>{
-  const out={version:101,generatedAt:new Date().toISOString(),sources:{}};
+// v102: snapshot-first. Cada adaptador puede refrescarse sin destruir el último histórico válido.
+// MACRO_STORE es un KV opcional. Si está vinculado, el snapshot sobrevive despliegues;
+// sin KV se conserva al menos durante la vida del isolate y el frontend mantiene otra copia local.
+let MEMORY_SNAPSHOT=null;
+const SNAPSHOT_KEY='macro:snapshot:v102';
+function isPlainObject(v){return !!v&&typeof v==='object'&&!Array.isArray(v);}
+function mergeSnapshot(oldValue,newValue){
+  if(Array.isArray(oldValue)||Array.isArray(newValue)){
+    const a=Array.isArray(oldValue)?oldValue:[],b=Array.isArray(newValue)?newValue:[];
+    return b.length>=a.length?b:a;
+  }
+  if(isPlainObject(oldValue)||isPlainObject(newValue)){
+    const out={...(isPlainObject(oldValue)?oldValue:{})};
+    for(const [k,v] of Object.entries(isPlainObject(newValue)?newValue:{})){
+      if(v===null||v===undefined||v==='')continue;
+      out[k]=mergeSnapshot(out[k],v);
+    }
+    return out;
+  }
+  return newValue===null||newValue===undefined?oldValue:newValue;
+}
+async function readSnapshot(env){
+  if(env?.MACRO_STORE?.get){try{const x=await env.MACRO_STORE.get(SNAPSHOT_KEY,'json');if(x?.sources)return x;}catch{}}
+  return MEMORY_SNAPSHOT;
+}
+async function writeSnapshot(env,ctx,snapshot){
+  MEMORY_SNAPSHOT=snapshot;
+  if(env?.MACRO_STORE?.put){const job=env.MACRO_STORE.put(SNAPSHOT_KEY,JSON.stringify(snapshot));if(ctx?.waitUntil)ctx.waitUntil(job);else try{await job}catch{}}
+}
+export default async(env={},ctx=null)=>{
+  const previous=await readSnapshot(env);
+  const out={version:102,generatedAt:new Date().toISOString(),snapshotMode:env?.MACRO_STORE?.get?'kv+bundled':'bundled+isolate',sources:{}};
   const names=['ipcHistorical','gdpHistorical','industryHistorical','unemploymentHistorical','tradeHistorical','financialHistorical','exchangeHistorical','ipc','arca','icg','bcra','rem','salary','icl','contractIndices','isacHistorical','creditHistorical','activityPulse'];
   const jobs=await Promise.allSettled([ipcHistorical(),gdpHistorical(),industryHistorical(),unemploymentHistorical(),tradeHistorical(),financialHistorical(),exchangeHistorical(),ipc(),arca(),icg(),bcra(),rem(),salaryRipte(),icl(),contractIndices(),isacHistorical(),creditHistorical(),activityPulse()]);
-  jobs.forEach((j,i)=>out.sources[names[i]]=j.status==='fulfilled'?j.value:{status:'error',error:String(j.reason?.message||j.reason)});
-  const ok=Object.values(out.sources).some(x=>x.status==='ok');
-  return new Response(JSON.stringify(out),{status:ok?200:503,headers:{'content-type':'application/json; charset=utf-8','cache-control':'public, max-age=60, s-maxage=60, stale-while-revalidate=120','access-control-allow-origin':'*'}});
+  jobs.forEach((j,i)=>{
+    const name=names[i],old=previous?.sources?.[name];
+    if(j.status==='fulfilled'){out.sources[name]=mergeSnapshot(old,j.value);}
+    else if(old){out.sources[name]={...old,status:old.status==='error'?'snapshot':'ok',snapshotFallback:true,refreshError:String(j.reason?.message||j.reason)};}
+    else out.sources[name]={status:'error',error:String(j.reason?.message||j.reason)};
+  });
+  const ok=Object.values(out.sources).some(x=>x.status==='ok'||x.status==='snapshot');
+  if(ok)await writeSnapshot(env,ctx,out);
+  return new Response(JSON.stringify(out),{status:ok?200:503,headers:{'content-type':'application/json; charset=utf-8','cache-control':'public, max-age=60, s-maxage=60, stale-while-revalidate=300','access-control-allow-origin':'*'}});
 };
