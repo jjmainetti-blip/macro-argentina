@@ -655,8 +655,17 @@ async function isacHistorical(){
   if(!Object.keys(monthly).length)throw new Error('serie ISAC interanual no disponible');
   return {status:'ok',source:'INDEC / Datos Argentina — ISAC variación interanual',sourceUrl,monthlyYoy:monthly};
 }
+
+async function emaeHistorical(){
+  const x=await seriesRows('143.3_ICE_SERVIA_2004_A_25',{start:'2020-01-01'});
+  const monthlyYoy={};
+  for(const r of x.rows){const k=String(r.date).slice(0,7);if(/^\d{4}-\d{2}$/.test(k)&&Number.isFinite(Number(r.value)))monthlyYoy[k]=round(Number(r.value),1);}
+  if(Object.keys(monthlyYoy).length<24)throw new Error('serie EMAE interanual insuficiente');
+  return {status:'ok',source:'INDEC / Datos Argentina — EMAE variación interanual',sourceUrl:x.url,monthlyYoy};
+}
+
 async function creditHistorical(){
-  const x=await seriesRows('91.1_PEFPC_0_0_35',{start:'2024-01-01'});
+  const x=await seriesRows('91.1_PEFPC_0_0_35',{start:'2019-01-01'});
   return {status:'ok',source:'BCRA / Datos Argentina — préstamos al sector privado',sourceUrl:x.url,monthlyYoy:yoyFromRows(x.rows)};
 }
 async function activityPulse(){
@@ -722,10 +731,10 @@ async function writeSnapshot(env,ctx,snapshot){
 }
 export default async(env={},ctx=null)=>{
   const stored=await readSnapshot(env);
-  const previous=mergeSnapshot({version:108,sources:BUNDLED_SOURCES},stored||{});
-  const out={version:108,generatedAt:new Date().toISOString(),snapshotMode:env?.MACRO_STORE?.get?'kv+bundled':'bundled+isolate',sources:{}};
-  const names=['ipcHistorical','gdpHistorical','industryHistorical','unemploymentHistorical','tradeHistorical','financialHistorical','exchangeHistorical','ipc','arca','icg','bcra','rem','salary','icl','contractIndices','isacHistorical','creditHistorical','activityPulse'];
-  const jobs=await Promise.allSettled([ipcHistorical(),gdpHistorical(),industryHistorical(),unemploymentHistorical(),tradeHistorical(),financialHistorical(),exchangeHistorical(),ipc(),arca(),icg(),bcra(),rem(),salaryRipte(),icl(),contractIndices(),isacHistorical(),creditHistorical(),activityPulse()]);
+  const previous=mergeSnapshot({version:109,sources:BUNDLED_SOURCES},stored||{});
+  const out={version:109,generatedAt:new Date().toISOString(),snapshotMode:env?.MACRO_STORE?.get?'kv+bundled':'bundled+isolate',sources:{}};
+  const names=['ipcHistorical','gdpHistorical','emaeHistorical','industryHistorical','unemploymentHistorical','tradeHistorical','financialHistorical','exchangeHistorical','ipc','arca','icg','bcra','rem','salary','icl','contractIndices','isacHistorical','creditHistorical','activityPulse'];
+  const jobs=await Promise.allSettled([ipcHistorical(),gdpHistorical(),emaeHistorical(),industryHistorical(),unemploymentHistorical(),tradeHistorical(),financialHistorical(),exchangeHistorical(),ipc(),arca(),icg(),bcra(),rem(),salaryRipte(),icl(),contractIndices(),isacHistorical(),creditHistorical(),activityPulse()]);
   jobs.forEach((j,i)=>{
     const name=names[i],old=previous?.sources?.[name];
     if(j.status==='fulfilled'){out.sources[name]=mergeSnapshot(old,j.value);}
