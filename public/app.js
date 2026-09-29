@@ -498,9 +498,9 @@ async function loadAutomaticData(){
     try{
       const r=await fetch('/api/macro-data',{headers:{accept:'application/json'}}); if(!r.ok)throw new Error(`API ${r.status}`);
       data=await r.json();
-      if(data?.sources)try{localStorage.setItem('macroArgentinaSnapshotV102',JSON.stringify(data));}catch{}
+      if(data?.sources)try{localStorage.setItem('macroArgentinaSnapshotV110',JSON.stringify(data));}catch{}
     }catch(networkError){
-      try{data=JSON.parse(localStorage.getItem('macroArgentinaSnapshotV102')||'null');}catch{}
+      try{data=JSON.parse(localStorage.getItem('macroArgentinaSnapshotV110')||'null');}catch{}
       if(!data?.sources)throw networkError;
       console.warn('macro-data: usando snapshot local',networkError);
     }
@@ -638,7 +638,7 @@ function recentAnnualEntries(obj,n=12){return Object.entries(obj||{}).filter(([d
 function normalizedMonthlyRows(rows,valueField='value',n=60){const byMonth=new Map();for(const r of (Array.isArray(rows)?rows:[])){const d=String(r?.date||'').slice(0,7),v=Number(r?.[valueField]);if(/^\d{4}-\d{2}$/.test(d)&&Number.isFinite(v))byMonth.set(d,v);}return [...byMonth.entries()].sort(([a],[b])=>a.localeCompare(b)).slice(-n);}
 async function loadBundledMacroHistory(){
   try{
-    const r=await fetch('/macro-history.json?v=108',{cache:'no-store'}); if(!r.ok)return;
+    const r=await fetch('/macro-history.json?v=110',{cache:'no-store'}); if(!r.ok)return;
     const h=await r.json();
     if(h.povertyAnnual)Object.assign(poverty,h.povertyAnnual);
     if(h.tradeMonthly)Object.assign(tradeBalanceMonthly,h.tradeMonthly);
