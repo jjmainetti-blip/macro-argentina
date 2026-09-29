@@ -498,9 +498,9 @@ async function loadAutomaticData(){
     try{
       const r=await fetch('/api/macro-data',{headers:{accept:'application/json'}}); if(!r.ok)throw new Error(`API ${r.status}`);
       data=await r.json();
-      if(data?.sources)try{localStorage.setItem('macroArgentinaSnapshotV110',JSON.stringify(data));}catch{}
+      if(data?.sources)try{localStorage.setItem('macroArgentinaSnapshotV111',JSON.stringify(data));}catch{}
     }catch(networkError){
-      try{data=JSON.parse(localStorage.getItem('macroArgentinaSnapshotV110')||'null');}catch{}
+      try{data=JSON.parse(localStorage.getItem('macroArgentinaSnapshotV111')||'null');}catch{}
       if(!data?.sources)throw networkError;
       console.warn('macro-data: usando snapshot local',networkError);
     }
@@ -638,7 +638,7 @@ function recentAnnualEntries(obj,n=12){return Object.entries(obj||{}).filter(([d
 function normalizedMonthlyRows(rows,valueField='value',n=60){const byMonth=new Map();for(const r of (Array.isArray(rows)?rows:[])){const d=String(r?.date||'').slice(0,7),v=Number(r?.[valueField]);if(/^\d{4}-\d{2}$/.test(d)&&Number.isFinite(v))byMonth.set(d,v);}return [...byMonth.entries()].sort(([a],[b])=>a.localeCompare(b)).slice(-n);}
 async function loadBundledMacroHistory(){
   try{
-    const r=await fetch('/macro-history.json?v=110',{cache:'no-store'}); if(!r.ok)return;
+    const r=await fetch('/macro-history.json?v=111',{cache:'no-store'}); if(!r.ok)return;
     const h=await r.json();
     if(h.povertyAnnual)Object.assign(poverty,h.povertyAnnual);
     if(h.tradeMonthly)Object.assign(tradeBalanceMonthly,h.tradeMonthly);
@@ -673,6 +673,7 @@ function kpiSeries(key){const S=kpiSourceCache||{},A=S.activityPulse||{};
   // ISAC: el identificador 33.2_I_2004_M_4 ya es porcentaje interanual; no volver a calcular YoY.
   if(key==='isac'&&S.isacHistorical?.monthlyYoy){const x=recentEntries(S.isacHistorical.monthlyYoy,60);if(x.length)return {chartType:'bar',labels:x.map(([d])=>displayMonth(d)),rawPeriods:x.map(([d])=>d),datasets:[{label:'ISAC · variación interanual (%)',data:x.map(([,v])=>Number(v))}],source:'INDEC / Datos Argentina',legend:`Últimas ${x.length} variaciones interanuales mensuales del ISAC.`};}
   if(key==='credit'&&S.creditHistorical?.monthlyYoy){const x=recentEntries(S.creditHistorical.monthlyYoy,60);return {chartType:'bar',labels:x.map(([d])=>displayMonth(d)),rawPeriods:x.map(([d])=>d),datasets:[{label:'Crédito privado · variación interanual nominal (%)',data:x.map(([,v])=>Number(v))}],source:'BCRA / Datos Argentina',legend:`Últimas ${x.length} variaciones interanuales mensuales del crédito privado.`};}
+  if(key==='arrears'&&S.arrearsHistorical?.monthlyTotal){const x=recentEntries(S.arrearsHistorical.monthlyTotal,60);if(x.length)return {chartType:'bar',labels:x.map(([d])=>displayMonth(d)),rawPeriods:x.map(([d])=>d),datasets:[{label:'Mora bancaria · irregularidad total (%)',data:x.map(([,v])=>Number(v))}],source:'BCRA — Informe sobre Bancos',legend:`Últimas ${x.length} observaciones mensuales del ratio de irregularidad del crédito al sector privado.`};}
   if(key==='autos'&&A.autos?.history?.['Patentamientos (unidades)']){const h=A.autos.history['Patentamientos (unidades)'],years=[2022,2023,2024,2025,2026],months=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];const palette=['#2563eb','#7c3aed','#0891b2','#ea580c','#16a34a'];const datasets=years.map((y,j)=>({label:String(y),backgroundColor:palette[j],borderColor:palette[j],preserveColor:true,data:months.map((_,i)=>{const v=h[`${y}-${String(i+1).padStart(2,'0')}`];return v==null?null:Number(v);})}));return {chartType:'bar',labels:months,datasets,source:'ACARA / SIOMAA',legend:'Patentamientos mensuales por año (2022–2026). Cada año conserva un color propio.'};}
   if(key==='cement'){const monthly=Object.fromEntries(Object.entries(cementMonthlyYoy).filter(([d,v])=>/^\d{4}-(0[1-9]|1[0-2])$/.test(d)&&Number.isFinite(Number(v))));const x=recentEntries(monthly,60);if(!x.length)return null;return {chartType:'bar',labels:x.map(([d])=>displayMonth(d)),rawPeriods:x.map(([d])=>d),datasets:[{label:'Despachos de cemento · variación interanual mensual (%)',data:x.map(([,v])=>Number(v)),type:'bar'}],source:'AFCP',legend:`Últimos 5 años: ${x.length} observaciones mensuales de variación interanual (%). Fuente AFCP.`};}
   const cached=kpiHistoryCache[key],h=cached?.history||A[key]?.history;if(h){const keys=Object.keys(h);if(keys.length&&h[keys[0]]&&typeof h[keys[0]]==='object'&&!Array.isArray(h[keys[0]])){const labels=[...new Set(keys.flatMap(k=>Object.keys(h[k]||{})))].filter(d=>/^\d{4}-\d{2}$/.test(d)).sort().slice(-60);const datasets=keys.map(k=>({label:k,data:labels.map(d=>{const v=h[k]?.[d];return v===null||v===undefined?null:Number(v);})})).filter(ds=>ds.data.some(v=>Number.isFinite(v)));if(labels.length&&datasets.length)return {labels:labels.map(displayMonth),datasets,source:cached?.source||A[key]?.source||A[key]?.sourceUrl||A.source};}const x=recentEntries(h);if(x.length)return {labels:x.map(([d])=>displayMonth(d)),datasets:[{label:KPI_META[key]?.title||key,data:x.map(([,v])=>Number(v))}],source:cached?.source||A[key]?.source||A[key]?.sourceUrl||A.source};}

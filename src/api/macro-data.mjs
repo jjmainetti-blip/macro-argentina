@@ -16,7 +16,7 @@ async function get(url,type='text'){
   const key=`${type}:${url}`;
   if(GET_CACHE.has(key))return GET_CACHE.get(key);
   const promise=(async()=>{
-    const c=new AbortController(); const t=setTimeout(()=>c.abort(),9000);
+    const c=new AbortController(); const t=setTimeout(()=>c.abort(),25000);
     try{const r=await fetch(url,{signal:c.signal,headers:{'user-agent':'MacroArgentinaDashboard/3.0 (+public economic dashboard)','accept-language':'es-AR,es;q=.9'}});if(!r.ok)throw new Error(`${r.status} ${r.statusText}`);return type==='json'?r.json():r.text();}
     finally{clearTimeout(t)}
   })();
@@ -668,6 +668,27 @@ async function creditHistorical(){
   const x=await seriesRows('91.1_PEFPC_0_0_35',{start:'2019-01-01'});
   return {status:'ok',source:'BCRA / Datos Argentina — préstamos al sector privado',sourceUrl:x.url,monthlyYoy:yoyFromRows(x.rows)};
 }
+async function arrearsHistorical(){
+  // Baseline verificado en informes BCRA. El refresco completa meses posteriores leyendo
+  // las páginas mensuales oficiales; si alguna falla, mergeSnapshot conserva el histórico.
+  const total={'2021-08':5.3,'2021-09':5.0,'2021-10':4.9,'2021-11':4.5,'2021-12':4.3,'2022-01':4.3,'2022-02':4.2,'2022-03':3.9,'2022-04':3.6,'2022-05':3.4,'2022-06':3.2,'2022-07':3.1};
+  const months=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  const targets=[]; for(let y=2022;y<=2026;y++)for(let m=1;m<=12;m++){const k=`${y}-${String(m).padStart(2,'0')}`;if(k>'2022-07'&&k<='2026-07')targets.push([k,months[m-1],y]);}
+  const batches=[]; for(let i=0;i<targets.length;i+=12)batches.push(targets.slice(i,i+12));
+  for(const batch of batches){
+    const rs=await Promise.allSettled(batch.map(async([k,mon,y])=>{
+      const url=`https://www.bcra.gob.ar/publicaciones/informe-sobre-bancos-${mon}-de-${y}/`;
+      const html=strip(await get(url));
+      const patterns=[/ratio de irregularidad del cr[eé]dito al sector privado[^%]{0,240}?(?:ubic[oó]|ubicarse|situ[oó]|situarse|alcanz[oó]|alcanzar|totaliz[oó]|totalizar|hasta|en torno a|en el entorno de)[^0-9]{0,60}(\d{1,2}(?:[,.]\d+)?)%/i,/irregularidad del cr[eé]dito al sector privado[^%]{0,180}?(\d{1,2}(?:[,.]\d+)?)%/i];
+      let v=NaN; for(const re of patterns){const m=html.match(re);if(m){v=Number(m[1].replace(',','.'));if(Number.isFinite(v))break;}}
+      if(!Number.isFinite(v))throw new Error(`mora no encontrada ${k}`); return [k,round(v,1)];
+    }));
+    for(const r of rs)if(r.status==='fulfilled')total[r.value[0]]=r.value[1];
+  }
+  if(Object.keys(total).length<24)throw new Error(`histórico de mora insuficiente: ${Object.keys(total).length}`);
+  return {status:'ok',source:'BCRA — Informe sobre Bancos',sourceUrl:'https://www.bcra.gob.ar/informe-sobre-bancos/',monthlyTotal:total};
+}
+
 async function activityPulse(){
   // Últimos valores publicados y verificados. El adaptador queda aislado para que una fuente sectorial no bloquee el resto del tablero.
   return {status:'ok',source:'Economía / INDEC / AFCP / ACARA / BCRA',
@@ -698,7 +719,7 @@ async function activityPulse(){
 // MACRO_STORE es un KV opcional. Si está vinculado, el snapshot sobrevive despliegues;
 // sin KV se conserva al menos durante la vida del isolate y el frontend mantiene otra copia local.
 let MEMORY_SNAPSHOT=null;
-const SNAPSHOT_KEY='macro:snapshot:v110';
+const SNAPSHOT_KEY='macro:snapshot:v111';
 function isPlainObject(v){return !!v&&typeof v==='object'&&!Array.isArray(v);}
 function mergeSnapshot(oldValue,newValue){
   if(Array.isArray(oldValue)||Array.isArray(newValue)){
@@ -731,10 +752,10 @@ async function writeSnapshot(env,ctx,snapshot){
 }
 export default async(env={},ctx=null)=>{
   const stored=await readSnapshot(env);
-  const previous=mergeSnapshot({version:110,sources:BUNDLED_SOURCES},stored||{});
-  const out={version:110,generatedAt:new Date().toISOString(),snapshotMode:env?.MACRO_STORE?.get?'kv+bundled':'bundled+isolate',sources:{}};
-  const names=['ipcHistorical','gdpHistorical','emaeHistorical','industryHistorical','unemploymentHistorical','tradeHistorical','financialHistorical','exchangeHistorical','ipc','arca','icg','bcra','rem','salary','icl','contractIndices','isacHistorical','creditHistorical','activityPulse'];
-  const jobs=await Promise.allSettled([ipcHistorical(),gdpHistorical(),emaeHistorical(),industryHistorical(),unemploymentHistorical(),tradeHistorical(),financialHistorical(),exchangeHistorical(),ipc(),arca(),icg(),bcra(),rem(),salaryRipte(),icl(),contractIndices(),isacHistorical(),creditHistorical(),activityPulse()]);
+  const previous=mergeSnapshot({version:111,sources:BUNDLED_SOURCES},stored||{});
+  const out={version:111,generatedAt:new Date().toISOString(),snapshotMode:env?.MACRO_STORE?.get?'kv+bundled':'bundled+isolate',sources:{}};
+  const names=['ipcHistorical','gdpHistorical','emaeHistorical','industryHistorical','unemploymentHistorical','tradeHistorical','financialHistorical','exchangeHistorical','ipc','arca','icg','bcra','rem','salary','icl','contractIndices','isacHistorical','creditHistorical','arrearsHistorical','activityPulse'];
+  const jobs=await Promise.allSettled([ipcHistorical(),gdpHistorical(),emaeHistorical(),industryHistorical(),unemploymentHistorical(),tradeHistorical(),financialHistorical(),exchangeHistorical(),ipc(),arca(),icg(),bcra(),rem(),salaryRipte(),icl(),contractIndices(),isacHistorical(),creditHistorical(),arrearsHistorical(),activityPulse()]);
   jobs.forEach((j,i)=>{
     const name=names[i],old=previous?.sources?.[name];
     if(j.status==='fulfilled'){out.sources[name]=mergeSnapshot(old,j.value);}
