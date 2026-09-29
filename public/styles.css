@@ -37,3 +37,5 @@
 
 /* v97 KPI presentation */
 .kpi .tone-up{color:var(--green)!important}.kpi .tone-down{color:var(--red)!important}.kpi .tone-flat{color:var(--muted)!important}.fiscal-values{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:16px 0 8px}.fiscal-values>div{min-width:0}.fiscal-values>div+div{border-left:1px solid var(--line);padding-left:12px}.fiscal-values span{display:block;color:var(--muted);font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.05em}.fiscal-values strong{display:block;font-size:22px;letter-spacing:-.035em;margin:4px 0 0;white-space:nowrap}.fiscal-values em{display:block;margin-top:6px;font-size:10px;font-style:normal;font-weight:800}.sr-only{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}@media(max-width:420px){.fiscal-values strong{font-size:19px}}
+
+.fiscal-unit{display:block;margin-top:2px;font-size:.72rem;font-weight:500;color:#64748b;line-height:1.2}
