@@ -17,6 +17,9 @@ checkMap('Crédito',h.creditMonthlyYoy,60);
 const mora=checkMap('Mora',h.arrearsMonthlyTotal,60);if(Object.values(h.arrearsMonthlyTotal).some(v=>!(v>0&&v<40)))fail('Mora fuera de rango');
 for(const m of ['primary','financial'])checkMap(`Fiscal ${m}`,h.fiscalPctGDP?.[m],24);
 checkMap('Patentamientos',h.autosMonthly,48);
+// v116
+checkMap('ILA',h.ilaMonthly,120);for(const [k,v] of Object.entries(h.ilaMonthly))if(!Number.isFinite(v.level)||!Number.isFinite(v.mom))fail(`ILA inválido ${k}`);
+checkMap('IGA',h.igaMonthly,36);for(const [k,v] of Object.entries(h.igaMonthly))if(!Number.isFinite(v.momSa)||!Number.isFinite(v.yoy))fail(`IGA inválido ${k}`);
 // v114
 checkMap('EMAE s.e.',h.emaeMonthlySaMom,60);notFraction('EMAE s.e.',h.emaeMonthlySaMom);
 checkMap('Crédito s.e.',h.creditMonthlySaRealMom,55);

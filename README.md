@@ -1,4 +1,4 @@
-# Macro Argentina — Cloudflare v115
+# Macro Argentina — Cloudflare v116
 
 Migración de la v63 desde Netlify a Cloudflare Workers + Static Assets.
 
@@ -102,3 +102,9 @@ Chequeo: `npm run validate:snapshot`.
   - Balanza: verde superávit ≥ año anterior; amarillo superávit menor; rojo déficit.
   - Resultado fiscal: verde superávit primario y financiero; amarillo sólo primario; rojo déficit primario.
   - Los umbrales están en `computeKpiCards()` (función `signalFrom(valor, banda, mayorEsMejor)`).
+
+
+## v116 — ILA e IGA
+- **Índice Líder de Actividad (ILA-ARG)**, CICEc (Bolsas de Comercio de Santa Fe y Rosario). El Worker busca el Excel vigente en `cicec.ar/base-de-datos` (`Data_ARG_AAAAMM.xlsx`, hoja "CICEC") y lee nivel, tasa mensual, interanual e índice de difusión. Ojo: en esa hoja los meses son números de Excel y octubre llega como `AAAA.1`; el lector lo contempla. Tarjeta: grande variación mensual; abajo interanual e índice de difusión. Gráfico: variación mensual, últimos 60 meses. CICEc publica ~fin de cada mes.
+- **Índice General de Actividad (IGA-OJF)**, Orlando J. Ferreres & Asociados. El Worker toma el enlace vigente a la síntesis pública (PDF en Google Drive) desde `ojf.com/Informes-Libre-Acceso`, lo descarga y lee la tabla de los últimos ~37 meses con un extractor de texto de PDF propio (sin dependencias). Tarjeta: grande variación mensual desestacionalizada; abajo interanual (igual que EMAE). Gráfico: variación mensual s.e. de los meses publicados. La serie completa de OJF es sólo para clientes; el sitio acumula los meses nuevos a medida que salen (con KV), sin borrar los anteriores. Los últimos 4 meses los revisa OJF y se actualizan solos.
+- Si OJF cambia el formato del PDF o CICEc el de la planilla, el sitio sigue mostrando el último dato incluido y la API informa el error en `refreshError`.

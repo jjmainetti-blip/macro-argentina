@@ -531,9 +531,9 @@ async function loadAutomaticData(){
     try{
       const r=await fetch('/api/macro-data',{headers:{accept:'application/json'}}); if(!r.ok)throw new Error(`API ${r.status}`);
       data=await r.json();
-      if(data?.sources)try{localStorage.setItem('macroArgentinaSnapshotV115',JSON.stringify(data));}catch{}
+      if(data?.sources)try{localStorage.setItem('macroArgentinaSnapshotV116',JSON.stringify(data));}catch{}
     }catch(networkError){
-      try{data=JSON.parse(localStorage.getItem('macroArgentinaSnapshotV115')||'null');}catch{}
+      try{data=JSON.parse(localStorage.getItem('macroArgentinaSnapshotV116')||'null');}catch{}
       if(!data?.sources)throw networkError;
       console.warn('macro-data: usando snapshot local',networkError);
     }
@@ -690,7 +690,7 @@ function hydrateKpiHistoryCache(S){
   }
 }
 const KPI_META={
- ipc:{title:'Inflación nacional',agency:'INDEC'},ipcCaba:{title:'Inflación CABA',agency:'IDECBA'},emae:{title:'EMAE',agency:'INDEC'},ipi:{title:'IPI manufacturero',agency:'INDEC'},arca:{title:'Recaudación',agency:'ARCA'},poverty:{title:'Pobreza',agency:'INDEC / UCA'},icg:{title:'Confianza de gobierno',agency:'UTDT'},trade:{title:'Balanza comercial',agency:'INDEC'},fiscal:{title:'Resultado fiscal',agency:'Ministerio de Economía'},cement:{title:'Despachos de cemento',agency:'AFCP'},isac:{title:'ISAC construcción',agency:'INDEC'},autos:{title:'Patentamientos 0 km',agency:'ACARA'},credit:{title:'Crédito privado',agency:'BCRA'},arrears:{title:'Mora bancaria',agency:'BCRA'}
+ ipc:{title:'Inflación nacional',agency:'INDEC'},ipcCaba:{title:'Inflación CABA',agency:'IDECBA'},emae:{title:'EMAE',agency:'INDEC'},ipi:{title:'IPI manufacturero',agency:'INDEC'},arca:{title:'Recaudación',agency:'ARCA'},poverty:{title:'Pobreza',agency:'INDEC / UCA'},icg:{title:'Confianza de gobierno',agency:'UTDT'},trade:{title:'Balanza comercial',agency:'INDEC'},fiscal:{title:'Resultado fiscal',agency:'Ministerio de Economía'},cement:{title:'Despachos de cemento',agency:'AFCP'},isac:{title:'ISAC construcción',agency:'INDEC'},autos:{title:'Patentamientos 0 km',agency:'ACARA'},credit:{title:'Crédito privado',agency:'BCRA'},arrears:{title:'Mora bancaria',agency:'BCRA'},ila:{title:'Índice Líder de Actividad (ILA)',agency:'CICEc'},iga:{title:'Índice General de Actividad (IGA)',agency:'OJF'}
 };
 // v114: rango mensual continuo (los meses sin dato quedan como hueco, no se interpolan).
 function monthRangeEntries(obj,n){const keys=Object.keys(obj||{}).filter(k=>/^\d{4}-\d{2}$/.test(k)&&Number.isFinite(Number(obj[k]))).sort();if(!keys.length)return [];const out=[];let [y,m]=keys.at(-1).split('-').map(Number);for(let i=0;i<n;i++){const k=`${y}-${String(m).padStart(2,'0')}`;out.unshift([k,Number.isFinite(Number(obj[k]))?Number(obj[k]):null]);if(k<=keys[0])break;m--;if(!m){m=12;y--;}}return out;}
@@ -700,7 +700,7 @@ function normalizedMonthlyRows(rows,valueField='value',n=60){const byMonth=new M
 let bundledMacroHistoryPromise=null;
 function loadBundledMacroHistory(){return bundledMacroHistoryPromise??=(async()=>{
   try{
-    const r=await fetch('/macro-history.json?v=115',{cache:'no-store'}); if(!r.ok)return;
+    const r=await fetch('/macro-history.json?v=116',{cache:'no-store'}); if(!r.ok)return;
     const h=await r.json(), B={};
     if(h.povertyAnnual)Object.assign(poverty,h.povertyAnnual);
     if(h.tradeMonthly)Object.assign(tradeBalanceMonthly,h.tradeMonthly);
@@ -718,6 +718,8 @@ function loadBundledMacroHistory(){return bundledMacroHistoryPromise??=(async()=
     if(h.autosMonthly)AP.autos={source:'ACARA / SIOMAA',history:{'Patentamientos (unidades)':h.autosMonthly}};
     if(h.cementLatest)AP.cement={tons:h.cementLatest.tons,period:h.cementLatest.period,source:'AFCP'};
     if(AP.fiscal||AP.autos||AP.cement)B.activityPulse=AP;
+    if(h.ilaMonthly)B.ilaHistorical={status:'ok',source:'CICEc — Bolsas de Comercio de Santa Fe y Rosario',monthly:h.ilaMonthly};
+    if(h.igaMonthly)B.igaHistorical={status:'ok',source:'OJF & Asociados — IGA-OJF',monthly:h.igaMonthly};
     bundledKpiSources=B; rebuildKpiSourceCache();
     if(currentSeries==='trade'&&window.Chart)renderHistory('trade');
   }catch(e){console.warn('bundled macro history',e);}
@@ -731,6 +733,8 @@ function kpiSeries(key){const S=kpiSourceCache||{},A=S.activityPulse||{};
   if(key==='arca'&&S.arca?.history){const nominal=recentEntries(S.arca.history,60),ipcRows=normalizedMonthlyRows(S.ipc?.monthly,'index',999),idx=Object.fromEntries(ipcRows),labels=[],real=[];for(const [d,n] of nominal){const prev=`${Number(d.slice(0,4))-1}${d.slice(4)}`,iNow=Number(idx[d]),iPrev=Number(idx[prev]);if(!Number.isFinite(iNow)||!Number.isFinite(iPrev)||iPrev===0)continue;const inflation=(iNow/iPrev-1)*100,r=Number((((1+n/100)/(1+inflation/100)-1)*100).toFixed(1))+0;labels.push(d);real.push(r);}if(labels.length)return {chartType:'bar',labels:labels.map(displayMonth),rawPeriods:labels,datasets:[{label:'Recaudación · variación interanual real (%)',data:real}],source:'ARCA + INDEC',legend:`Últimas ${labels.length} variaciones interanuales reales de la recaudación, deflactadas con IPC Nacional del mismo mes.`};}
   // ICG: sólo observaciones mensuales válidas; se conserva toda la historia disponible y los cambios presidenciales.
   if(key==='icg'&&S.icg?.history){const x=recentEntries(S.icg.history,9999);if(x.length)return {labels:x.map(([d])=>displayMonth(d)),rawPeriods:x.map(([d])=>d),presidentOverlay:true,datasets:[{label:'ICG',data:x.map(([,v])=>Number(v)),borderColor:'#0b5bd3',backgroundColor:'rgba(11,91,211,.06)'}],source:'UTDT',legend:`Serie histórica mensual: ${x.length} observaciones · líneas verticales = cambios presidenciales.`};}
+  if(key==='ila'&&S.ilaHistorical?.monthly){const mm=Object.fromEntries(Object.entries(S.ilaHistorical.monthly).map(([k,v])=>[k,v?.mom])),x=monthRangeEntries(mm,60);if(x.length)return {chartType:'bar',labels:x.map(([d])=>displayMonth(d)),rawPeriods:x.map(([d])=>d),datasets:[{label:'ILA-ARG · variación mensual (%)',data:x.map(([,v])=>v)}],source:'CICEc — Bolsas de Comercio de Santa Fe y Rosario',legend:`Últimos ${x.length} meses: variación mensual del Índice Líder (anticipa los puntos de giro del ciclo económico).`};}
+  if(key==='iga'&&S.igaHistorical?.monthly){const mm=Object.fromEntries(Object.entries(S.igaHistorical.monthly).map(([k,v])=>[k,v?.momSa])),x=monthRangeEntries(mm,60);if(x.length)return {chartType:'bar',labels:x.map(([d])=>displayMonth(d)),rawPeriods:x.map(([d])=>d),datasets:[{label:'IGA-OJF · variación mensual desestacionalizada (%)',data:x.map(([,v])=>v)}],source:'Orlando J. Ferreres & Asociados',legend:`Últimos ${x.length} meses publicados: variación mensual del IGA-OJF desestacionalizado. Los últimos 4 datos están sujetos a revisión.`};}
   if(key==='emae'&&S.emaeHistorical?.monthlySaMom){const x=monthRangeEntries(S.emaeHistorical.monthlySaMom,60);if(x.length)return {chartType:'bar',labels:x.map(([d])=>displayMonth(d)),rawPeriods:x.map(([d])=>d),datasets:[{label:'EMAE · variación mensual desestacionalizada (%)',data:x.map(([,v])=>v)}],source:'INDEC / Datos Argentina',legend:`Últimos ${x.length} meses: variación mensual del EMAE desestacionalizado.`};}
   // IPI: monthlyYoy ya es la variación interanual calculada sobre la serie original del IPI.
   if(key==='ipi'&&(S.industryHistorical?.monthlySaMom||S.industryHistorical?.monthlyYoy)){const sa=Object.keys(S.industryHistorical.monthlySaMom||{}).length>0,x=monthRangeEntries(sa?S.industryHistorical.monthlySaMom:S.industryHistorical.monthlyYoy,60);if(x.length)return {chartType:'bar',labels:x.map(([d])=>displayMonth(d)),rawPeriods:x.map(([d])=>d),datasets:[{label:sa?'IPI manufacturero · variación mensual desestacionalizada (%)':'IPI manufacturero · variación interanual (%)',data:x.map(([,v])=>v===null?null:Number(v.toFixed(1)))}],source:'INDEC / Datos Argentina',legend:`Últimos ${x.length} meses: ${sa?'variación mensual del IPI desestacionalizado':'variación interanual del IPI'}.`};}
@@ -811,6 +815,12 @@ function computeKpiCards(){
   activity('emae',S.emaeHistorical,'Actividad económica');
   activity('ipi',S.industryHistorical,'Industria manufacturera');
   activity('isac',S.isacHistorical,'Construcción');
+  // v116 · IGA-OJF: igual que EMAE (mensual s.e. grande, interanual abajo).
+  {const H=S.igaHistorical?.monthly||{};activity('iga',{monthlySaMom:Object.fromEntries(Object.entries(H).map(([k,v])=>[k,v?.momSa])),monthlyYoy:Object.fromEntries(Object.entries(H).map(([k,v])=>[k,v?.yoy]))},'Actividad (IGA-OJF)');}
+  // v116 · ILA-ARG: grande variación mensual; abajo interanual e índice de difusión (>50% = mayoría de series líderes en alza).
+  {const H=S.ilaHistorical?.monthly||{},L=kpiLastEntries(Object.fromEntries(Object.entries(H).map(([k,v])=>[k,v?.mom])),1)[0];
+   if(L){const r=H[L[0]]||{},yoy=numOrNull(r.yoy),dif=numOrNull(r.diffusion);
+     C.ila={ym:L[0],value:kpiPct(L[1]),period:`${displayMonth(L[0])} · variación mensual`,detail:[yoy!==null?`${kpiPct(yoy)} interanual`:null,dif!==null?`difusión ${new Intl.NumberFormat('es-AR',{maximumFractionDigits:0}).format(dif)}%`:null].filter(Boolean).join(' · '),signal:signalFrom(L[1],0.1,true),why:`El Índice Líder ${L[1]>0?'subió':L[1]<0?'bajó':'no varió'} ${kpiNum(Math.abs(L[1]))}% en el mes${dif!==null?`; ${kpiNum(dif)}% de las series líderes en alza`:''}.`};}}
   // Recaudación: grande interanual real (deflactada con IPC del mismo mes); chico interanual nominal.
   {const L=kpiLastEntries(S.arca?.history,1)[0];
    if(L){const idx=Object.fromEntries((S.ipc?.monthly||[]).map(r=>[String(r.date).slice(0,7),Number(r.index)])),i1=idx[L[0]],i0=idx[ymShift(L[0],-12)];const real=Number.isFinite(i1)&&Number.isFinite(i0)?((1+L[1]/100)/(i1/i0)-1)*100+0:null;

@@ -679,6 +679,66 @@ async function emaeHistorical(){
   return out;
 }
 
+
+// ===================== v116 · ILA-ARG (CICEc) e IGA-OJF =====================
+// ILA: base de datos pública de CICEc (Bolsas de Comercio de Santa Fe y Rosario), hoja "CICEC".
+// Columna A = año.mes como número de Excel (ojo: octubre llega como 2026.1), G = ILA nivel, H = tasa mensual, I = interanual, J = índice de difusión.
+async function ilaHistorical(){
+  let url=null;
+  try{const html=await get('https://cicec.ar/base-de-datos');const m=html.match(/href="([^"]*Data_ARG_\d{6}\.xlsx)"/i);if(m)url=new URL(m[1],'https://cicec.ar/').href;}catch{}
+  if(!url){const d=new Date();const prev=new Date(Date.UTC(d.getUTCFullYear(),d.getUTCMonth()-1,1));url=`https://cicec.ar/sites/default/files/base-datos-${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}/Data_ARG_${prev.getUTCFullYear()}${String(prev.getUTCMonth()+1).padStart(2,'0')}.xlsx`;}
+  const c=new AbortController(),tm=setTimeout(()=>c.abort(),25000);
+  try{
+    const r=await fetch(url,{signal:c.signal,headers:{'user-agent':'Mozilla/5.0 (MacroArgentinaDashboard)'}});if(!r.ok)throw new Error(`CICEc ${r.status}`);
+    const wb=XLSX.read(await r.arrayBuffer(),{type:'array'});const name=wb.SheetNames.find(n=>/^cicec$/i.test(n.trim()));if(!name)throw new Error('CICEc: hoja CICEC no encontrada');
+    const rows=XLSX.utils.sheet_to_json(wb.Sheets[name],{header:1,raw:true,defval:null});
+    // Ubicar columnas por encabezado (fila con "ILA-ARG"); si no, usar G..J.
+    let cL=6,cM=7,cY=8,cD=9;const hdr=rows.find(r=>r&&r.some(v=>/^ILA-ARG$/i.test(String(v??'').trim())));
+    if(hdr){cL=hdr.findIndex(v=>/^ILA-ARG$/i.test(String(v??'').trim()));cM=cL+1;cY=cL+2;cD=cL+3;}
+    const monthly={};
+    for(const r of rows){const a=r?.[0];if(a==null)continue;let y,m;const sA=String(a).trim(),ms=sA.match(/^(\d{4})\.(\d{2})$/);
+      if(ms){y=+ms[1];m=+ms[2];}else{const n=Number(a);if(!Number.isFinite(n)||n<1990||n>2100)continue;y=Math.floor(n);m=Math.round((n-y)*100);}
+      if(m<1||m>12)continue;const lv=Number(r[cL]);if(r[cL]==null||!Number.isFinite(lv))continue;
+      const f=v=>v==null||!Number.isFinite(Number(v))?null:Number(v);const mom=f(r[cM]),yoy=f(r[cY]),dif=f(r[cD]);
+      monthly[`${y}-${String(m).padStart(2,'0')}`]={level:round(lv,4),mom:mom===null?null:round(mom*100,2),yoy:yoy===null?null:round(yoy*100,2),diffusion:dif===null?null:round(dif,1)};}
+    if(Object.keys(monthly).length<60)throw new Error(`ILA: serie corta (${Object.keys(monthly).length})`);
+    return {status:'ok',source:'CICEc — Bolsas de Comercio de Santa Fe y Rosario (ILA-ARG)',sourceUrl:url,monthly};
+  }finally{clearTimeout(tm)}
+}
+// Extracción mínima de texto de PDF (streams Flate + operadores Tj/TJ), sin dependencias.
+async function inflatePartial(bytes){const ds=new DecompressionStream('deflate');const w=ds.writable.getWriter();w.write(bytes).catch(()=>{});w.close().catch(()=>{});const rd=ds.readable.getReader();const parts=[];try{while(true){const {done,value}=await rd.read();if(done)break;parts.push(value);}}catch{}let n=0;for(const p of parts)n+=p.length;const o=new Uint8Array(n);let i=0;for(const p of parts){o.set(p,i);i+=p.length;}return o;}
+async function pdfTextLines(buf){
+  const u8=new Uint8Array(buf),latin=new TextDecoder('latin1'),s=latin.decode(u8),contents=[];
+  const re=/<<([^]*?)>>\s*stream\r?\n/g;let m;
+  while((m=re.exec(s))){const dict=m[1],start=m.index+m[0].length,L=dict.match(/\/Length\s+(\d+)(?!\s+\d+\s+R)/),end=L?start+Number(L[1]):s.indexOf('endstream',start);re.lastIndex=Math.max(end,start);
+    if(!/FlateDecode/.test(dict)||/Length1|Subtype\s*\/Image/.test(dict))continue;const txt=latin.decode(await inflatePartial(u8.slice(start,end)));
+    if(txt.length<60000&&/\bBT\r?\n/.test(txt)&&/\bT[Jj]\b/.test(txt))contents.push(txt);}
+  const lines=[];
+  for(const t of contents){const items=[];let x=0,y=0;const r2=/(-?[\d.]+) (-?[\d.]+) (-?[\d.]+) (-?[\d.]+) (-?[\d.]+) (-?[\d.]+) Tm|(-?[\d.]+) (-?[\d.]+) T[dD]|\[([^\]]*)\] ?TJ|\(((?:\\.|[^\\)])*)\) ?Tj/g;let k;
+    while((k=r2.exec(t))){if(k[5]!==undefined){x=+k[5];y=+k[6];}else if(k[7]!==undefined){x+=+k[7];y+=+k[8];}else{const raw=k[9]!==undefined?(k[9].match(/\((?:\\.|[^\\)])*\)/g)||[]).map(z=>z.slice(1,-1)).join(''):k[10];const txt=raw.replace(/\\(\d{3})/g,(_,o)=>String.fromCharCode(parseInt(o,8))).replace(/\\(.)/g,'$1');if(txt.trim())items.push({x,y,txt});}}
+    const byY=new Map();for(const it of items){const kk=Math.round(it.y);if(!byY.has(kk))byY.set(kk,[]);byY.get(kk).push(it);}
+    for(const [,a] of [...byY.entries()].sort((p,q)=>q[0]-p[0]))lines.push(a.sort((p,q)=>p.x-q.x).map(i=>i.txt).join(' ').replace(/\s+/g,' ').trim());}
+  return lines;
+}
+// IGA: la síntesis pública de OJF (PDF en Google Drive) trae una tabla con los últimos ~37 meses.
+async function igaHistorical(){
+  let id=null;
+  try{const html=await get('https://www.ojf.com/Informes-Libre-Acceso');const i=html.search(/Informe-IGA|IGA-OJF/i);const seg=i>=0?html.slice(i):html;const m=seg.match(/drive\.google\.com\/file\/d\/([A-Za-z0-9_-]{20,})/);if(m)id=m[1];}catch{}
+  if(!id)id='14ZK0npNpAWn4m3Ml-XPKcHIBwB92pQHG';
+  const url=`https://drive.google.com/uc?export=download&id=${id}`;
+  const c=new AbortController(),tm=setTimeout(()=>c.abort(),25000);
+  try{
+    const r=await fetch(url,{signal:c.signal,redirect:'follow',headers:{'user-agent':'Mozilla/5.0 (MacroArgentinaDashboard)'}});if(!r.ok)throw new Error(`IGA PDF ${r.status}`);
+    const buf=await r.arrayBuffer();if(new TextDecoder('latin1').decode(new Uint8Array(buf).slice(0,4))!=='%PDF')throw new Error('IGA: la descarga no es un PDF');
+    const lines=await pdfTextLines(buf);const M={ene:1,feb:2,mar:3,abr:4,may:5,jun:6,jul:7,ago:8,sep:9,sept:9,set:9,oct:10,nov:11,dic:12};
+    const n=v=>Number(String(v).replace(/\./g,'').replace(',','.'));const monthly={};
+    for(const l of lines){const m=l.match(/^(ene|feb|mar|abr|may|jun|jul|ago|sept?|set|oct|nov|dic)-(\d{2}) ([\d.,]+) (-?[\d,]+) ?% ([\d.,]+) (-?[\d,]+) ?%/i);if(!m)continue;
+      const k=`20${m[2]}-${String(M[m[1].toLowerCase()]).padStart(2,'0')}`;monthly[k]={level:n(m[3]),yoy:n(m[4]),levelSa:n(m[5]),momSa:n(m[6])};}
+    if(Object.keys(monthly).length<12)throw new Error(`IGA: tabla no identificada (${Object.keys(monthly).length})`);
+    return {status:'ok',source:'Orlando J. Ferreres & Asociados — IGA-OJF',sourceUrl:`https://drive.google.com/file/d/${id}/view`,monthly};
+  }finally{clearTimeout(tm)}
+}
+
 // v114: variación mensual real s.e. de los préstamos en pesos, según el Informe Monetario Mensual del BCRA.
 async function immCreditSaMom(){
   const monthsEs=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
@@ -778,7 +838,7 @@ async function activityPulse(){
 
 // sin KV se conserva al menos durante la vida del isolate y el frontend mantiene otra copia local.
 let MEMORY_SNAPSHOT=null;
-const SNAPSHOT_KEY='macro:snapshot:v115';
+const SNAPSHOT_KEY='macro:snapshot:v116';
 function isPlainObject(v){return !!v&&typeof v==='object'&&!Array.isArray(v);}
 function mergeSnapshot(oldValue,newValue){
   if(Array.isArray(oldValue)||Array.isArray(newValue)){
@@ -811,10 +871,10 @@ async function writeSnapshot(env,ctx,snapshot){
 }
 export default async(env={},ctx=null)=>{
   const stored=await readSnapshot(env);
-  const previous=mergeSnapshot({version:115,sources:BUNDLED_SOURCES},stored||{});
-  const out={version:115,generatedAt:new Date().toISOString(),snapshotMode:env?.MACRO_STORE?.get?'kv+bundled':'bundled+isolate',sources:{}};
+  const previous=mergeSnapshot({version:116,sources:BUNDLED_SOURCES},stored||{});
+  const out={version:116,generatedAt:new Date().toISOString(),snapshotMode:env?.MACRO_STORE?.get?'kv+bundled':'bundled+isolate',sources:{}};
   // v113: cada fuente corre aislada. Un error sincrónico o una función inexistente ya no puede tirar el endpoint completo.
-  const jobs={ipcHistorical:()=>ipcHistorical(),gdpHistorical:()=>gdpHistorical(),emaeHistorical:()=>emaeHistorical(),industryHistorical:()=>industryHistorical(),unemploymentHistorical:()=>unemploymentHistorical(),tradeHistorical:()=>tradeHistorical(),financialHistorical:()=>financialHistorical(),exchangeHistorical:()=>exchangeHistorical(),ipc:()=>ipc(),arca:()=>arca(),icg:()=>icg(),bcra:()=>bcra(),rem:()=>rem(),salary:()=>salaryRipte(),icl:()=>icl(),contractIndices:()=>contractIndices(),isacHistorical:()=>isacHistorical(),creditHistorical:()=>creditHistorical(),arrearsHistorical:()=>arrearsHistorical(),activityPulse:()=>activityPulse()};
+  const jobs={ipcHistorical:()=>ipcHistorical(),gdpHistorical:()=>gdpHistorical(),emaeHistorical:()=>emaeHistorical(),industryHistorical:()=>industryHistorical(),unemploymentHistorical:()=>unemploymentHistorical(),tradeHistorical:()=>tradeHistorical(),financialHistorical:()=>financialHistorical(),exchangeHistorical:()=>exchangeHistorical(),ipc:()=>ipc(),arca:()=>arca(),icg:()=>icg(),bcra:()=>bcra(),rem:()=>rem(),salary:()=>salaryRipte(),icl:()=>icl(),contractIndices:()=>contractIndices(),isacHistorical:()=>isacHistorical(),creditHistorical:()=>creditHistorical(),arrearsHistorical:()=>arrearsHistorical(),activityPulse:()=>activityPulse(),ilaHistorical:()=>ilaHistorical(),igaHistorical:()=>igaHistorical()};
   const names=Object.keys(jobs);
   const results=await Promise.allSettled(names.map(n=>Promise.resolve().then(jobs[n])));
   results.forEach((j,i)=>{

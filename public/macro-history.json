@@ -1,5 +1,5 @@
 {
-"schema": 5,
+"schema": 6,
 "generated": "2026-09-30",
 "policy": "bundled baseline; remote sources may append newer periods but never delete baseline",
 "ipcRows": [
@@ -2515,7 +2515,9 @@
 "emaeMonthlySaMom": "INDEC vía Datos Argentina, serie 143.3_ICE_SER_VM_2004_A_34 (variación mensual desestacionalizada; fracción ×100)",
 "creditMonthlySaRealMom": "BCRA, Informe Monetario Mensual: préstamos en pesos al sector privado, variación mensual real sin estacionalidad (nov-2021 y feb-2024 sin cifra publicada)",
 "ipiMonthlySaMom": "INDEC vía Datos Argentina, 453.1_SERIE_DESEADA_0_0_24_58 (variación mensual de la serie desestacionalizada)",
-"isacMonthlySaMom": "INDEC vía Datos Argentina, 33.2_ISAC_SIN_EDAD_0_M_23_56 (variación mensual de la serie desestacionalizada)"
+"isacMonthlySaMom": "INDEC vía Datos Argentina, 33.2_ISAC_SIN_EDAD_0_M_23_56 (variación mensual de la serie desestacionalizada)",
+"ilaMonthly": "CICEc — Bolsas de Comercio de Santa Fe y Rosario, Data_ARG (hoja CICEC): ILA-ARG nivel (2004=100), tasa mensual, interanual e índice de difusión",
+"igaMonthly": "OJF & Asociados — IGA-OJF, síntesis mensual pública (últimos 37 meses; los últimos 4 sujetos a revisión)"
 },
 "emaeMonthlySaMom": {
 "2015-01": -0.4,
@@ -3126,5 +3128,1071 @@
 "value": 1.94,
 "mom": -5.9,
 "period": "sep 2026"
+},
+"ilaMonthly": {
+"2015-01": {
+"level": 119.5301,
+"mom": 0.33,
+"yoy": 0.83,
+"diffusion": 51.2
+},
+"2015-02": {
+"level": 120.5154,
+"mom": 0.82,
+"yoy": 2.08,
+"diffusion": 63.4
+},
+"2015-03": {
+"level": 121.5479,
+"mom": 0.85,
+"yoy": 2.99,
+"diffusion": 66.9
+},
+"2015-04": {
+"level": 122.3199,
+"mom": 0.63,
+"yoy": 3.1,
+"diffusion": 70.4
+},
+"2015-05": {
+"level": 122.5295,
+"mom": 0.17,
+"yoy": 2.83,
+"diffusion": 73.9
+},
+"2015-06": {
+"level": 122.5162,
+"mom": -0.01,
+"yoy": 2.93,
+"diffusion": 75.6
+},
+"2015-07": {
+"level": 122.0706,
+"mom": -0.36,
+"yoy": 2.74,
+"diffusion": 70.4
+},
+"2015-08": {
+"level": 121.4262,
+"mom": -0.53,
+"yoy": 2.29,
+"diffusion": 56.4
+},
+"2015-09": {
+"level": 120.7885,
+"mom": -0.53,
+"yoy": 1.31,
+"diffusion": 46.0
+},
+"2015-10": {
+"level": 119.9611,
+"mom": -0.69,
+"yoy": 0.11,
+"diffusion": 33.8
+},
+"2015-11": {
+"level": 119.276,
+"mom": -0.57,
+"yoy": -0.36,
+"diffusion": 26.8
+},
+"2015-12": {
+"level": 118.928,
+"mom": -0.29,
+"yoy": -0.18,
+"diffusion": 21.6
+},
+"2016-01": {
+"level": 118.114,
+"mom": -0.69,
+"yoy": -1.18,
+"diffusion": 19.8
+},
+"2016-02": {
+"level": 117.4202,
+"mom": -0.59,
+"yoy": -2.57,
+"diffusion": 19.8
+},
+"2016-03": {
+"level": 117.4456,
+"mom": 0.02,
+"yoy": -3.38,
+"diffusion": 21.6
+},
+"2016-04": {
+"level": 117.6281,
+"mom": 0.16,
+"yoy": -3.84,
+"diffusion": 23.3
+},
+"2016-05": {
+"level": 118.0265,
+"mom": 0.34,
+"yoy": -3.68,
+"diffusion": 28.5
+},
+"2016-06": {
+"level": 118.5529,
+"mom": 0.44,
+"yoy": -3.23,
+"diffusion": 40.7
+},
+"2016-07": {
+"level": 119.3026,
+"mom": 0.63,
+"yoy": -2.27,
+"diffusion": 47.7
+},
+"2016-08": {
+"level": 120.0865,
+"mom": 0.65,
+"yoy": -1.1,
+"diffusion": 56.4
+},
+"2016-09": {
+"level": 120.5888,
+"mom": 0.42,
+"yoy": -0.17,
+"diffusion": 58.2
+},
+"2016-10": {
+"level": 121.4888,
+"mom": 0.74,
+"yoy": 1.27,
+"diffusion": 66.9
+},
+"2016-11": {
+"level": 122.4001,
+"mom": 0.75,
+"yoy": 2.62,
+"diffusion": 72.1
+},
+"2016-12": {
+"level": 123.13,
+"mom": 0.59,
+"yoy": 3.53,
+"diffusion": 68.6
+},
+"2017-01": {
+"level": 124.0306,
+"mom": 0.73,
+"yoy": 5.01,
+"diffusion": 72.1
+},
+"2017-02": {
+"level": 124.2818,
+"mom": 0.2,
+"yoy": 5.84,
+"diffusion": 70.4
+},
+"2017-03": {
+"level": 124.0563,
+"mom": -0.18,
+"yoy": 5.63,
+"diffusion": 68.6
+},
+"2017-04": {
+"level": 124.3882,
+"mom": 0.27,
+"yoy": 5.75,
+"diffusion": 66.9
+},
+"2017-05": {
+"level": 124.8819,
+"mom": 0.4,
+"yoy": 5.81,
+"diffusion": 63.4
+},
+"2017-06": {
+"level": 125.5094,
+"mom": 0.5,
+"yoy": 5.87,
+"diffusion": 61.6
+},
+"2017-07": {
+"level": 125.6172,
+"mom": 0.09,
+"yoy": 5.29,
+"diffusion": 58.2
+},
+"2017-08": {
+"level": 125.4931,
+"mom": -0.1,
+"yoy": 4.5,
+"diffusion": 56.4
+},
+"2017-09": {
+"level": 125.4103,
+"mom": -0.07,
+"yoy": 4.0,
+"diffusion": 58.2
+},
+"2017-10": {
+"level": 125.112,
+"mom": -0.24,
+"yoy": 2.98,
+"diffusion": 58.2
+},
+"2017-11": {
+"level": 124.4545,
+"mom": -0.53,
+"yoy": 1.68,
+"diffusion": 52.9
+},
+"2017-12": {
+"level": 123.8877,
+"mom": -0.46,
+"yoy": 0.62,
+"diffusion": 46.0
+},
+"2018-01": {
+"level": 123.0842,
+"mom": -0.65,
+"yoy": -0.76,
+"diffusion": 39.0
+},
+"2018-02": {
+"level": 123.0681,
+"mom": -0.01,
+"yoy": -0.98,
+"diffusion": 39.0
+},
+"2018-03": {
+"level": 123.1841,
+"mom": 0.09,
+"yoy": -0.7,
+"diffusion": 39.0
+},
+"2018-04": {
+"level": 122.0347,
+"mom": -0.94,
+"yoy": -1.89,
+"diffusion": 28.5
+},
+"2018-05": {
+"level": 119.9857,
+"mom": -1.69,
+"yoy": -3.92,
+"diffusion": 23.3
+},
+"2018-06": {
+"level": 117.167,
+"mom": -2.38,
+"yoy": -6.65,
+"diffusion": 18.1
+},
+"2018-07": {
+"level": 115.5697,
+"mom": -1.37,
+"yoy": -8.0,
+"diffusion": 14.6
+},
+"2018-08": {
+"level": 114.7168,
+"mom": -0.74,
+"yoy": -8.59,
+"diffusion": 11.1
+},
+"2018-09": {
+"level": 113.2952,
+"mom": -1.25,
+"yoy": -9.66,
+"diffusion": 5.9
+},
+"2018-10": {
+"level": 112.3388,
+"mom": -0.85,
+"yoy": -10.21,
+"diffusion": 5.9
+},
+"2018-11": {
+"level": 111.877,
+"mom": -0.41,
+"yoy": -10.11,
+"diffusion": 12.8
+},
+"2018-12": {
+"level": 111.8535,
+"mom": -0.02,
+"yoy": -9.71,
+"diffusion": 19.8
+},
+"2019-01": {
+"level": 112.563,
+"mom": 0.63,
+"yoy": -8.55,
+"diffusion": 28.5
+},
+"2019-02": {
+"level": 112.8209,
+"mom": 0.23,
+"yoy": -8.33,
+"diffusion": 30.3
+},
+"2019-03": {
+"level": 112.5626,
+"mom": -0.23,
+"yoy": -8.62,
+"diffusion": 32.0
+},
+"2019-04": {
+"level": 112.2374,
+"mom": -0.29,
+"yoy": -8.03,
+"diffusion": 35.5
+},
+"2019-05": {
+"level": 112.355,
+"mom": 0.1,
+"yoy": -6.36,
+"diffusion": 39.0
+},
+"2019-06": {
+"level": 112.0852,
+"mom": -0.24,
+"yoy": -4.34,
+"diffusion": 42.5
+},
+"2019-07": {
+"level": 110.3406,
+"mom": -1.57,
+"yoy": -4.52,
+"diffusion": 30.3
+},
+"2019-08": {
+"level": 108.8326,
+"mom": -1.38,
+"yoy": -5.13,
+"diffusion": 26.8
+},
+"2019-09": {
+"level": 108.1874,
+"mom": -0.59,
+"yoy": -4.51,
+"diffusion": 28.5
+},
+"2019-10": {
+"level": 107.8653,
+"mom": -0.3,
+"yoy": -3.98,
+"diffusion": 32.0
+},
+"2019-11": {
+"level": 108.0859,
+"mom": 0.2,
+"yoy": -3.39,
+"diffusion": 30.3
+},
+"2019-12": {
+"level": 108.4536,
+"mom": 0.34,
+"yoy": -3.04,
+"diffusion": 30.3
+},
+"2020-01": {
+"level": 108.7546,
+"mom": 0.28,
+"yoy": -3.38,
+"diffusion": 40.7
+},
+"2020-02": {
+"level": 108.3667,
+"mom": -0.36,
+"yoy": -3.95,
+"diffusion": 42.5
+},
+"2020-03": {
+"level": 107.4478,
+"mom": -0.85,
+"yoy": -4.54,
+"diffusion": 42.5
+},
+"2020-04": {
+"level": 107.537,
+"mom": 0.08,
+"yoy": -4.19,
+"diffusion": 44.2
+},
+"2020-05": {
+"level": 108.4211,
+"mom": 0.82,
+"yoy": -3.5,
+"diffusion": 47.7
+},
+"2020-06": {
+"level": 110.0595,
+"mom": 1.5,
+"yoy": -1.81,
+"diffusion": 52.9
+},
+"2020-07": {
+"level": 112.1576,
+"mom": 1.89,
+"yoy": 1.65,
+"diffusion": 59.9
+},
+"2020-08": {
+"level": 113.8022,
+"mom": 1.46,
+"yoy": 4.57,
+"diffusion": 68.6
+},
+"2020-09": {
+"level": 114.9941,
+"mom": 1.04,
+"yoy": 6.29,
+"diffusion": 73.9
+},
+"2020-10": {
+"level": 115.6898,
+"mom": 0.6,
+"yoy": 7.25,
+"diffusion": 77.3
+},
+"2020-11": {
+"level": 115.8854,
+"mom": 0.17,
+"yoy": 7.22,
+"diffusion": 75.6
+},
+"2020-12": {
+"level": 116.1579,
+"mom": 0.23,
+"yoy": 7.1,
+"diffusion": 70.4
+},
+"2021-01": {
+"level": 116.2831,
+"mom": 0.11,
+"yoy": 6.92,
+"diffusion": 61.6
+},
+"2021-02": {
+"level": 117.035,
+"mom": 0.64,
+"yoy": 8.0,
+"diffusion": 61.6
+},
+"2021-03": {
+"level": 118.1662,
+"mom": 0.96,
+"yoy": 9.98,
+"diffusion": 63.4
+},
+"2021-04": {
+"level": 118.0839,
+"mom": -0.07,
+"yoy": 9.81,
+"diffusion": 59.9
+},
+"2021-05": {
+"level": 117.6259,
+"mom": -0.39,
+"yoy": 8.49,
+"diffusion": 58.2
+},
+"2021-06": {
+"level": 117.851,
+"mom": 0.19,
+"yoy": 7.08,
+"diffusion": 63.4
+},
+"2021-07": {
+"level": 118.0834,
+"mom": 0.2,
+"yoy": 5.28,
+"diffusion": 66.9
+},
+"2021-08": {
+"level": 118.5266,
+"mom": 0.37,
+"yoy": 4.15,
+"diffusion": 63.4
+},
+"2021-09": {
+"level": 119.1901,
+"mom": 0.56,
+"yoy": 3.65,
+"diffusion": 63.4
+},
+"2021-10": {
+"level": 120.2869,
+"mom": 0.92,
+"yoy": 3.97,
+"diffusion": 68.6
+},
+"2021-11": {
+"level": 121.811,
+"mom": 1.26,
+"yoy": 5.11,
+"diffusion": 75.6
+},
+"2021-12": {
+"level": 122.6379,
+"mom": 0.68,
+"yoy": 5.58,
+"diffusion": 72.1
+},
+"2022-01": {
+"level": 122.6261,
+"mom": -0.01,
+"yoy": 5.45,
+"diffusion": 70.4
+},
+"2022-02": {
+"level": 122.9585,
+"mom": 0.27,
+"yoy": 5.06,
+"diffusion": 68.6
+},
+"2022-03": {
+"level": 123.3463,
+"mom": 0.31,
+"yoy": 4.38,
+"diffusion": 65.1
+},
+"2022-04": {
+"level": 123.3032,
+"mom": -0.03,
+"yoy": 4.42,
+"diffusion": 63.4
+},
+"2022-05": {
+"level": 123.0175,
+"mom": -0.23,
+"yoy": 4.58,
+"diffusion": 54.7
+},
+"2022-06": {
+"level": 122.3351,
+"mom": -0.56,
+"yoy": 3.8,
+"diffusion": 49.4
+},
+"2022-07": {
+"level": 121.4464,
+"mom": -0.73,
+"yoy": 2.85,
+"diffusion": 42.5
+},
+"2022-08": {
+"level": 120.2803,
+"mom": -0.96,
+"yoy": 1.48,
+"diffusion": 37.2
+},
+"2022-09": {
+"level": 119.3893,
+"mom": -0.74,
+"yoy": 0.17,
+"diffusion": 30.3
+},
+"2022-10": {
+"level": 119.0545,
+"mom": -0.28,
+"yoy": -1.02,
+"diffusion": 25.0
+},
+"2022-11": {
+"level": 118.6933,
+"mom": -0.3,
+"yoy": -2.56,
+"diffusion": 21.6
+},
+"2022-12": {
+"level": 118.1735,
+"mom": -0.44,
+"yoy": -3.64,
+"diffusion": 21.6
+},
+"2023-01": {
+"level": 118.6598,
+"mom": 0.41,
+"yoy": -3.23,
+"diffusion": 28.5
+},
+"2023-02": {
+"level": 119.3517,
+"mom": 0.58,
+"yoy": -2.93,
+"diffusion": 37.2
+},
+"2023-03": {
+"level": 119.3085,
+"mom": -0.04,
+"yoy": -3.27,
+"diffusion": 40.7
+},
+"2023-04": {
+"level": 118.478,
+"mom": -0.7,
+"yoy": -3.91,
+"diffusion": 39.0
+},
+"2023-05": {
+"level": 116.8118,
+"mom": -1.42,
+"yoy": -5.04,
+"diffusion": 39.0
+},
+"2023-06": {
+"level": 115.848,
+"mom": -0.83,
+"yoy": -5.3,
+"diffusion": 37.2
+},
+"2023-07": {
+"level": 115.1588,
+"mom": -0.6,
+"yoy": -5.18,
+"diffusion": 32.0
+},
+"2023-08": {
+"level": 114.0484,
+"mom": -0.97,
+"yoy": -5.18,
+"diffusion": 25.0
+},
+"2023-09": {
+"level": 112.3652,
+"mom": -1.49,
+"yoy": -5.88,
+"diffusion": 16.3
+},
+"2023-10": {
+"level": 110.5547,
+"mom": -1.62,
+"yoy": -7.14,
+"diffusion": 11.1
+},
+"2023-11": {
+"level": 108.3959,
+"mom": -1.97,
+"yoy": -8.68,
+"diffusion": 7.6
+},
+"2023-12": {
+"level": 106.7437,
+"mom": -1.54,
+"yoy": -9.67,
+"diffusion": 5.9
+},
+"2024-01": {
+"level": 105.443,
+"mom": -1.23,
+"yoy": -11.14,
+"diffusion": 5.9
+},
+"2024-02": {
+"level": 104.5165,
+"mom": -0.88,
+"yoy": -12.43,
+"diffusion": 9.4
+},
+"2024-03": {
+"level": 104.7818,
+"mom": 0.25,
+"yoy": -12.18,
+"diffusion": 21.6
+},
+"2024-04": {
+"level": 106.7979,
+"mom": 1.91,
+"yoy": -9.86,
+"diffusion": 35.5
+},
+"2024-05": {
+"level": 109.3381,
+"mom": 2.35,
+"yoy": -6.4,
+"diffusion": 54.7
+},
+"2024-06": {
+"level": 111.4496,
+"mom": 1.91,
+"yoy": -3.8,
+"diffusion": 70.4
+},
+"2024-07": {
+"level": 113.2554,
+"mom": 1.61,
+"yoy": -1.65,
+"diffusion": 79.1
+},
+"2024-08": {
+"level": 114.4632,
+"mom": 1.06,
+"yoy": 0.36,
+"diffusion": 84.3
+},
+"2024-09": {
+"level": 115.7118,
+"mom": 1.08,
+"yoy": 2.98,
+"diffusion": 87.8
+},
+"2024-10": {
+"level": 116.6403,
+"mom": 0.8,
+"yoy": 5.5,
+"diffusion": 87.8
+},
+"2024-11": {
+"level": 117.5307,
+"mom": 0.76,
+"yoy": 8.43,
+"diffusion": 79.1
+},
+"2024-12": {
+"level": 118.3201,
+"mom": 0.67,
+"yoy": 10.85,
+"diffusion": 70.4
+},
+"2025-01": {
+"level": 118.6877,
+"mom": 0.31,
+"yoy": 12.56,
+"diffusion": 68.6
+},
+"2025-02": {
+"level": 118.3276,
+"mom": -0.3,
+"yoy": 13.21,
+"diffusion": 58.2
+},
+"2025-03": {
+"level": 117.3955,
+"mom": -0.79,
+"yoy": 12.04,
+"diffusion": 46.0
+},
+"2025-04": {
+"level": 116.482,
+"mom": -0.78,
+"yoy": 9.07,
+"diffusion": 35.5
+},
+"2025-05": {
+"level": 116.099,
+"mom": -0.33,
+"yoy": 6.18,
+"diffusion": 30.3
+},
+"2025-06": {
+"level": 115.3494,
+"mom": -0.65,
+"yoy": 3.5,
+"diffusion": 23.3
+},
+"2025-07": {
+"level": 114.4,
+"mom": -0.83,
+"yoy": 1.01,
+"diffusion": 14.6
+},
+"2025-08": {
+"level": 113.9623,
+"mom": -0.38,
+"yoy": -0.44,
+"diffusion": 14.6
+},
+"2025-09": {
+"level": 113.7694,
+"mom": -0.17,
+"yoy": -1.68,
+"diffusion": 18.1
+},
+"2025-10": {
+"level": 113.9046,
+"mom": 0.12,
+"yoy": -2.35,
+"diffusion": 23.3
+},
+"2025-11": {
+"level": 114.3717,
+"mom": 0.41,
+"yoy": -2.69,
+"diffusion": 28.5
+},
+"2025-12": {
+"level": 115.4466,
+"mom": 0.94,
+"yoy": -2.43,
+"diffusion": 42.5
+},
+"2026-01": {
+"level": 116.4997,
+"mom": 0.91,
+"yoy": -1.84,
+"diffusion": 58.2
+},
+"2026-02": {
+"level": 117.5032,
+"mom": 0.86,
+"yoy": -0.7,
+"diffusion": 68.6
+},
+"2026-03": {
+"level": 118.6987,
+"mom": 1.01,
+"yoy": 1.11,
+"diffusion": 79.1
+},
+"2026-04": {
+"level": 119.3579,
+"mom": 0.55,
+"yoy": 2.47,
+"diffusion": 82.6
+},
+"2026-05": {
+"level": 119.1493,
+"mom": -0.17,
+"yoy": 2.63,
+"diffusion": 77.3
+},
+"2026-06": {
+"level": 118.7619,
+"mom": -0.33,
+"yoy": 2.96,
+"diffusion": 65.1
+},
+"2026-07": {
+"level": 118.7681,
+"mom": 0.01,
+"yoy": 3.82,
+"diffusion": 52.9
+},
+"2026-08": {
+"level": 118.9734,
+"mom": 0.17,
+"yoy": 4.4,
+"diffusion": 46.0
+}
+},
+"igaMonthly": {
+"2023-08": {
+"level": 175.0,
+"yoy": -0.5,
+"levelSa": 170.12,
+"momSa": -0.3
+},
+"2023-09": {
+"level": 173.1,
+"yoy": -0.3,
+"levelSa": 169.55,
+"momSa": -0.3
+},
+"2023-10": {
+"level": 171.3,
+"yoy": 0.4,
+"levelSa": 167.41,
+"momSa": -1.3
+},
+"2023-11": {
+"level": 171.4,
+"yoy": -1.8,
+"levelSa": 166.97,
+"momSa": -0.3
+},
+"2023-12": {
+"level": 159.8,
+"yoy": -5.6,
+"levelSa": 163.87,
+"momSa": -1.9
+},
+"2024-01": {
+"level": 152.5,
+"yoy": -5.5,
+"levelSa": 159.41,
+"momSa": -2.7
+},
+"2024-02": {
+"level": 148.4,
+"yoy": -5.3,
+"levelSa": 161.6,
+"momSa": 1.4
+},
+"2024-03": {
+"level": 152.1,
+"yoy": -11.0,
+"levelSa": 158.08,
+"momSa": -2.2
+},
+"2024-04": {
+"level": 165.7,
+"yoy": -1.7,
+"levelSa": 161.43,
+"momSa": 2.1
+},
+"2024-05": {
+"level": 166.4,
+"yoy": -2.1,
+"levelSa": 161.32,
+"momSa": -0.1
+},
+"2024-06": {
+"level": 164.1,
+"yoy": -3.5,
+"levelSa": 161.0,
+"momSa": -0.2
+},
+"2024-07": {
+"level": 166.4,
+"yoy": -2.2,
+"levelSa": 164.76,
+"momSa": 2.3
+},
+"2024-08": {
+"level": 166.6,
+"yoy": -4.8,
+"levelSa": 162.84,
+"momSa": -1.2
+},
+"2024-09": {
+"level": 167.8,
+"yoy": -3.1,
+"levelSa": 165.0,
+"momSa": 1.3
+},
+"2024-10": {
+"level": 173.5,
+"yoy": 1.3,
+"levelSa": 167.54,
+"momSa": 1.5
+},
+"2024-11": {
+"level": 171.9,
+"yoy": 0.3,
+"levelSa": 168.09,
+"momSa": 0.3
+},
+"2024-12": {
+"level": 166.3,
+"yoy": 4.1,
+"levelSa": 169.79,
+"momSa": 1.0
+},
+"2025-01": {
+"level": 163.3,
+"yoy": 7.1,
+"levelSa": 170.53,
+"momSa": 0.4
+},
+"2025-02": {
+"level": 159.1,
+"yoy": 7.2,
+"levelSa": 173.44,
+"momSa": 1.7
+},
+"2025-03": {
+"level": 163.1,
+"yoy": 7.2,
+"levelSa": 168.53,
+"momSa": -2.8
+},
+"2025-04": {
+"level": 175.7,
+"yoy": 6.0,
+"levelSa": 172.12,
+"momSa": 2.1
+},
+"2025-05": {
+"level": 175.1,
+"yoy": 5.3,
+"levelSa": 170.74,
+"momSa": -0.8
+},
+"2025-06": {
+"level": 176.6,
+"yoy": 7.7,
+"levelSa": 171.96,
+"momSa": 0.7
+},
+"2025-07": {
+"level": 171.5,
+"yoy": 3.1,
+"levelSa": 170.66,
+"momSa": -0.8
+},
+"2025-08": {
+"level": 174.2,
+"yoy": 4.6,
+"levelSa": 171.67,
+"momSa": 0.6
+},
+"2025-09": {
+"level": 177.7,
+"yoy": 5.9,
+"levelSa": 172.93,
+"momSa": 0.7
+},
+"2025-10": {
+"level": 179.2,
+"yoy": 3.3,
+"levelSa": 172.59,
+"momSa": -0.2
+},
+"2025-11": {
+"level": 172.4,
+"yoy": 0.3,
+"levelSa": 170.65,
+"momSa": -1.1
+},
+"2025-12": {
+"level": 168.9,
+"yoy": 1.5,
+"levelSa": 170.75,
+"momSa": 0.1
+},
+"2026-01": {
+"level": 162.8,
+"yoy": -0.3,
+"levelSa": 171.28,
+"momSa": 0.3
+},
+"2026-02": {
+"level": 154.3,
+"yoy": -3.0,
+"levelSa": 168.53,
+"momSa": -1.6
+},
+"2026-03": {
+"level": 168.3,
+"yoy": 3.2,
+"levelSa": 173.25,
+"momSa": 2.8
+},
+"2026-04": {
+"level": 176.3,
+"yoy": 0.3,
+"levelSa": 172.23,
+"momSa": -0.6
+},
+"2026-05": {
+"level": 176.6,
+"yoy": 0.9,
+"levelSa": 173.01,
+"momSa": 0.5
+},
+"2026-06": {
+"level": 180.8,
+"yoy": 2.4,
+"levelSa": 174.03,
+"momSa": 0.6
+},
+"2026-07": {
+"level": 169.7,
+"yoy": -1.0,
+"levelSa": 170.01,
+"momSa": -2.3
+},
+"2026-08": {
+"level": 175.3,
+"yoy": 0.6,
+"levelSa": 172.95,
+"momSa": 1.7
+}
 }
 }
