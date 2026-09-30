@@ -1,4 +1,4 @@
-# Macro Argentina — Cloudflare v117
+# Macro Argentina — Cloudflare v118
 
 Migración de la v63 desde Netlify a Cloudflare Workers + Static Assets.
 
@@ -119,3 +119,11 @@ Chequeo: `npm run validate:snapshot`.
 - Histórico local para mercados y salario (`marketsHistory` en `macro-history.json` y en `bundled-history.mjs`), generado con las mismas funciones del backend sobre datos reales al 30-sep-2026. Diario: últimos 400 días; el resto mensual/anual. La API agrega el diario completo cuando responde.
 - RIPTE: la página de argentina.gob.ar pasa a ser opcional (antes, si no respondía, se perdía toda la serie aunque el CSV oficial ya se hubiera leído).
 - CPI de EE.UU. (BLS): si la API no responde se usa el respaldo; antes se perdía el tipo de cambio real (TCR).
+
+
+## v118 — calculadora de actualización (ICL, CER, UVA)
+- **Causa**: ICL, CER y UVA dependían sólo de la API, que los lee del archivo plano del BCRA (`tas5_ser.txt`, ~3,8 MB). Si el BCRA rechaza o demora el pedido desde Cloudflare, la calculadora los deshabilitaba y sólo quedaba el IPC.
+- **Respaldo local**: `public/contract-indices.json` (≈165 KB) con las series diarias completas — ICL (7988) desde 2020, CER (3540) desde 2002, UVA (7913) desde 2016 — en formato compacto (fecha inicial + valores consecutivos). La API suma los días nuevos cuando responde.
+- Los pedidos a sitios oficiales (BCRA, INDEC, argentina.gob.ar) se hacen con un agente de navegador estándar.
+- Resultado con más precisión: índices con hasta 4 decimales, variación con 2 y factor con 4.
+- Para actualizar el respaldo a mano: descargar `tas5_ser.txt` del BCRA y regenerar el JSON (series 7988, 3540, 7913).

@@ -402,7 +402,7 @@ function displayCalcDate(k){if(/^\d{4}-\d{2}-\d{2}$/.test(k)){const [y,m,d]=k.sp
 function updateCalcMeta(){syncUpdateIndexAvailability();const kind=document.getElementById('updateIndex')?.value||'ipc',el=document.getElementById('updateLatest'),method=document.getElementById('updateMethod'),has=fillUpdateDates(kind);if(!has){if(el)el.textContent=`${kind.toUpperCase()}: sin datos disponibles.`;return;}if(kind==='ipc'){const ipcMap=Object.keys(ipcCalcIndex).length?ipcCalcIndex:inflationIndex,k=Object.keys(ipcMap).sort().at(-1);if(el)el.innerHTML=k?`Último dato disponible: <strong>${displayMonth(k)}</strong> · IPC mensual INDEC`:'IPC: cargando…';if(method)method.textContent='IPC: actualización por cociente entre los índices de precios de los meses seleccionados.';return;}const daily=hasDailyIndex(kind),map=daily?dailyMapForIndex(kind):monthlyMapForIndex(kind),k=(daily?availableDatesForIndex(kind):availableMonthsForIndex(kind)).at(-1);if(el)el.innerHTML=k?`Último dato vigente: <strong>${displayCalcDate(k)}</strong> · ${kind.toUpperCase()} <strong>${fmt.format(map[k])}</strong> · <em>${daily?'frecuencia diaria':'frecuencia mensual (fallback)'}</em>`:`${kind.toUpperCase()}: sin datos vigentes cargados.`;if(method)method.textContent=daily?`${kind.toUpperCase()}: actualización por cociente entre los valores diarios oficiales del BCRA para las fechas seleccionadas. No se usan observaciones futuras.`:`${kind.toUpperCase()}: el backend disponible aún no expone la serie diaria; se usa temporalmente el valor mensual oficial para mantener operativa la calculadora.`;}
 document.getElementById('updateIndex')?.addEventListener('change',updateCalcMeta);
 document.getElementById('updateStartYear')?.addEventListener('change',()=>syncUpdateMonths('Start'));document.getElementById('updateEndYear')?.addEventListener('change',()=>syncUpdateMonths('End'));document.getElementById('updateStartMonth')?.addEventListener('change',()=>syncUpdateDays('Start'));document.getElementById('updateEndMonth')?.addEventListener('change',()=>syncUpdateDays('End'));
-document.getElementById('updateCalc')?.addEventListener('submit',e=>{e.preventDefault();const kind=document.getElementById('updateIndex').value,a=selectedUpdateDate('Start',kind),b=selectedUpdateDate('End',kind),amt=+document.getElementById('updateAmount').value,el=document.getElementById('updateResult');if(b<=a){el.textContent='La fecha final debe ser posterior a la inicial.';return;}const map=kind==='ipc'?(Object.keys(ipcCalcIndex).length?ipcCalcIndex:inflationIndex):(hasDailyIndex(kind)?dailyMapForIndex(kind):monthlyMapForIndex(kind)),initial=Number(map[a]),final=Number(map[b]),f=Number.isFinite(initial)&&Number.isFinite(final)&&initial>0?final/initial:null;if(!f){el.textContent='No hay valores disponibles para ambas fechas seleccionadas.';return;}el.innerHTML=`Índice inicial (${displayCalcDate(a)}): <strong>${fmt.format(initial)}</strong><br>Índice final (${displayCalcDate(b)}): <strong>${fmt.format(final)}</strong><br>Variación ${kind.toUpperCase()}: <strong>${fmt.format((f-1)*100)}%</strong>${amt>0?`<br>${money.format(amt)} → <strong>${money.format(amt*f)}</strong>.`:''}<br><small>Factor ${fmt.format(f)} = índice final / índice inicial.</small>`;});
+document.getElementById('updateCalc')?.addEventListener('submit',e=>{e.preventDefault();const kind=document.getElementById('updateIndex').value,a=selectedUpdateDate('Start',kind),b=selectedUpdateDate('End',kind),amt=+document.getElementById('updateAmount').value,el=document.getElementById('updateResult');if(b<=a){el.textContent='La fecha final debe ser posterior a la inicial.';return;}const map=kind==='ipc'?(Object.keys(ipcCalcIndex).length?ipcCalcIndex:inflationIndex):(hasDailyIndex(kind)?dailyMapForIndex(kind):monthlyMapForIndex(kind)),initial=Number(map[a]),final=Number(map[b]),f=Number.isFinite(initial)&&Number.isFinite(final)&&initial>0?final/initial:null;if(!f){el.textContent='No hay valores disponibles para ambas fechas seleccionadas.';return;}const fIdx=new Intl.NumberFormat('es-AR',{minimumFractionDigits:2,maximumFractionDigits:4}),fPct=new Intl.NumberFormat('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2}),fFac=new Intl.NumberFormat('es-AR',{minimumFractionDigits:4,maximumFractionDigits:4});el.innerHTML=`Índice inicial (${displayCalcDate(a)}): <strong>${fIdx.format(initial)}</strong><br>Índice final (${displayCalcDate(b)}): <strong>${fIdx.format(final)}</strong><br>Variación ${kind.toUpperCase()}: <strong>${fPct.format((f-1)*100)}%</strong>${amt>0?`<br>${money.format(amt)} → <strong>${money.format(amt*f)}</strong>.`:''}<br><small>Factor ${fFac.format(f)} = índice final / índice inicial.</small>`;});
 
 let agendaEvents=[];
 function renderAgenda(events){
@@ -526,7 +526,7 @@ async function loadOfficialSeriesFallback(){
 
 // v117: la API se pide por grupos (cada uno con pocos pedidos externos) y cada grupo se procesa al llegar.
 const MACRO_GROUPS=['core','history','markets','activity','leading'];
-const MACRO_LS_KEY='macroArgentinaSnapshotV117';
+const MACRO_LS_KEY='macroArgentinaSnapshotV118';
 // Series históricas (dólar, riesgo país, Merval, tasa, RIPTE, PIB, industria, desempleo, comercio).
 // Recibe la fusión histórico local + API, así los gráficos funcionan aunque la API no responda.
 function applyHistorySources(S){
@@ -715,7 +715,7 @@ function normalizedMonthlyRows(rows,valueField='value',n=60){const byMonth=new M
 let bundledMacroHistoryPromise=null;
 function loadBundledMacroHistory(){return bundledMacroHistoryPromise??=(async()=>{
   try{
-    const r=await fetch('/macro-history.json?v=117',{cache:'no-store'}); if(!r.ok)return;
+    const r=await fetch('/macro-history.json?v=118',{cache:'no-store'}); if(!r.ok)return;
     const h=await r.json(), B={};
     if(h.povertyAnnual)Object.assign(poverty,h.povertyAnnual);
     if(h.tradeMonthly)Object.assign(tradeBalanceMonthly,h.tradeMonthly);
@@ -736,7 +736,13 @@ function loadBundledMacroHistory(){return bundledMacroHistoryPromise??=(async()=
     if(h.ilaMonthly)B.ilaHistorical={status:'ok',source:'CICEc — Bolsas de Comercio de Santa Fe y Rosario',monthly:h.ilaMonthly};
     if(h.igaMonthly)B.igaHistorical={status:'ok',source:'OJF & Asociados — IGA-OJF',monthly:h.igaMonthly};
     if(h.marketsHistory){for(const k of ['financialHistorical','exchangeHistorical','salary'])if(h.marketsHistory[k])B[k]=h.marketsHistory[k];}
+    // v118: ICL, CER y UVA (calculadora) — respaldo local desde el archivo plano del BCRA.
+    try{const rc=await fetch('/contract-indices.json?v=118',{cache:'no-store'});if(rc.ok){const c=await rc.json();
+      const expand=s=>{const daily={},monthly={};if(!s?.start||!Array.isArray(s.values))return null;let dt=new Date(s.start+'T00:00:00Z');for(const v of s.values){const k=dt.toISOString().slice(0,10);if(v!==null&&Number.isFinite(Number(v))){daily[k]=Number(v);if(monthly[k.slice(0,7)]==null)monthly[k.slice(0,7)]=Number(v);}dt=new Date(dt.getTime()+864e5);}return {status:'ok',source:'BCRA — tas5_ser.txt',daily,monthly};};
+      const icl=expand(c.series?.icl),cer=expand(c.series?.cer),uva=expand(c.series?.uva);
+      if(icl)B.icl=icl;if(cer||uva)B.contractIndices={status:'ok',source:'BCRA — CER/UVA',...(cer?{cer}:{}),...(uva?{uva}:{})};}}catch(e){console.warn('contract indices',e);}
     bundledKpiSources=B; rebuildKpiSourceCache();
+    safeApply('calculatorHydration',()=>hydrateCalculatorSources(kpiSourceCache));
     safeApply('historySources',()=>applyHistorySources(kpiSourceCache));
     if(window.Chart){safeApply('history',()=>renderHistory(currentSeries));safeApply('fx',renderFx);}
     if(currentSeries==='trade'&&window.Chart)renderHistory('trade');

@@ -20,7 +20,9 @@ async function get(url,type='text'){
   if(hit&&Date.now()-hit.at<GET_TTL_MS)return hit.promise;
   const promise=(async()=>{
     const c=new AbortController(); const t=setTimeout(()=>c.abort(),25000);
-    try{const r=await fetch(url,{signal:c.signal,headers:{'user-agent':'MacroArgentinaDashboard/3.0 (+public economic dashboard)','accept-language':'es-AR,es;q=.9'}});if(!r.ok)throw new Error(`${r.status} ${r.statusText}`);return type==='json'?r.json():r.text();}
+    // v118: algunos sitios oficiales (BCRA) rechazan agentes no-navegador; se usa uno estándar.
+    const ua=/bcra\.gob\.ar|argentina\.gob\.ar|indec\.gob\.ar/.test(url)?'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36':'MacroArgentinaDashboard/3.0 (+public economic dashboard)';
+    try{const r=await fetch(url,{signal:c.signal,headers:{'user-agent':ua,'accept-language':'es-AR,es;q=.9'}});if(!r.ok)throw new Error(`${r.status} ${r.statusText}`);return type==='json'?r.json():r.text();}
     finally{clearTimeout(t)}
   })();
   GET_CACHE.set(key,{promise,at:Date.now()});
@@ -841,7 +843,7 @@ async function activityPulse(){
 
 // sin KV se conserva al menos durante la vida del isolate y el frontend mantiene otra copia local.
 let MEMORY_SNAPSHOT=null;
-const SNAPSHOT_PREFIX='macro:snapshot:v117:';
+const SNAPSHOT_PREFIX='macro:snapshot:v118:';
 const MEMORY_SNAPSHOTS={};
 function isPlainObject(v){return !!v&&typeof v==='object'&&!Array.isArray(v);}
 function mergeSnapshot(oldValue,newValue){
@@ -890,8 +892,8 @@ export default async(env={},ctx=null,request=null)=>{
   const stored=await readSnapshot(env,group);
   const bundled={};for(const n of names)if(BUNDLED_SOURCES[n])bundled[n]=BUNDLED_SOURCES[n];
   if(group==='core'&&BUNDLED_SOURCES.ipcCaba)bundled.ipcCaba=BUNDLED_SOURCES.ipcCaba;
-  const previous=mergeSnapshot({version:117,sources:bundled},stored||{});
-  const out={version:117,group,generatedAt:new Date().toISOString(),snapshotMode:env?.MACRO_STORE?.get?'kv+bundled':'bundled+isolate',sources:{}};
+  const previous=mergeSnapshot({version:118,sources:bundled},stored||{});
+  const out={version:118,group,generatedAt:new Date().toISOString(),snapshotMode:env?.MACRO_STORE?.get?'kv+bundled':'bundled+isolate',sources:{}};
   const results=await Promise.allSettled(names.map(n=>Promise.resolve().then(JOBS[n])));
   results.forEach((j,i)=>{
     const name=names[i],old=previous?.sources?.[name];

@@ -17,6 +17,8 @@ checkMap('Crédito',h.creditMonthlyYoy,60);
 const mora=checkMap('Mora',h.arrearsMonthlyTotal,60);if(Object.values(h.arrearsMonthlyTotal).some(v=>!(v>0&&v<40)))fail('Mora fuera de rango');
 for(const m of ['primary','financial'])checkMap(`Fiscal ${m}`,h.fiscalPctGDP?.[m],24);
 checkMap('Patentamientos',h.autosMonthly,48);
+// v118: ICL/CER/UVA (calculadora)
+{const C=JSON.parse(fs.readFileSync(new URL('../public/contract-indices.json',import.meta.url),'utf8'));for(const k of ['icl','cer','uva']){const s=C.series?.[k];if(!s||!Array.isArray(s.values)||s.values.filter(v=>v!=null).length<365)fail(`${k.toUpperCase()}: respaldo local corto`);}}
 // v117: mercados y salario (gráficos de dólar, riesgo país, Merval, tasa y RIPTE)
 {const M=h.marketsHistory||{};const n=o=>Object.keys(o||{}).length;
  if(n(M.financialHistorical?.countryRisk)<20)fail('Riesgo país: histórico local corto');
