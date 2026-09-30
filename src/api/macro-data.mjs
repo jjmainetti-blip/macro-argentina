@@ -400,6 +400,9 @@ async function exchangeHistorical(){
   for(const d of new Set([...Object.keys(out.free.daily.nominal),...Object.keys(out.official.daily.nominal)])){const f=Number(out.free.daily.nominal[d]),o=Number(out.official.daily.nominal[d]);if(Number.isFinite(f)&&Number.isFinite(o)&&o!==0)out.dailyGap[d]=round((f/o-1)*100,2);}
   out.coverage={free:{first:Math.min(...Object.keys(out.free.nominal).map(Number)),last:Math.max(...Object.keys(out.free.nominal).map(Number)),count:Object.keys(out.free.nominal).length},official:{first:Math.min(...Object.keys(out.official.nominal).map(Number)),last:Math.max(...Object.keys(out.official.nominal).map(Number)),count:Object.keys(out.official.nominal).length},gap:{first:Math.min(...Object.keys(out.gap).map(Number)),last:Math.max(...Object.keys(out.gap).map(Number)),count:Object.keys(out.gap).length}};
   out.notes=['No se interpolan años sin cotización libre verificable. El deflactor histórico se extiende a 1914 con la serie oficial de costo de vida (base 1929=100) empalmada al IPC desde 1944.','1990–2010: mercado unificado; dólar libre = tipo de cambio de mercado/de referencia.','1984–1989: paralelo y oficial según FMI; 1930s/1970s: mercado libre/oficial según publicaciones BCRA.','ARS constantes y TCR bilateral usan automáticamente el último mes común disponible entre IPC Argentina e IPC-U EE.UU.; no se mezclan meses de base.'];
+  // v121: el histórico diario completo viaja en public/fx-daily.json; la API envía sólo los últimos 400 días.
+  {const cut=new Date(Date.now()-400*864e5).toISOString().slice(0,10);const trim=o=>{for(const k of Object.keys(o||{}))if(k<cut)delete o[k];};
+  for(const side of [out.free,out.official])for(const k of ['nominal','real','tcr'])trim(side?.daily?.[k]);trim(out.dailyGap);}
   out.errors=errors;return out;
 }
 async function ipc(){
@@ -848,7 +851,7 @@ async function activityPulse(){
 
 // sin KV se conserva al menos durante la vida del isolate y el frontend mantiene otra copia local.
 let MEMORY_SNAPSHOT=null;
-const SNAPSHOT_PREFIX='macro:snapshot:v119:';
+const SNAPSHOT_PREFIX='macro:snapshot:v121:';
 const MEMORY_SNAPSHOTS={};
 function isPlainObject(v){return !!v&&typeof v==='object'&&!Array.isArray(v);}
 function mergeSnapshot(oldValue,newValue){
@@ -897,8 +900,8 @@ export default async(env={},ctx=null,request=null)=>{
   const stored=await readSnapshot(env,group);
   const bundled={};for(const n of names)if(BUNDLED_SOURCES[n])bundled[n]=BUNDLED_SOURCES[n];
   if(group==='core'&&BUNDLED_SOURCES.ipcCaba)bundled.ipcCaba=BUNDLED_SOURCES.ipcCaba;
-  const previous=mergeSnapshot({version:119,sources:bundled},stored||{});
-  const out={version:119,group,generatedAt:new Date().toISOString(),snapshotMode:env?.MACRO_STORE?.get?'kv+bundled':'bundled+isolate',sources:{}};
+  const previous=mergeSnapshot({version:121,sources:bundled},stored||{});
+  const out={version:121,group,generatedAt:new Date().toISOString(),snapshotMode:env?.MACRO_STORE?.get?'kv+bundled':'bundled+isolate',sources:{}};
   const results=await Promise.allSettled(names.map(n=>Promise.resolve().then(JOBS[n])));
   results.forEach((j,i)=>{
     const name=names[i],old=previous?.sources?.[name];

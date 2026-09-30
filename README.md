@@ -1,4 +1,4 @@
-# Macro Argentina — Cloudflare v120
+# Macro Argentina — Cloudflare v121
 
 Migración de la v63 desde Netlify a Cloudflare Workers + Static Assets.
 
@@ -145,3 +145,14 @@ Chequeo: `npm run validate:snapshot`.
 - **Riesgo país**: Ámbito (JSON público) → Rava (sólo si dice "actualizado" hoy) → Infobae → último cierre de ArgentinaDatos. Antes se caía casi siempre al último cierre (fecha de ayer).
 - **Merval**: BYMA (API pública BYMADATA, cotización del día y cierre anterior) → Rava (~10 min de demora) → zion.ar (último cierre).
 - **Carga sobre las fuentes**: `/api/markets` comparte una respuesta de 20 s (Cache API + memoria del isolate); los históricos usados para el cierre anterior se reutilizan 1 hora.
+
+
+## v121 — gráfico del dólar: series diarias y mensuales desde 1991
+- `public/fx-daily.json` (≈120 KB, formato compacto) con el dólar **libre** y el **oficial** diarios desde el 1-abr-1991:
+  - 1991-04 a 2001-12: 1 peso = 1 USD (convertibilidad, días hábiles).
+  - Libre: desde 2002-01-11 dólar informal/blue (Ámbito, `mercados.ambito.com/dolar/informal/historico-general`).
+  - Oficial: 2002-01-11 a 2002-04-08 mayorista; desde 2002-04-09 oficial BNA (Ámbito).
+  - Días posteriores al último dato de Ámbito: ArgentinaDatos (que redondea a pesos enteros en 2011-2012, por eso no se usa en ese tramo).
+- En el navegador se derivan, con un único método para todo el período: **mensual** (último dato del mes), **ARS constantes** (IPC INDEC mensual; antes de 2017, inflación anual dic/dic repartida por mes), **TCR** (ARS constantes × CPI-U EE.UU.) y **brecha** diaria y mensual (antes la brecha mensual no existía).
+- La frecuencia **anual** mantiene la serie larga del backend (desde 1928).
+- La API (`group=markets`) envía sólo los últimos 400 días diarios del dólar; el resto viene del archivo local.

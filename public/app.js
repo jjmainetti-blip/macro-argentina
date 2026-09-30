@@ -191,7 +191,7 @@ function updateCoverage(){const coverage=document.getElementById('seriesCoverage
 
 // v119: índice de precios para el RIPTE real. Usa la cadena IPC completa si está cargada;
 // si no, IPC INDEC mensual (histórico local, desde dic-2016) y, hacia atrás, la inflación anual dic/dic repartida en partes iguales por mes.
-function salaryPriceIndex(months){
+function salaryPriceIndex(months,fromYear=1994){
   const need=months||[];const covered=need.filter(ym=>Number.isFinite(Number(inflationIndex[ym]))).length;
   if(need.length&&covered>=need.length-2)return inflationIndex;
   const out={};const rows=(Array.isArray(kpiSourceCache?.ipc?.monthly)?kpiSourceCache.ipc.monthly:[]).filter(r=>Number.isFinite(Number(r.index))).sort((a,b)=>String(a.date).localeCompare(String(b.date)));
@@ -199,7 +199,7 @@ function salaryPriceIndex(months){
   for(const r of rows)out[String(r.date).slice(0,7)]=Number(r.index);
   let anchorYm=String(rows[0].date).slice(0,7);if(!anchorYm.endsWith('-12')){const y=Number(anchorYm.slice(0,4))-1;if(out[`${y}-12`]==null){const r0=rows[0];if(anchorYm.endsWith('-01')&&Number.isFinite(Number(r0.value)))out[`${y}-12`]=Number(r0.index)/(1+Number(r0.value)/100);else return out;}anchorYm=`${y}-12`;}
   let decIdx=out[anchorYm];
-  for(let y=Number(anchorYm.slice(0,4));y>=1994;y--){const inf=Number(inflation[y]);if(!Number.isFinite(inf))break;const prevDec=decIdx/(1+inf/100),g=Math.pow(1+inf/100,1/12);
+  for(let y=Number(anchorYm.slice(0,4));y>=fromYear;y--){const inf=Number(inflation[y]);if(!Number.isFinite(inf))break;const prevDec=decIdx/(1+inf/100),g=Math.pow(1+inf/100,1/12);
     for(let m=1;m<=12;m++){const k=`${y}-${String(m).padStart(2,'0')}`;if(out[k]==null)out[k]=prevDec*Math.pow(g,m);}decIdx=prevDec;}
   return out;
 }
@@ -374,8 +374,42 @@ const FX_CONTROL_PERIODS=[
   {from:2019,to:2025,label:'Restricciones cambiarias'}
 ];
 const fxRegimePlugin={id:'fxRegimes',beforeDatasetsDraw(chart){if(!document.getElementById('fxControlsToggle')?.checked)return;const {ctx,chartArea,scales}=chart;if(!chartArea)return;ctx.save();ctx.fillStyle='rgba(245,158,11,.10)';const labels=chart.data.labels||[];for(const r of FX_CONTROL_PERIODS){let a=labels.findIndex(x=>Number(String(x).slice(0,4))>=r.from),b=-1;for(let i=labels.length-1;i>=0;i--)if(Number(String(labels[i]).slice(0,4))<=r.to){b=i;break}if(a<0||b<0||b<a)continue;const x1=scales.x.getPixelForValue(a),x2=scales.x.getPixelForValue(b);ctx.fillRect(x1,chartArea.top,Math.max(2,x2-x1),chartArea.bottom-chartArea.top)}ctx.restore();}};
+// v121: serie diaria extendida (1991→hoy) y derivados homogéneos: mensual (último dato del mes), ARS constantes,
+// TCR y brecha, todos calculados con el mismo método para todo el período.
+const fxMonthlyGap={};const fxFileDaily={free:{},official:{}};let fxFileEnd='';
+let fxDailyPromise=null;
+function loadFxDaily(){return fxDailyPromise??=(async()=>{try{const r=await fetch('/fx-daily.json?v=121',{cache:'no-store'});if(!r.ok)return;const j=await r.json();
+  expandCompactDaily(j.free,fxFileDaily.free);expandCompactDaily(j.official,fxFileDaily.official);fxFileEnd=[j.free?.end,j.official?.end].filter(Boolean).sort().at(0)||'';
+  rebuildFxDerived();if(window.Chart)renderFx();}catch(e){console.warn('fx daily',e);}})();}
+function rebuildFxDerived(){
+  // 1) Diario nominal: el archivo local (más preciso en 2011-2012) manda hasta su última fecha; la API agrega días posteriores.
+  const applyFile=(file,dest)=>{const ks=Object.keys(file);if(!ks.length)return;const end=ks.reduce((m,k)=>k>m?k:m,'');
+    for(const k of Object.keys(dest))if(k<=end&&file[k]==null)delete dest[k]; // dentro del período del archivo, sólo sus días (evita valores redondeados de otras fuentes)
+    Object.assign(dest,file);};
+  applyFile(fxFileDaily.free,fxFreeDailyNominal);applyFile(fxFileDaily.official,fxOfficialDailyNominal);
+  if(!Object.keys(fxFreeDailyNominal).length&&!Object.keys(fxOfficialDailyNominal).length)return;
+  // 2) Mensual nominal = último dato diario de cada mes.
+  const lastOfMonth=(daily,dest)=>{const tmp={};for(const k of Object.keys(daily).sort())tmp[k.slice(0,7)]=daily[k];Object.assign(dest,tmp);};
+  lastOfMonth(fxFreeDailyNominal,fxFreeMonthlyNominal);lastOfMonth(fxOfficialDailyNominal,fxOfficialMonthlyNominal);
+  // 3) Índice de precios mensual (IPC; antes de 2017, inflación anual repartida por mes) y CPI de EE.UU.
+  const months=Object.keys({...fxFreeMonthlyNominal,...fxOfficialMonthlyNominal}).sort();
+  const P=salaryPriceIndex(months,1990),pKeys=Object.keys(P).filter(k=>Number.isFinite(Number(P[k]))).sort();if(!pKeys.length)return;
+  const lastP=pKeys.at(-1),base=(fxBasePeriod&&P[fxBasePeriod]!=null)?fxBasePeriod:lastP;fxBasePeriod=base;
+  const pOf=ym=>{if(P[ym]!=null)return Number(P[ym]);if(ym>lastP)return Number(P[lastP]);return null;};
+  const usKeys=Object.keys(usCpiMonthlyMap).sort();const usOf=ym=>{if(usCpiMonthlyMap[ym]!=null)return Number(usCpiMonthlyMap[ym]);if(usKeys.length&&ym>usKeys.at(-1))return Number(usCpiMonthlyMap[usKeys.at(-1)]);const a=Number(usCpiAnnual[ym.slice(0,4)]);return Number.isFinite(a)?a:null;};
+  const pb=pOf(base),ub=usOf(base);
+  const derive=(nom,real,tcr,keyToYm)=>{for(const k of Object.keys(real))delete real[k];for(const k of Object.keys(tcr))delete tcr[k];
+    for(const [k,v] of Object.entries(nom)){const ym=keyToYm(k),p=pOf(ym);if(!p||!pb)continue;const r=Number(v)*pb/p;real[k]=Number(r.toFixed(4));const u=usOf(ym);if(u&&ub)tcr[k]=Number((r*u/ub).toFixed(4));}};
+  derive(fxFreeMonthlyNominal,fxFreeMonthlyReal,fxFreeMonthlyTcr,k=>k);derive(fxOfficialMonthlyNominal,fxOfficialMonthlyReal,fxOfficialMonthlyTcr,k=>k);
+  derive(fxFreeDailyNominal,fxFreeDailyReal,fxFreeDailyTcr,k=>k.slice(0,7));derive(fxOfficialDailyNominal,fxOfficialDailyReal,fxOfficialDailyTcr,k=>k.slice(0,7));
+  // 4) Brecha diaria (mismo día; si falta el oficial, el último de los 5 días previos) y mensual.
+  for(const k of Object.keys(fxDailyGap))delete fxDailyGap[k];for(const k of Object.keys(fxMonthlyGap))delete fxMonthlyGap[k];
+  const offKeys=Object.keys(fxOfficialDailyNominal).sort();let j=0;
+  for(const d of Object.keys(fxFreeDailyNominal).sort()){while(j+1<offKeys.length&&offKeys[j+1]<=d)j++;const od=offKeys[j];if(!od||od>d)continue;if((new Date(d)-new Date(od))/864e5>5)continue;const f=Number(fxFreeDailyNominal[d]),o=Number(fxOfficialDailyNominal[od]);if(o>0&&Number.isFinite(f))fxDailyGap[d]=Number(((f/o-1)*100).toFixed(2));}
+  for(const [ym,f] of Object.entries(fxFreeMonthlyNominal)){const o=Number(fxOfficialMonthlyNominal[ym]);if(o>0&&Number.isFinite(Number(f)))fxMonthlyGap[ym]=Number(((Number(f)/o-1)*100).toFixed(2));}
+}
 function fxAnnualData(){if(fxSeriesMode==='gap')return fxGap;if(fxSeriesMode==='official')return fxPriceMode==='tcr'?fxOfficialTcr:fxPriceMode==='real'?fxOfficialReal:fxOfficialNominal;return fxPriceMode==='tcr'?fxFreeTcr:fxPriceMode==='real'?freeDollarReal:freeDollarNominal;}
-function fxMonthlyData(){if(fxSeriesMode==='gap')return {};if(fxSeriesMode==='official')return fxPriceMode==='tcr'?fxOfficialMonthlyTcr:fxPriceMode==='real'?fxOfficialMonthlyReal:fxOfficialMonthlyNominal;return fxPriceMode==='tcr'?fxFreeMonthlyTcr:fxPriceMode==='real'?fxFreeMonthlyReal:fxFreeMonthlyNominal;}
+function fxMonthlyData(){if(fxSeriesMode==='gap')return fxMonthlyGap;if(fxSeriesMode==='official')return fxPriceMode==='tcr'?fxOfficialMonthlyTcr:fxPriceMode==='real'?fxOfficialMonthlyReal:fxOfficialMonthlyNominal;return fxPriceMode==='tcr'?fxFreeMonthlyTcr:fxPriceMode==='real'?fxFreeMonthlyReal:fxFreeMonthlyNominal;}
 function fxDailyData(){if(fxSeriesMode==='gap')return fxDailyGap;if(fxSeriesMode==='official')return fxPriceMode==='tcr'?fxOfficialDailyTcr:fxPriceMode==='real'?fxOfficialDailyReal:fxOfficialDailyNominal;return fxPriceMode==='tcr'?fxFreeDailyTcr:fxPriceMode==='real'?fxFreeDailyReal:fxFreeDailyNominal;}
 function fxDateKey(k){return /^\d{4}-\d{2}-\d{2}$/.test(k)?k:`${k}-12-31`;}
 function fxBaseLabel(){if(!fxBasePeriod)return 'último IPC';const [y,m]=String(fxBasePeriod).split('-');const i=Number(m)-1;const label=Number.isInteger(i)&&i>=0&&i<MONTH_LABELS.length?MONTH_LABELS[i]:m;return `${label||''}-${y||''}`.replace(/^-|-$/g,'')||'último IPC';}
@@ -575,7 +609,7 @@ async function loadOfficialSeriesFallback(){
 
 // v117: la API se pide por grupos (cada uno con pocos pedidos externos) y cada grupo se procesa al llegar.
 const MACRO_GROUPS=['core','history','markets','activity','leading'];
-const MACRO_LS_KEY='macroArgentinaSnapshotV119';
+const MACRO_LS_KEY='macroArgentinaSnapshotV121';
 // Series históricas (dólar, riesgo país, Merval, tasa, RIPTE, PIB, industria, desempleo, comercio).
 // Recibe la fusión histórico local + API, así los gráficos funcionan aunque la API no responda.
 function applyHistorySources(S){
@@ -603,8 +637,9 @@ function applyHistorySources(S){
     safeApply('exchangeHistorical',()=>{
     if(srcOk(S.exchangeHistorical)){const X=S.exchangeHistorical;Object.assign(freeDollarNominal,X.free?.nominal||{});Object.assign(freeDollarReal,X.free?.real||{});Object.assign(fxOfficialNominal,X.official?.nominal||{});Object.assign(fxOfficialReal,X.official?.real||{});Object.assign(fxFreeTcr,X.free?.tcr||{});Object.assign(fxOfficialTcr,X.official?.tcr||{});Object.assign(fxFreeMonthlyNominal,X.free?.monthly?.nominal||{});Object.assign(fxFreeMonthlyReal,X.free?.monthly?.real||{});Object.assign(fxFreeMonthlyTcr,X.free?.monthly?.tcr||{});Object.assign(fxOfficialMonthlyNominal,X.official?.monthly?.nominal||{});Object.assign(fxOfficialMonthlyReal,X.official?.monthly?.real||{});Object.assign(fxOfficialMonthlyTcr,X.official?.monthly?.tcr||{});Object.assign(fxFreeDailyNominal,X.free?.daily?.nominal||{});Object.assign(fxFreeDailyReal,X.free?.daily?.real||{});Object.assign(fxFreeDailyTcr,X.free?.daily?.tcr||{});Object.assign(fxOfficialDailyNominal,X.official?.daily?.nominal||{});Object.assign(fxOfficialDailyReal,X.official?.daily?.real||{});Object.assign(fxOfficialDailyTcr,X.official?.daily?.tcr||{});
       const fillDailyTcr=(nominal,monthlyNominal,monthlyTcr,dailyTcr)=>{for(const [d,v] of Object.entries(nominal)){if(dailyTcr[d]!=null)continue;const ym=d.slice(0,7),mn=Number(monthlyNominal[ym]),mt=Number(monthlyTcr[ym]);if(Number.isFinite(mn)&&mn!==0&&Number.isFinite(mt))dailyTcr[d]=Number((Number(v)*(mt/mn)).toFixed(4));}};
-      fillDailyTcr(fxFreeDailyNominal,fxFreeMonthlyNominal,fxFreeMonthlyTcr,fxFreeDailyTcr);fillDailyTcr(fxOfficialDailyNominal,fxOfficialMonthlyNominal,fxOfficialMonthlyTcr,fxOfficialDailyTcr);Object.assign(fxGap,X.gap||{});Object.assign(fxDailyGap,X.dailyGap||{});fxBasePeriod=X.free?.basePeriod||X.official?.basePeriod||'';const dailyKeys=Object.keys(fxFreeDailyNominal);if(dailyKeys.length){const annualKeys=Object.keys(freeDollarNominal).map(fxDateKey).sort(),mn=annualKeys[0]||dailyKeys.sort()[0],mx=dailyKeys.sort().at(-1);const a=document.getElementById('fxPeriodFrom'),b=document.getElementById('fxPeriodTo');if(a){a.min=mn;a.max=mx;}if(b){b.min=mn;b.max=mx;b.value=mx;}}renderFx();}
+      rebuildFxDerived();fillDailyTcr(fxFreeDailyNominal,fxFreeMonthlyNominal,fxFreeMonthlyTcr,fxFreeDailyTcr);fillDailyTcr(fxOfficialDailyNominal,fxOfficialMonthlyNominal,fxOfficialMonthlyTcr,fxOfficialDailyTcr);Object.assign(fxGap,X.gap||{});Object.assign(fxDailyGap,X.dailyGap||{});fxBasePeriod=X.free?.basePeriod||X.official?.basePeriod||'';const dailyKeys=Object.keys(fxFreeDailyNominal);if(dailyKeys.length){const annualKeys=Object.keys(freeDollarNominal).map(fxDateKey).sort(),mn=annualKeys[0]||dailyKeys.sort()[0],mx=dailyKeys.sort().at(-1);const a=document.getElementById('fxPeriodFrom'),b=document.getElementById('fxPeriodTo');if(a){a.min=mn;a.max=mx;}if(b){b.min=mn;b.max=mx;b.value=mx;}}renderFx();}
     });
+    safeApply('fxDerived',()=>{rebuildFxDerived();if(window.Chart)renderFx();});
     if(Object.keys(salaryRipteMonthly).length)applySalaryMode();
     if(currentSeries && window.Chart) renderHistory(currentSeries);
     if(srcOk(S.gdpHistorical) && S.gdpHistorical.annual){Object.assign(gdpGrowth,S.gdpHistorical.annual);fillSelect('gdpStart',gdpGrowth,1980);fillSelect('gdpEnd',gdpGrowth,2025);}
@@ -764,7 +799,7 @@ function normalizedMonthlyRows(rows,valueField='value',n=60){const byMonth=new M
 let bundledMacroHistoryPromise=null;
 function loadBundledMacroHistory(){return bundledMacroHistoryPromise??=(async()=>{
   try{
-    const r=await fetch('/macro-history.json?v=119',{cache:'no-store'}); if(!r.ok)return;
+    const r=await fetch('/macro-history.json?v=121',{cache:'no-store'}); if(!r.ok)return;
     const h=await r.json(), B={};
     if(h.povertyAnnual)Object.assign(poverty,h.povertyAnnual);
     if(h.tradeMonthly)Object.assign(tradeBalanceMonthly,h.tradeMonthly);
@@ -951,4 +986,4 @@ function renderKpiCards(){
 
 // v105: preload bundled histories independently of remote APIs/KV.
 loadBundledMacroHistory();
-loadMarketsDaily();
+loadMarketsDaily().then(()=>loadFxDaily());
