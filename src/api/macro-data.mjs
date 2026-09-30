@@ -665,37 +665,63 @@ async function isacHistorical(){
 }
 
 async function emaeHistorical(){
-  const x=await seriesRows('143.3_ICE_SERVIA_2004_A_25',{start:'2020-01-01'});
-  const monthlyYoy={};
-  for(const r of x.rows){const k=String(r.date).slice(0,7);if(/^\d{4}-\d{2}$/.test(k)&&Number.isFinite(Number(r.value)))monthlyYoy[k]=Number(r.value);}
-  if(Object.keys(monthlyYoy).length<24)throw new Error('serie EMAE interanual insuficiente');
-  const pctMap=fractionMapToPct(monthlyYoy);for(const k of Object.keys(pctMap))pctMap[k]=round(Number(pctMap[k]),1);
-  return {status:'ok',source:'INDEC / Datos Argentina — EMAE variación interanual',sourceUrl:x.url,monthlyYoy:pctMap};
+  // v114: la tarjeta muestra la variación mensual desestacionalizada (143.3_ICE_SER_VM_2004_A_34) y, abajo, la interanual.
+  const [yoyR,saR]=await Promise.allSettled([seriesRows('143.3_ICE_SERVIA_2004_A_25',{start:'2018-01-01'}),seriesRows('143.3_ICE_SER_VM_2004_A_34',{start:'2015-01-01'})]);
+  const toPct=rows=>{const m={};for(const r of rows){const k=String(r.date).slice(0,7);if(/^\d{4}-\d{2}$/.test(k)&&Number.isFinite(Number(r.value)))m[k]=Number(r.value);}const p=fractionMapToPct(m);for(const k of Object.keys(p))p[k]=round(Number(p[k]),1)+0;return p;};
+  const out={status:'ok',source:'INDEC / Datos Argentina — EMAE'};
+  if(yoyR.status==='fulfilled'){out.monthlyYoy=toPct(yoyR.value.rows);out.sourceUrl=yoyR.value.url;}
+  if(saR.status==='fulfilled')out.monthlySaMom=toPct(saR.value.rows);
+  if(!out.monthlyYoy&&!out.monthlySaMom)throw new Error('series EMAE no disponibles');
+  return out;
 }
 
+// v114: variación mensual real s.e. de los préstamos en pesos, según el Informe Monetario Mensual del BCRA.
+async function immCreditSaMom(){
+  const monthsEs=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  const now=new Date(),out={};
+  const tries=[];for(let i=1;i<=3;i++){const d=new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth()-i,1));tries.push([`${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}`,monthsEs[d.getUTCMonth()],d.getUTCFullYear()]);}
+  await Promise.allSettled(tries.map(async([k,mon,y])=>{
+    let html=null;for(const slug of [`informe-monetario-mensual-${mon}-de-${y}`,`informe-monetario-mensual-${mon}-${y}`]){try{html=strip(await get(`https://www.bcra.gob.ar/publicaciones/${slug}/`));break;}catch{}}
+    if(!html)return;
+    const sentences=html.split(/(?<=\.)\s+(?=[A-ZÁÉÍÓÚ])/);
+    for(const s of sentences){if(!/(pr[eé]stamos|cr[eé]dito) (?:bancarios? )?en pesos al sector privado/i.test(s)||!/(s\.\s?e|estacionalidad)/i.test(s))continue;
+      const m=s.match(/(-?\d{1,2}(?:,\d)?)\s?%/);if(!m)continue;let v=Number(m[1].replace(',','.'));
+      if(v>0&&/(ca[ií]d|cay[oe]|contraj|contrac|disminu|merma|retroc)/i.test(s.slice(0,m.index)))v=-v;out[k]=round(v,1)+0;break;}
+  }));
+  return out;
+}
 async function creditHistorical(){
-  const x=await seriesRows('91.1_PEFPC_0_0_35',{start:'2019-01-01'});
-  return {status:'ok',source:'BCRA / Datos Argentina — préstamos al sector privado',sourceUrl:x.url,monthlyYoy:yoyFromRows(x.rows)};
+  const [lv,imm]=await Promise.allSettled([seriesRows('91.1_PEFPC_0_0_35',{start:'2019-01-01'}),immCreditSaMom()]);
+  const out={status:'ok',source:'BCRA — préstamos al sector privado'};
+  if(lv.status==='fulfilled'){out.monthlyYoy=yoyFromRows(lv.value.rows);out.sourceUrl=lv.value.url;}
+  if(imm.status==='fulfilled'&&Object.keys(imm.value).length)out.monthlySaRealMom=imm.value;
+  if(!out.monthlyYoy&&!out.monthlySaRealMom)throw new Error('crédito sin datos');
+  return out;
 }
 async function arrearsFromOfficialWorkbook(){
+  // v114: hoja "Calidad de Cartera (por líneas)": secciones "1. Total Sector Privado", "2. Familias - Total", "3. Empresas - Total";
+  // en cada una, la fila "Cartera irregular total" y la fila de fechas ("En porcentaje", fechas seriales de Excel).
   const url='https://www.bcra.gob.ar/archivos/Pdfs/PublicacionesEstadisticas/informes/informe-bancos-anexo.xlsx';
-  const c=new AbortController(),t=setTimeout(()=>c.abort(),18000);
+  const c=new AbortController(),t=setTimeout(()=>c.abort(),20000);
   try{
-    const r=await fetch(url,{signal:c.signal}); if(!r.ok)throw new Error(`anexo BCRA ${r.status}`);
-    const wb=XLSX.read(await r.arrayBuffer(),{type:'array',cellDates:true});
-    const monthKey=v=>{if(v instanceof Date&&!isNaN(v))return `${v.getUTCFullYear()}-${String(v.getUTCMonth()+1).padStart(2,'0')}`;const z=String(v??'').trim();let m=z.match(/(20\d{2})[-\/.](0?[1-9]|1[0-2])/);if(m)return `${m[1]}-${String(+m[2]).padStart(2,'0')}`;m=z.match(/(0?[1-9]|1[0-2])[-\/.](20\d{2})/);if(m)return `${m[2]}-${String(+m[1]).padStart(2,'0')}`;return null;};
-    const nt=v=>String(v??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
-    const score=v=>{const z=nt(v);let n=0;if(/irregular|moros/.test(z))n+=4;if(/sector privado|total/.test(z))n+=3;if(/famil|empresa|grupo|entidad/.test(z))n-=2;return n;};
-    const extract=rows=>{const out={};if(!rows.length)return out;const cols=Math.max(...rows.map(r=>r.length),0),hs=Array(cols).fill(0);for(let r=0;r<Math.min(rows.length,25);r++)for(let c=0;c<cols;c++)hs[c]=Math.max(hs[c],score(rows[r]?.[c]));for(const row of rows){let d=null;for(const cell of row){d=monthKey(cell);if(d)break;}if(!d)continue;let best=null,bs=-99;for(let c=0;c<row.length;c++){const v=Number(String(row[c]??'').replace(',','.').replace('%','').trim());if(!Number.isFinite(v)||v<0||v>30)continue;if(hs[c]>bs){bs=hs[c];best=v;}}if(bs>=4)out[d]=round(best,1);}return out;};
-    let best={};for(const name of wb.SheetNames){const rows=XLSX.utils.sheet_to_json(wb.Sheets[name],{header:1,raw:true,defval:null}),a=extract(rows);if(Object.keys(a).length>Object.keys(best).length)best=a;const cols=Math.max(...rows.map(r=>r.length),0),tr=[];for(let c=0;c<cols;c++)tr.push(rows.map(r=>r[c]));const b=extract(tr);if(Object.keys(b).length>Object.keys(best).length)best=b;}
-    if(Object.keys(best).length<36)throw new Error(`anexo BCRA: serie de mora no identificada (${Object.keys(best).length})`);return {url,monthlyTotal:best};
+    const r=await fetch(url,{signal:c.signal,headers:{'user-agent':'Mozilla/5.0 (MacroArgentinaDashboard)'}}); if(!r.ok)throw new Error(`anexo BCRA ${r.status}`);
+    const wb=XLSX.read(await r.arrayBuffer(),{type:'array'});
+    const name=wb.SheetNames.find(n=>/calidad de cartera.*l[ií]neas/i.test(n));if(!name)throw new Error('anexo BCRA: hoja por líneas no encontrada');
+    const rows=XLSX.utils.sheet_to_json(wb.Sheets[name],{header:1,raw:true,defval:null});
+    const label=i=>String(rows[i]?.[0]??'').trim();
+    const ym=v=>{const n=Number(v);if(!Number.isFinite(n)||n<20000)return null;const d=new Date(Date.UTC(1899,11,30)+n*86400000);return `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}`;};
+    const section=re=>{const s=rows.findIndex((_,i)=>re.test(label(i)));if(s<0)return {};let dr=-1,vr=-1;for(let i=s+1;i<Math.min(rows.length,s+12);i++){if(dr<0&&/^En porcentaje/i.test(label(i)))dr=i;if(/^Cartera irregular total/i.test(label(i))){vr=i;break;}}if(dr<0||vr<0)return {};const out={};for(let j=1;j<rows[dr].length;j++){const k=ym(rows[dr][j]),v=Number(rows[vr][j]);if(k&&Number.isFinite(v))out[k]=round(v,1)+0;}return out;};
+    const total=section(/^1\.\s*Total Sector Privado/i),families=section(/^2\.\s*Familias/i),companies=section(/^3\.\s*Empresas/i);
+    if(Object.keys(total).length<36)throw new Error(`anexo BCRA: serie de mora no identificada (${Object.keys(total).length})`);
+    return {url,monthlyTotal:total,monthlyFamilies:families,monthlyCompanies:companies};
   }finally{clearTimeout(t)}
 }
 async function arrearsHistorical(){
   // v113: base oficial mensual (Datos Argentina 332.2_SISTEMA_FIADA__53) + anexo xlsx + últimos Informes sobre Bancos.
   const total={}; let sourceUrl='https://www.bcra.gob.ar/informe-sobre-bancos/'; let latest=null;
   try{const x=await seriesRows('332.2_SISTEMA_FIADA__53',{start:'2019-01-01'});for(const r of x.rows){const k=String(r.date).slice(0,7);if(/^\d{4}-\d{2}$/.test(k)&&Number.isFinite(r.value)&&r.value>0&&r.value<40)total[k]=round(r.value,1);}sourceUrl=x.url;}catch(e){console.warn('mora serie oficial',e);}
-  try{const x=await arrearsFromOfficialWorkbook();Object.assign(total,x.monthlyTotal);sourceUrl=x.url;}catch(e){console.warn('anexo BCRA mora',e);}
+  const families={},companies={};
+  try{const x=await arrearsFromOfficialWorkbook();Object.assign(total,x.monthlyTotal);Object.assign(families,x.monthlyFamilies);Object.assign(companies,x.monthlyCompanies);sourceUrl=x.url;}catch(e){console.warn('anexo BCRA mora',e);}
   // Meses recientes calculados dinámicamente (el informe se publica con ~2 meses de rezago).
   const monthsEs=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
   const now=new Date(),recent=[];
@@ -709,9 +735,10 @@ async function arrearsHistorical(){
     const emp=html.match(/empresas[^0-9%]{0,60}(\d{1,2}(?:[,.]\d+)?)%/i);
     return {k,total:num(m[1]),families:fam?num(fam[1]):null,companies:emp?num(emp[1]):null};
   }));
-  for(const r of rs)if(r.status==='fulfilled'){total[r.value.k]=round(r.value.total,1);if(!latest||r.value.k>latest.k)latest=r.value;}
+  for(const r of rs)if(r.status==='fulfilled'){const v=r.value;total[v.k]=round(v.total,1);if(Number.isFinite(v.families))families[v.k]=round(v.families,1);if(Number.isFinite(v.companies))companies[v.k]=round(v.companies,1);if(!latest||v.k>latest.k)latest=v;}
   if(Object.keys(total).length<24)throw new Error(`histórico de mora insuficiente: ${Object.keys(total).length}`);
-  const out={status:'ok',source:'BCRA — Datos Argentina / Anexo Estadístico / Informe sobre Bancos',sourceUrl,monthlyTotal:total};
+  const out={status:'ok',source:'BCRA — Informe sobre Bancos (Anexo)',sourceUrl,monthlyTotal:total,monthlyFamilies:families,monthlyCompanies:companies};
+  if(!latest){const k=Object.keys(total).sort().at(-1);if(k&&Number.isFinite(families[k])&&Number.isFinite(companies[k]))latest={k,total:total[k],families:families[k],companies:companies[k]};}
   if(latest&&Number.isFinite(latest.families)&&Number.isFinite(latest.companies))out.latest={period:periodEs(latest.k),total:round(latest.total,1),families:round(latest.families,1),companies:round(latest.companies,1)};
   return out;
 }
@@ -737,16 +764,17 @@ async function fiscalPctGdp(){
 // Devuelve sólo lo que puede refrescarse en vivo; el resto proviene del snapshot incluido (bundled-history.mjs).
 async function activityPulse(){
   const out={status:'ok',source:'Economía / AFCP / INDEC / ACARA / BCRA'};
-  const [fiscal,isac,arrears]=await Promise.allSettled([fiscalPctGdp(),isacHistorical(),arrearsHistorical()]);
+  const [fiscal,isac,arrears,credit]=await Promise.allSettled([fiscalPctGdp(),isacHistorical(),arrearsHistorical(),immCreditSaMom()]);
+  if(credit.status==='fulfilled'){const e=Object.entries(credit.value).sort(([a],[b])=>a.localeCompare(b)).at(-1);if(e)out.creditLatest={ym:e[0],period:periodEs(e[0]),arsRealMom:e[1]};}
   if(fiscal.status==='fulfilled')out.fiscal=fiscal.value;
-  if(isac.status==='fulfilled'){const e=Object.entries(isac.value.monthlyYoy||{}).sort(([a],[b])=>a.localeCompare(b)).at(-1);if(e)out.isacLatestYoy={period:periodEs(e[0]),yoy:e[1]};}
+  if(isac.status==='fulfilled'){const e=Object.entries(isac.value.monthlyYoy||{}).sort(([a],[b])=>a.localeCompare(b)).at(-1);if(e)out.isacLatestYoy={ym:e[0],period:periodEs(e[0]),yoy:e[1]};}
   if(arrears.status==='fulfilled'&&arrears.value.latest)out.arrears=arrears.value.latest;
   return out;
 }
 
 // sin KV se conserva al menos durante la vida del isolate y el frontend mantiene otra copia local.
 let MEMORY_SNAPSHOT=null;
-const SNAPSHOT_KEY='macro:snapshot:v113';
+const SNAPSHOT_KEY='macro:snapshot:v114';
 function isPlainObject(v){return !!v&&typeof v==='object'&&!Array.isArray(v);}
 function mergeSnapshot(oldValue,newValue){
   if(Array.isArray(oldValue)||Array.isArray(newValue)){
@@ -779,8 +807,8 @@ async function writeSnapshot(env,ctx,snapshot){
 }
 export default async(env={},ctx=null)=>{
   const stored=await readSnapshot(env);
-  const previous=mergeSnapshot({version:113,sources:BUNDLED_SOURCES},stored||{});
-  const out={version:113,generatedAt:new Date().toISOString(),snapshotMode:env?.MACRO_STORE?.get?'kv+bundled':'bundled+isolate',sources:{}};
+  const previous=mergeSnapshot({version:114,sources:BUNDLED_SOURCES},stored||{});
+  const out={version:114,generatedAt:new Date().toISOString(),snapshotMode:env?.MACRO_STORE?.get?'kv+bundled':'bundled+isolate',sources:{}};
   // v113: cada fuente corre aislada. Un error sincrónico o una función inexistente ya no puede tirar el endpoint completo.
   const jobs={ipcHistorical:()=>ipcHistorical(),gdpHistorical:()=>gdpHistorical(),emaeHistorical:()=>emaeHistorical(),industryHistorical:()=>industryHistorical(),unemploymentHistorical:()=>unemploymentHistorical(),tradeHistorical:()=>tradeHistorical(),financialHistorical:()=>financialHistorical(),exchangeHistorical:()=>exchangeHistorical(),ipc:()=>ipc(),arca:()=>arca(),icg:()=>icg(),bcra:()=>bcra(),rem:()=>rem(),salary:()=>salaryRipte(),icl:()=>icl(),contractIndices:()=>contractIndices(),isacHistorical:()=>isacHistorical(),creditHistorical:()=>creditHistorical(),arrearsHistorical:()=>arrearsHistorical(),activityPulse:()=>activityPulse()};
   const names=Object.keys(jobs);
@@ -795,7 +823,9 @@ export default async(env={},ctx=null)=>{
   for(const [name,old] of Object.entries(previous?.sources||{}))if(!out.sources[name])out.sources[name]=old;
   // Mantener el KPI de ISAC alineado con la serie si ésta se actualizó.
   const AP=out.sources.activityPulse;
-  if(AP?.isacLatestYoy&&AP.isac&&AP.isacLatestYoy.period!==AP.isac.period){AP.isac={...AP.isac,period:AP.isacLatestYoy.period,yoy:AP.isacLatestYoy.yoy,mom:null};}
+  if(AP?.isacLatestYoy&&AP.isac&&AP.isacLatestYoy.ym>(AP.isac.ym||'')){AP.isac={...AP.isac,ym:AP.isacLatestYoy.ym,period:AP.isacLatestYoy.period,yoy:AP.isacLatestYoy.yoy,mom:null};}
+  // Crédito: si el IMM trae un mes más nuevo, se actualiza el dato en pesos y se omite el detalle en USD (quedaría desfasado).
+  if(AP?.creditLatest&&AP.credit&&AP.creditLatest.ym>(AP.credit.ym||'')){AP.credit={source:AP.credit.source,ym:AP.creditLatest.ym,period:AP.creditLatest.period,arsRealMom:AP.creditLatest.arsRealMom};}
   const ok=Object.values(out.sources).some(x=>x.status==='ok'||x.status==='snapshot');
   if(ok)await writeSnapshot(env,ctx,out);
   return new Response(JSON.stringify(out),{status:ok?200:503,headers:{'content-type':'application/json; charset=utf-8','cache-control':'public, max-age=60, s-maxage=60, stale-while-revalidate=300','access-control-allow-origin':'*'}});

@@ -17,6 +17,10 @@ checkMap('Crédito',h.creditMonthlyYoy,60);
 const mora=checkMap('Mora',h.arrearsMonthlyTotal,60);if(Object.values(h.arrearsMonthlyTotal).some(v=>!(v>0&&v<40)))fail('Mora fuera de rango');
 for(const m of ['primary','financial'])checkMap(`Fiscal ${m}`,h.fiscalPctGDP?.[m],24);
 checkMap('Patentamientos',h.autosMonthly,48);
+// v114
+checkMap('EMAE s.e.',h.emaeMonthlySaMom,60);notFraction('EMAE s.e.',h.emaeMonthlySaMom);
+checkMap('Crédito s.e.',h.creditMonthlySaRealMom,55);
+for(const [n,o] of [['Mora familias',h.arrearsMonthlyFamilies],['Mora empresas',h.arrearsMonthlyCompanies]]){checkMap(n,o,120);if(monthKeys(o).at(-1)!==mora.at(-1))fail(`${n}: no termina en ${mora.at(-1)}`);}
 // Real revenue must be computable for all of the last 60 months.
 const idx=Object.fromEntries(h.ipcRows.map(x=>[x.date,x.index]));
 for(const d of monthKeys(h.arcaYoy).slice(-60)){const [y,m]=d.split('-'),p=`${+y-1}-${m}`;if(!Number.isFinite(idx[d])||!Number.isFinite(idx[p]))fail(`Recaudación real sin IPC: ${d}`);}
