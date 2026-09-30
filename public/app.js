@@ -1,4 +1,4 @@
-/* Macro Argentina v105 — series auditables, rango personalizado y variación acumulada.
+/* Macro Argentina v113 (base v105) — series auditables, rango personalizado y variación acumulada.
    Las series se cargan directamente desde la API pública cuando es posible y el backend Netlify queda como segunda vía. */
 
 const fmt = new Intl.NumberFormat('es-AR', { maximumFractionDigits: 1 });
@@ -491,20 +491,36 @@ async function loadCementMonthlyFast(){
   }catch(e){console.warn('cement monthly fast',e);}
 }
 
+// Respaldo directo contra Datos Argentina: sólo si el histórico fusionado es corto.
+// v113: EMAE llega como fracción (0,064 = 6,4%) y el resultado se guarda en la capa API (antes se perdía).
+let officialFallbackRunning=false;
 async function loadOfficialSeriesFallback(){
-  const S=kpiSourceCache||{};
-  const fetchSeries=async(id,start)=>{
-    const u=`https://apis.datos.gob.ar/series/api/series/?ids=${encodeURIComponent(id)}&start_date=${start}&limit=1000&format=json&metadata=none`;
-    const r=await fetch(u,{headers:{accept:'application/json'}}); if(!r.ok)throw new Error(`Datos Argentina ${r.status}`);
-    const j=await r.json(); return (j.data||[]).map(x=>({date:String(x[0]).slice(0,7),value:Number(x[1])})).filter(x=>/^\d{4}-\d{2}$/.test(x.date)&&Number.isFinite(x.value));
-  };
-  if(!S.emaeHistorical?.monthlyYoy||Object.keys(S.emaeHistorical.monthlyYoy).length<60){
-    try{const rows=await fetchSeries('143.3_ICE_SERVIA_2004_A_25','2020-01-01'),monthlyYoy={};for(const x of rows)monthlyYoy[x.date]=Number(x.value.toFixed(1));if(Object.keys(monthlyYoy).length>=60)S.emaeHistorical={...(S.emaeHistorical||{}),status:'ok',source:'INDEC / Datos Argentina — EMAE variación interanual',monthlyYoy:{...(S.emaeHistorical?.monthlyYoy||{}),...monthlyYoy}};}catch(e){console.warn('EMAE fallback',e);}
-  }
-  if(!S.creditHistorical?.monthlyYoy||Object.keys(S.creditHistorical.monthlyYoy).length<60){
-    try{const rows=await fetchSeries('91.1_PEFPC_0_0_35','2019-01-01'),levels={},monthlyYoy={};for(const x of rows)levels[x.date]=x.value;for(const [d,v] of Object.entries(levels)){const [y,m]=d.split('-'),pv=levels[`${Number(y)-1}-${m}`];if(Number.isFinite(pv)&&pv!==0)monthlyYoy[d]=Number(((v/pv-1)*100).toFixed(1));}if(Object.keys(monthlyYoy).length>=60)S.creditHistorical={...(S.creditHistorical||{}),status:'ok',source:'BCRA / Datos Argentina — préstamos al sector privado',monthlyYoy:{...(S.creditHistorical?.monthlyYoy||{}),...monthlyYoy}};}catch(e){console.warn('Crédito fallback',e);}
-  }
-  if(currentSeries==='emae'||currentSeries==='credit')renderHistory(currentSeries);
+  if(officialFallbackRunning)return; officialFallbackRunning=true;
+  try{
+    await loadBundledMacroHistory();
+    const S=kpiSourceCache||{};
+    const fetchSeries=async(id,start)=>{
+      const u=`https://apis.datos.gob.ar/series/api/series/?ids=${encodeURIComponent(id)}&start_date=${start}&limit=1000&format=json&metadata=none`;
+      const r=await fetch(u,{headers:{accept:'application/json'}}); if(!r.ok)throw new Error(`Datos Argentina ${r.status}`);
+      const j=await r.json(); return (j.data||[]).map(x=>({date:String(x[0]).slice(0,7),value:Number(x[1])})).filter(x=>/^\d{4}-\d{2}$/.test(x.date)&&Number.isFinite(x.value));
+    };
+    let changed=false;
+    if(!S.emaeHistorical?.monthlyYoy||Object.keys(S.emaeHistorical.monthlyYoy).length<60){
+      try{const rows=await fetchSeries('143.3_ICE_SERVIA_2004_A_25','2018-01-01'),monthlyYoy={};
+        const fraction=rows.length>=12&&Math.max(...rows.map(x=>Math.abs(x.value)))<=1.5;
+        for(const x of rows)monthlyYoy[x.date]=Number((fraction?x.value*100:x.value).toFixed(1));
+        if(Object.keys(monthlyYoy).length>=24){apiKpiSources={...apiKpiSources,emaeHistorical:mergeKpiData(apiKpiSources.emaeHistorical,{status:'ok',source:'INDEC / Datos Argentina — EMAE variación interanual',monthlyYoy})};changed=true;}
+      }catch(e){console.warn('EMAE fallback',e);}
+    }
+    if(!S.creditHistorical?.monthlyYoy||Object.keys(S.creditHistorical.monthlyYoy).length<60){
+      try{const rows=await fetchSeries('91.1_PEFPC_0_0_35','2018-01-01'),levels={},monthlyYoy={};
+        for(const x of rows)levels[x.date]=x.value;
+        for(const [d,v] of Object.entries(levels)){const [y,m]=d.split('-'),pv=levels[`${Number(y)-1}-${m}`];if(Number.isFinite(pv)&&pv!==0)monthlyYoy[d]=Number(((v/pv-1)*100).toFixed(1));}
+        if(Object.keys(monthlyYoy).length>=24){apiKpiSources={...apiKpiSources,creditHistorical:mergeKpiData(apiKpiSources.creditHistorical,{status:'ok',source:'BCRA / Datos Argentina — préstamos al sector privado',monthlyYoy})};changed=true;}
+      }catch(e){console.warn('Crédito fallback',e);}
+    }
+    if(changed)rebuildKpiSourceCache();
+  }finally{officialFallbackRunning=false;}
 }
 
 async function loadAutomaticData(){
@@ -514,13 +530,13 @@ async function loadAutomaticData(){
     try{
       const r=await fetch('/api/macro-data',{headers:{accept:'application/json'}}); if(!r.ok)throw new Error(`API ${r.status}`);
       data=await r.json();
-      if(data?.sources)try{localStorage.setItem('macroArgentinaSnapshotV112',JSON.stringify(data));}catch{}
+      if(data?.sources)try{localStorage.setItem('macroArgentinaSnapshotV113',JSON.stringify(data));}catch{}
     }catch(networkError){
-      try{data=JSON.parse(localStorage.getItem('macroArgentinaSnapshotV112')||'null');}catch{}
+      try{data=JSON.parse(localStorage.getItem('macroArgentinaSnapshotV113')||'null');}catch{}
       if(!data?.sources)throw networkError;
       console.warn('macro-data: usando snapshot local',networkError);
     }
-    const S=data.sources||{}; kpiSourceCache=S; hydrateKpiHistoryCache(S);
+    const S=data.sources||{}; apiKpiSources=S; rebuildKpiSourceCache();
     loadOfficialSeriesFallback();
     safeApply('calculatorHydration',()=>hydrateCalculatorSources(S));
 
@@ -569,7 +585,8 @@ async function loadAutomaticData(){
     }
     if(S.arca?.status==='ok'){const x=S.arca.latest,nom=Number(x.yoy),arcaYm=ymFromSpanishPeriod(x.period),ipcYm=String(S.ipc?.updated||'').slice(0,7),infl=Number(S.ipc?.latest?.yoy),real=arcaYm&&arcaYm===ipcYm&&Number.isFinite(nom)&&Number.isFinite(infl)?((1+nom/100)/(1+infl/100)-1)*100:NaN;setKpi('arca',signedPct(nom),`${x.period} · variación interanual nominal`,Number.isFinite(real)?`Real: ${signedPct(real)}`:'Real: —');const card=document.querySelector('.kpi[data-kpi="arca"]');applyTone(card?.querySelector('[data-value]'),nom);applyTone(card?.querySelector('[data-detail]'),real);}
     if(S.icg?.status==='ok'){const x=S.icg.latest;setKpi('icg',fmt.format(x.value),`${x.period} · puntos`,`${Number(x.mom)>0?'+':''}${fmt.format(x.mom)}% mensual`);}
-    if(S.activityPulse?.status==='ok'){const A=S.activityPulse;const sign=n=>Number(n)>0?'+':'';if(A.fiscal)setFiscalKpi(A.fiscal);if(A.cement)setKpi('cement',`${fmt.format(A.cement.tons/1000)} mil t`,`${A.cement.period} · total`,`${sign(A.cement.yoy)}${fmt.format(A.cement.yoy)}% interanual`);if(A.isac)setKpi('isac',`${sign(A.isac.yoy)}${fmt.format(A.isac.yoy)}%`,`${A.isac.period} · interanual`,`${sign(A.isac.mom)}${fmt.format(A.isac.mom)}% mensual s.e.`);if(A.autos)setKpi('autos',new Intl.NumberFormat('es-AR').format(A.autos.units),`${A.autos.period} · unidades`,`${sign(A.autos.yoy)}${fmt.format(A.autos.yoy)}% interanual`);if(A.credit)setKpi('credit',`${sign(A.credit.arsRealMom)}${fmt.format(A.credit.arsRealMom)}%`,`${A.credit.period} · pesos, real mensual s.e.`,`USD: ${new Intl.NumberFormat('es-AR').format(A.credit.usdBalance)} M · ${sign(A.credit.usdMom)}USD ${new Intl.NumberFormat('es-AR').format(Math.abs(A.credit.usdMom))} M mensual`);if(A.arrears)setKpi('arrears',`${fmt.format(A.arrears.total)}%`,`${A.arrears.period} · irregularidad total`,`Familias ${fmt.format(A.arrears.families)}% · empresas ${fmt.format(A.arrears.companies)}%`);}
+    if(S.activityPulse?.status==='ok'){const A=S.activityPulse;const sign=n=>Number(n)>0?'+':'';if(A.fiscal)setFiscalKpi(A.fiscal);if(A.cement&&fin(A.cement.tons)&&fin(A.cement.yoy))setKpi('cement',`${fmt.format(A.cement.tons/1000)} mil t`,`${A.cement.period} · total`,`${sign(A.cement.yoy)}${fmt.format(A.cement.yoy)}% interanual`);const fin=v=>v!==null&&v!==undefined&&v!==''&&Number.isFinite(Number(v));
+  if(A.isac&&fin(A.isac.yoy))setKpi('isac',`${sign(A.isac.yoy)}${fmt.format(A.isac.yoy)}%`,`${A.isac.period} · interanual`,fin(A.isac.mom)?`${sign(A.isac.mom)}${fmt.format(A.isac.mom)}% mensual s.e.`:'Construcción');if(A.autos&&fin(A.autos.units)&&fin(A.autos.yoy))setKpi('autos',new Intl.NumberFormat('es-AR').format(A.autos.units),`${A.autos.period} · unidades`,`${sign(A.autos.yoy)}${fmt.format(A.autos.yoy)}% interanual`);if(A.credit&&fin(A.credit.arsRealMom)&&fin(A.credit.usdBalance)&&fin(A.credit.usdMom))setKpi('credit',`${sign(A.credit.arsRealMom)}${fmt.format(A.credit.arsRealMom)}%`,`${A.credit.period} · pesos, real mensual s.e.`,`USD: ${new Intl.NumberFormat('es-AR').format(A.credit.usdBalance)} M · ${sign(A.credit.usdMom)}USD ${new Intl.NumberFormat('es-AR').format(Math.abs(A.credit.usdMom))} M mensual`);if(A.arrears&&fin(A.arrears.total))setKpi('arrears',`${fmt.format(A.arrears.total)}%`,`${A.arrears.period} · irregularidad total`,fin(A.arrears.families)&&fin(A.arrears.companies)?`Familias ${fmt.format(A.arrears.families)}% · empresas ${fmt.format(A.arrears.companies)}%`:'Crédito al sector privado');}
 
     if(S.salary?.status==='ok'&&currentSeries==='salary'&&window.Chart)safeApply('salaryRender',()=>renderHistory('salary'));
     const releases=[{releaseDate:'2026-09-28',date:'sep 2026',displayDate:'Publicado 28 sep 2026 · período sep 2026',title:'ICG UTDT',value:'1,94 puntos · −5,9% mensual'}];if(S.ipc?.status==='ok')releases.push({date:S.ipc.updated||'',title:'IPC Nacional',value:`${fmt.format(S.ipc.latest.value)}% mensual · ${fmt.format(S.ipc.latest.yoy)}% interanual`});if(S.salary?.status==='ok'&&S.salary.latest)releases.push({date:S.salary.latest.period,title:'RIPTE',value:money.format(S.salary.latest.value)});if(S.arca?.status==='ok')releases.push({date:S.arca.latest.period||'',title:'Recaudación ARCA',value:moneyMillionsToBillions(S.arca.latest.value)});if(S.icg?.status==='ok')releases.push({releaseDate:S.icg.publicationDate||'',date:S.icg.latest.period||'',title:'ICG UTDT',value:`${fmt.format(S.icg.latest.value)} puntos${Number.isFinite(Number(S.icg.latest.mom))?` · ${Number(S.icg.latest.mom)>0?'+':''}${fmt.format(S.icg.latest.mom)}% mensual`:''}`});renderLatestRelease(releases);
@@ -580,7 +597,7 @@ async function loadAutomaticData(){
     }
     updateCoverage();
     if(window.Chart)renderHistory(currentSeries);
-  }catch(err){if(status)status.innerHTML='<strong>Datos verificados</strong><small>Actualización automática activa · se reintentará la conexión con las fuentes</small>';console.warn(err);}
+  }catch(err){if(status)status.innerHTML='<strong>Datos verificados</strong><small>Actualización automática activa · se reintentará la conexión con las fuentes</small>';console.warn(err);loadOfficialSeriesFallback();}
 }
 window.addEventListener('load',()=>{
   initKpiExplorer();
@@ -598,6 +615,27 @@ loadCementMonthlyFast();
 
 // v84 · Explorador de tarjetas
 let kpiDetailChart=null, kpiSourceCache={}, kpiHistoryCache={}, fiscalMetric='primary';
+// v113: dos capas de datos para las tarjetas. bundledKpiSources = histórico incluido en el sitio
+// (macro-history.json); apiKpiSources = /api/macro-data. kpiSourceCache es SIEMPRE la fusión plana
+// de ambas (antes el histórico local se guardaba en kpiSourceCache.sources.* y las tarjetas nunca lo leían,
+// y la respuesta de la API reemplazaba el objeto completo).
+let bundledKpiSources={}, apiKpiSources={};
+function isPlainObj(v){return !!v&&typeof v==='object'&&!Array.isArray(v);}
+function mergeKpiData(base,over){
+  if(Array.isArray(base)||Array.isArray(over)){
+    const a=Array.isArray(base)?base:[],b=Array.isArray(over)?over:[];
+    if([...a,...b].every(x=>isPlainObj(x)&&x.date)){const m=new Map(a.map(x=>[String(x.date).slice(0,7),x]));for(const x of b){const k=String(x.date).slice(0,7);m.set(k,{...(m.get(k)||{}),...x});}return [...m.values()].sort((x,y)=>String(x.date).localeCompare(String(y.date)));}
+    return b.length?b:a;
+  }
+  if(isPlainObj(base)||isPlainObj(over)){const out={...(isPlainObj(base)?base:{})};for(const [k,v] of Object.entries(isPlainObj(over)?over:{})){if(v===null||v===undefined||v==='')continue;out[k]=mergeKpiData(out[k],v);}return out;}
+  return over===null||over===undefined?base:over;
+}
+function rebuildKpiSourceCache(){
+  const merged=mergeKpiData(bundledKpiSources,apiKpiSources);
+  // Una fuente en error en la API no debe ocultar el histórico local.
+  for(const [k,v] of Object.entries(merged))if(v?.status==='error'&&bundledKpiSources[k])merged[k]={...bundledKpiSources[k],...v,status:'ok'};
+  kpiSourceCache=merged; hydrateKpiHistoryCache(kpiSourceCache);
+}
 
 // ICG: separadores de períodos presidenciales. Las fechas se expresan con la
 // granularidad mensual de la propia serie del ICG.
@@ -653,35 +691,37 @@ const KPI_META={
 function recentEntries(obj,n=12){return Object.entries(obj||{}).filter(([d,v])=>/^\d{4}-\d{2}$/.test(String(d))&&Number.isFinite(Number(v))).sort(([a],[b])=>String(a).localeCompare(String(b))).slice(-n);}
 function recentAnnualEntries(obj,n=12){return Object.entries(obj||{}).filter(([d,v])=>/^\d{4}$/.test(String(d))&&Number.isFinite(Number(v))).sort(([a],[b])=>Number(a)-Number(b)).slice(-n);}
 function normalizedMonthlyRows(rows,valueField='value',n=60){const byMonth=new Map();for(const r of (Array.isArray(rows)?rows:[])){const d=String(r?.date||'').slice(0,7),v=Number(r?.[valueField]);if(/^\d{4}-\d{2}$/.test(d)&&Number.isFinite(v))byMonth.set(d,v);}return [...byMonth.entries()].sort(([a],[b])=>a.localeCompare(b)).slice(-n);}
-async function loadBundledMacroHistory(){
+let bundledMacroHistoryPromise=null;
+function loadBundledMacroHistory(){return bundledMacroHistoryPromise??=(async()=>{
   try{
-    const r=await fetch('/macro-history.json?v=112',{cache:'no-store'}); if(!r.ok)return;
-    const h=await r.json();
+    const r=await fetch('/macro-history.json?v=113',{cache:'no-store'}); if(!r.ok)return;
+    const h=await r.json(), B={};
     if(h.povertyAnnual)Object.assign(poverty,h.povertyAnnual);
     if(h.tradeMonthly)Object.assign(tradeBalanceMonthly,h.tradeMonthly);
-    // v108: IPC CABA must be hydrated from the bundled snapshot itself, not only from /api/macro-data.
-    // This keeps the modal working even if the API/KV path fails or resolves later.
-    if(h.ipcCabaMonthly){
-      kpiSourceCache=kpiSourceCache||{sources:{}}; kpiSourceCache.sources=kpiSourceCache.sources||{};
-      const prev=kpiSourceCache.sources.ipcCaba?.history||{};
-      kpiSourceCache.sources.ipcCaba={...(kpiSourceCache.sources.ipcCaba||{}),status:'ok',source:'IDECBA — IPCBA Nivel General',history:{...h.ipcCabaMonthly,...prev}};
-    }
-    kpiSourceCache=kpiSourceCache||{sources:{}}; kpiSourceCache.sources=kpiSourceCache.sources||{};
-    const S=kpiSourceCache.sources;
-    if(h.icgMonthly)S.icg={...(S.icg||{}),status:'ok',history:{...h.icgMonthly,...(S.icg?.history||{})}};
-    if(h.arcaYoy)S.arca={...(S.arca||{}),status:'ok',history:{...h.arcaYoy,...(S.arca?.history||{})}};
-    if(h.ipiMonthlyYoy)S.industryHistorical={...(S.industryHistorical||{}),status:'ok',monthlyYoy:{...h.ipiMonthlyYoy,...(S.industryHistorical?.monthlyYoy||{})}};
-    if(h.isacMonthlyYoy)S.isacHistorical={...(S.isacHistorical||{}),status:'ok',monthlyYoy:{...h.isacMonthlyYoy,...(S.isacHistorical?.monthlyYoy||{})}};
-    if(Array.isArray(h.ipcRows)){const old=Array.isArray(S.ipc?.monthly)?S.ipc.monthly:[];const m=new Map(h.ipcRows.map(x=>[String(x.date).slice(0,7),x]));for(const x of old){const d=String(x?.date||'').slice(0,7);if(d)m.set(d,{...(m.get(d)||{}),...x});}S.ipc={...(S.ipc||{}),status:'ok',monthly:[...m.values()].sort((a,b)=>a.date.localeCompare(b.date))};}
+    if(Array.isArray(h.ipcRows))B.ipc={status:'ok',source:'INDEC — IPC Nacional',monthly:h.ipcRows};
+    if(h.ipcCabaMonthly)B.ipcCaba={status:'ok',source:'IDECBA — IPCBA Nivel General',history:h.ipcCabaMonthly};
+    if(h.icgMonthly)B.icg={status:'ok',source:'UTDT',history:h.icgMonthly};
+    if(h.arcaYoy)B.arca={status:'ok',source:'ARCA',history:h.arcaYoy};
+    if(h.ipiMonthlyYoy)B.industryHistorical={status:'ok',monthlyYoy:h.ipiMonthlyYoy};
+    if(h.isacMonthlyYoy)B.isacHistorical={status:'ok',monthlyYoy:h.isacMonthlyYoy};
+    if(h.emaeMonthlyYoy)B.emaeHistorical={status:'ok',source:'INDEC / Datos Argentina — EMAE variación interanual',monthlyYoy:h.emaeMonthlyYoy};
+    if(h.creditMonthlyYoy)B.creditHistorical={status:'ok',source:'BCRA / Datos Argentina — préstamos al sector privado',monthlyYoy:h.creditMonthlyYoy};
+    if(h.arrearsMonthlyTotal)B.arrearsHistorical={status:'ok',source:'BCRA',monthlyTotal:h.arrearsMonthlyTotal};
+    const AP={status:'ok'};
+    if(h.fiscalPctGDP)AP.fiscal={source:'Ministerio de Economía — IMIG; PIB INDEC',historyPctGDP:h.fiscalPctGDP};
+    if(h.autosMonthly)AP.autos={source:'ACARA / SIOMAA',history:{'Patentamientos (unidades)':h.autosMonthly}};
+    if(AP.fiscal||AP.autos)B.activityPulse=AP;
+    bundledKpiSources=B; rebuildKpiSourceCache();
+    if(currentSeries==='trade'&&window.Chart)renderHistory('trade');
   }catch(e){console.warn('bundled macro history',e);}
-}
+})();}
 function kpiSeries(key){const S=kpiSourceCache||{},A=S.activityPulse||{};
-  if(key==='fiscal'){const f=A.fiscal||{};const src=f.historyPctGDP?.[fiscalMetric];if(src){const months=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'],years=['2024','2025','2026'];const datasets=years.map(y=>({label:y,data:months.map((_,i)=>{const v=src[`${y}-${String(i+1).padStart(2,'0')}`];return v==null?null:Number(v);})}));return {labels:months,datasets,source:'Ministerio de Economía',legend:`Resultado ${fiscalMetric==='primary'?'primario':'financiero'} acumulado YTD como % del PIB. Comparación mensual 2024–2026 · valores oficiales publicados (aprox.).`};}}
+  if(key==='fiscal'){const f=A.fiscal||{};const src=f.historyPctGDP?.[fiscalMetric];if(src){const months=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'],years=[...new Set(Object.keys(src).filter(k=>/^\d{4}-\d{2}$/.test(k)).map(k=>k.slice(0,4)))].sort().slice(-3);const datasets=years.map(y=>({label:y,data:months.map((_,i)=>{const v=src[`${y}-${String(i+1).padStart(2,'0')}`];return v==null?null:Number(v);})}));return {labels:months,datasets,source:'Ministerio de Economía (IMIG) / INDEC',legend:`Resultado ${fiscalMetric==='primary'?'primario':'financiero'} acumulado en el año como % del PIB. Comparación mensual ${years[0]}–${years.at(-1)} · IMIG sobre PIB nominal INDEC (año en curso: PIB estimado).`};}}
   // IPC: usar exclusivamente la variación mensual publicada. Nunca graficar el nivel del índice.
   if(key==='ipc'){const x=normalizedMonthlyRows(S.ipc?.monthly,'value',60);if(x.length)return {labels:x.map(([d])=>displayMonth(d)),rawPeriods:x.map(([d])=>d),datasets:[{label:'Inflación mensual (%)',data:x.map(([,v])=>v)}],source:'INDEC',legend:`Últimas ${x.length} observaciones mensuales publicadas.`};}
   if(key==='ipcCaba'&&S.ipcCaba?.history){const x=recentEntries(S.ipcCaba.history,60);return {labels:x.map(([d])=>displayMonth(d)),datasets:[{label:'Inflación CABA mensual (%)',data:x.map(([,v])=>Number(v))}],source:'IDECBA',legend:'Hasta 5 años de observaciones mensuales disponibles.'};}
   // Recaudación: barras con variación interanual real, deflactada con IPC Nacional del mismo mes.
-  if(key==='arca'&&S.arca?.history){const nominal=recentEntries(S.arca.history,60),ipcRows=normalizedMonthlyRows(S.ipc?.monthly,'index',999),idx=Object.fromEntries(ipcRows),labels=[],real=[];for(const [d,n] of nominal){const prev=`${Number(d.slice(0,4))-1}${d.slice(4)}`,iNow=Number(idx[d]),iPrev=Number(idx[prev]);if(!Number.isFinite(iNow)||!Number.isFinite(iPrev)||iPrev===0)continue;const inflation=(iNow/iPrev-1)*100,r=Number((((1+n/100)/(1+inflation/100)-1)*100).toFixed(1));labels.push(d);real.push(r);}if(labels.length)return {chartType:'bar',labels:labels.map(displayMonth),rawPeriods:labels,datasets:[{label:'Recaudación · variación interanual real (%)',data:real}],source:'ARCA + INDEC',legend:`Últimas ${labels.length} variaciones interanuales reales de la recaudación, deflactadas con IPC Nacional del mismo mes.`};}
+  if(key==='arca'&&S.arca?.history){const nominal=recentEntries(S.arca.history,60),ipcRows=normalizedMonthlyRows(S.ipc?.monthly,'index',999),idx=Object.fromEntries(ipcRows),labels=[],real=[];for(const [d,n] of nominal){const prev=`${Number(d.slice(0,4))-1}${d.slice(4)}`,iNow=Number(idx[d]),iPrev=Number(idx[prev]);if(!Number.isFinite(iNow)||!Number.isFinite(iPrev)||iPrev===0)continue;const inflation=(iNow/iPrev-1)*100,r=Number((((1+n/100)/(1+inflation/100)-1)*100).toFixed(1))+0;labels.push(d);real.push(r);}if(labels.length)return {chartType:'bar',labels:labels.map(displayMonth),rawPeriods:labels,datasets:[{label:'Recaudación · variación interanual real (%)',data:real}],source:'ARCA + INDEC',legend:`Últimas ${labels.length} variaciones interanuales reales de la recaudación, deflactadas con IPC Nacional del mismo mes.`};}
   // ICG: sólo observaciones mensuales válidas; se conserva toda la historia disponible y los cambios presidenciales.
   if(key==='icg'&&S.icg?.history){const x=recentEntries(S.icg.history,9999);if(x.length)return {labels:x.map(([d])=>displayMonth(d)),rawPeriods:x.map(([d])=>d),presidentOverlay:true,datasets:[{label:'ICG',data:x.map(([,v])=>Number(v)),borderColor:'#0b5bd3',backgroundColor:'rgba(11,91,211,.06)'}],source:'UTDT',legend:`Serie histórica mensual: ${x.length} observaciones · líneas verticales = cambios presidenciales.`};}
   if(key==='emae'&&S.emaeHistorical?.monthlyYoy){const x=recentEntries(S.emaeHistorical.monthlyYoy,60);if(x.length)return {chartType:'bar',labels:x.map(([d])=>displayMonth(d)),rawPeriods:x.map(([d])=>d),datasets:[{label:'EMAE · variación interanual (%)',data:x.map(([,v])=>Number(v))}],source:'INDEC / Datos Argentina',legend:`Últimas ${x.length} variaciones interanuales mensuales del EMAE.`};}
@@ -691,7 +731,7 @@ function kpiSeries(key){const S=kpiSourceCache||{},A=S.activityPulse||{};
   if(key==='isac'&&S.isacHistorical?.monthlyYoy){const x=recentEntries(S.isacHistorical.monthlyYoy,60);if(x.length)return {chartType:'bar',labels:x.map(([d])=>displayMonth(d)),rawPeriods:x.map(([d])=>d),datasets:[{label:'ISAC · variación interanual (%)',data:x.map(([,v])=>Number(v))}],source:'INDEC / Datos Argentina',legend:`Últimas ${x.length} variaciones interanuales mensuales del ISAC.`};}
   if(key==='credit'&&S.creditHistorical?.monthlyYoy){const x=recentEntries(S.creditHistorical.monthlyYoy,60);return {chartType:'bar',labels:x.map(([d])=>displayMonth(d)),rawPeriods:x.map(([d])=>d),datasets:[{label:'Crédito privado · variación interanual nominal (%)',data:x.map(([,v])=>Number(v))}],source:'BCRA / Datos Argentina',legend:`Últimas ${x.length} variaciones interanuales mensuales del crédito privado.`};}
   if(key==='arrears'&&S.arrearsHistorical?.monthlyTotal){const x=recentEntries(S.arrearsHistorical.monthlyTotal,60);if(x.length)return {chartType:'bar',labels:x.map(([d])=>displayMonth(d)),rawPeriods:x.map(([d])=>d),datasets:[{label:'Mora bancaria · irregularidad total (%)',data:x.map(([,v])=>Number(v))}],source:'BCRA — Informe sobre Bancos',legend:`Últimas ${x.length} observaciones mensuales del ratio de irregularidad del crédito al sector privado.`};}
-  if(key==='autos'&&A.autos?.history?.['Patentamientos (unidades)']){const h=A.autos.history['Patentamientos (unidades)'],years=[2022,2023,2024,2025,2026],months=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];const palette=['#2563eb','#7c3aed','#0891b2','#ea580c','#16a34a'];const datasets=years.map((y,j)=>({label:String(y),backgroundColor:palette[j],borderColor:palette[j],preserveColor:true,data:months.map((_,i)=>{const v=h[`${y}-${String(i+1).padStart(2,'0')}`];return v==null?null:Number(v);})}));return {chartType:'bar',labels:months,datasets,source:'ACARA / SIOMAA',legend:'Patentamientos mensuales por año (2022–2026). Cada año conserva un color propio.'};}
+  if(key==='autos'&&A.autos?.history?.['Patentamientos (unidades)']){const h=A.autos.history['Patentamientos (unidades)'],years=[...new Set(Object.keys(h).filter(k=>/^\d{4}-\d{2}$/.test(k)).map(k=>Number(k.slice(0,4))))].sort((a,b)=>a-b).slice(-5),months=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];const palette=['#2563eb','#7c3aed','#0891b2','#ea580c','#16a34a'];const datasets=years.map((y,j)=>({label:String(y),backgroundColor:palette[j],borderColor:palette[j],preserveColor:true,data:months.map((_,i)=>{const v=h[`${y}-${String(i+1).padStart(2,'0')}`];return v==null?null:Number(v);})}));return {chartType:'bar',labels:months,datasets,source:'ACARA / SIOMAA',legend:`Patentamientos mensuales por año (${years[0]}–${years.at(-1)}). Cada año conserva un color propio.`};}
   if(key==='cement'){const monthly=Object.fromEntries(Object.entries(cementMonthlyYoy).filter(([d,v])=>/^\d{4}-(0[1-9]|1[0-2])$/.test(d)&&Number.isFinite(Number(v))));const x=recentEntries(monthly,60);if(!x.length)return null;return {chartType:'bar',labels:x.map(([d])=>displayMonth(d)),rawPeriods:x.map(([d])=>d),datasets:[{label:'Despachos de cemento · variación interanual mensual (%)',data:x.map(([,v])=>Number(v)),type:'bar'}],source:'AFCP',legend:`Últimos 5 años: ${x.length} observaciones mensuales de variación interanual (%). Fuente AFCP.`};}
   const cached=kpiHistoryCache[key],h=cached?.history||A[key]?.history;if(h){const keys=Object.keys(h);if(keys.length&&h[keys[0]]&&typeof h[keys[0]]==='object'&&!Array.isArray(h[keys[0]])){const labels=[...new Set(keys.flatMap(k=>Object.keys(h[k]||{})))].filter(d=>/^\d{4}-\d{2}$/.test(d)).sort().slice(-60);const datasets=keys.map(k=>({label:k,data:labels.map(d=>{const v=h[k]?.[d];return v===null||v===undefined?null:Number(v);})})).filter(ds=>ds.data.some(v=>Number.isFinite(v)));if(labels.length&&datasets.length)return {labels:labels.map(displayMonth),datasets,source:cached?.source||A[key]?.source||A[key]?.sourceUrl||A.source};}const x=recentEntries(h);if(x.length)return {labels:x.map(([d])=>displayMonth(d)),datasets:[{label:KPI_META[key]?.title||key,data:x.map(([,v])=>Number(v))}],source:cached?.source||A[key]?.source||A[key]?.sourceUrl||A.source};}
   if(key==='trade'){const monthly=Object.fromEntries(Object.entries(tradeBalanceMonthly||{}).filter(([d,v])=>/^\d{4}-(0[1-9]|1[0-2])$/.test(String(d))&&Number.isFinite(Number(v))));const x=recentEntries(monthly,60);if(x.length)return {chartType:'bar',labels:x.map(([d])=>displayMonth(d)),rawPeriods:x.map(([d])=>d),tradeArrow:true,datasets:[{label:'Saldo comercial mensual (M USD)',data:x.map(([,v])=>Number(v))}],source:'INDEC',legend:'Saldo comercial mensual. La flecha une el último mes con el mismo mes del año anterior y muestra la variación porcentual interanual del saldo.'};return null;}const maps={poverty:poverty};if(maps[key]){const x=Object.entries(maps[key]).filter(([d,v])=>/^\d{4}$/.test(String(d))&&Number.isFinite(Number(v))).sort(([a],[b])=>Number(a)-Number(b));if(x.length)return {chartType:'line',labels:x.map(([d])=>String(d)),datasets:[{label:KPI_META[key]?.title||key,data:x.map(([,v])=>Number(v))}],source:KPI_META[key]?.agency,legend:`${x.length} observaciones históricas publicadas disponibles.`};}
@@ -727,4 +767,4 @@ function openKpiModal(key){const card=document.querySelector(`.kpi[data-kpi="${k
 function initKpiExplorer(){document.querySelectorAll('.kpi[data-kpi]').forEach(card=>{card.tabIndex=0;card.setAttribute('role','button');card.setAttribute('aria-label',`Ver evolución de ${card.querySelector('.kpi-top span')?.textContent||'indicador'}`);card.addEventListener('click',()=>openKpiModal(card.dataset.kpi));card.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openKpiModal(card.dataset.kpi);}});});document.querySelectorAll('[data-kpi-close]').forEach(x=>x.addEventListener('click',closeKpiModal));document.addEventListener('keydown',e=>{if(e.key==='Escape')closeKpiModal();});}
 
 // v105: preload bundled histories independently of remote APIs/KV.
-loadBundledMacroHistory().then(()=>{try{hydrateKpiHistoryCache(kpiSourceCache||{});}catch{}});
+loadBundledMacroHistory();

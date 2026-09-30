@@ -10,7 +10,14 @@ checkMap('ISAC',h.isacMonthlyYoy,60);
 checkMap('Balanza',h.tradeMonthly,60,'2021-09','2026-08');
 checkMap('Recaudación',h.arcaYoy,60,'2021-09','2026-08');
 const icg=checkMap('ICG',h.icgMonthly,250);if(icg[0]!=='2001-11')fail(`ICG inicio ${icg[0]}`);
+// v113: históricos de tarjetas que antes dependían sólo de /api/macro-data.
+const notFraction=(name,o)=>{const v=Object.values(o||{}).map(Number);if(Math.max(...v.map(Math.abs))<=1.5)fail(`${name}: valores parecen fracción, no %`);};
+checkMap('EMAE',h.emaeMonthlyYoy,60);notFraction('EMAE',h.emaeMonthlyYoy);notFraction('ISAC',h.isacMonthlyYoy);notFraction('IPI',h.ipiMonthlyYoy);
+checkMap('Crédito',h.creditMonthlyYoy,60);
+const mora=checkMap('Mora',h.arrearsMonthlyTotal,60);if(Object.values(h.arrearsMonthlyTotal).some(v=>!(v>0&&v<40)))fail('Mora fuera de rango');
+for(const m of ['primary','financial'])checkMap(`Fiscal ${m}`,h.fiscalPctGDP?.[m],24);
+checkMap('Patentamientos',h.autosMonthly,48);
 // Real revenue must be computable for all of the last 60 months.
 const idx=Object.fromEntries(h.ipcRows.map(x=>[x.date,x.index]));
 for(const d of monthKeys(h.arcaYoy).slice(-60)){const [y,m]=d.split('-'),p=`${+y-1}-${m}`;if(!Number.isFinite(idx[d])||!Number.isFinite(idx[p]))fail(`Recaudación real sin IPC: ${d}`);}
-console.log(JSON.stringify({ok:true,counts:{ipc:h.ipcRows.length,ipi:monthKeys(h.ipiMonthlyYoy).length,isac:monthKeys(h.isacMonthlyYoy).length,trade:monthKeys(h.tradeMonthly).length,arca:monthKeys(h.arcaYoy).length,icg:icg.length},ranges:{trade:[monthKeys(h.tradeMonthly).at(-60),monthKeys(h.tradeMonthly).at(-1)],arca:[monthKeys(h.arcaYoy).at(-60),monthKeys(h.arcaYoy).at(-1)],icg:[icg[0],icg.at(-1)]}},null,2));
+console.log(JSON.stringify({ok:true,counts:{ipc:h.ipcRows.length,ipi:monthKeys(h.ipiMonthlyYoy).length,isac:monthKeys(h.isacMonthlyYoy).length,trade:monthKeys(h.tradeMonthly).length,arca:monthKeys(h.arcaYoy).length,icg:icg.length,emae:monthKeys(h.emaeMonthlyYoy).length,credit:monthKeys(h.creditMonthlyYoy).length,arrears:mora.length,fiscal:monthKeys(h.fiscalPctGDP.primary).length,autos:monthKeys(h.autosMonthly).length},ranges:{trade:[monthKeys(h.tradeMonthly).at(-60),monthKeys(h.tradeMonthly).at(-1)],arca:[monthKeys(h.arcaYoy).at(-60),monthKeys(h.arcaYoy).at(-1)],icg:[icg[0],icg.at(-1)]}},null,2));

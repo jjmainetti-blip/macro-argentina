@@ -13,20 +13,22 @@ const URLS={
   calendar:'https://www.bcra.gob.ar/calendario-de-informes/'
 };
 const GET_CACHE=new Map();
+const GET_TTL_MS=10*60*1000; // v113: evita que un isolate sirva datos viejos indefinidamente
 async function get(url,type='text'){
   const key=`${type}:${url}`;
-  if(GET_CACHE.has(key))return GET_CACHE.get(key);
+  const hit=GET_CACHE.get(key);
+  if(hit&&Date.now()-hit.at<GET_TTL_MS)return hit.promise;
   const promise=(async()=>{
     const c=new AbortController(); const t=setTimeout(()=>c.abort(),25000);
     try{const r=await fetch(url,{signal:c.signal,headers:{'user-agent':'MacroArgentinaDashboard/3.0 (+public economic dashboard)','accept-language':'es-AR,es;q=.9'}});if(!r.ok)throw new Error(`${r.status} ${r.statusText}`);return type==='json'?r.json():r.text();}
     finally{clearTimeout(t)}
   })();
-  GET_CACHE.set(key,promise);
+  GET_CACHE.set(key,{promise,at:Date.now()});
   try{return await promise}catch(e){GET_CACHE.delete(key);throw e}
 }
 const round=(n,d=1)=>n==null?null:Number(n.toFixed(d));
 const pct=(a,b)=>b?(a/b-1)*100:null;
-async function seriesRows(id,{start='1900-01-01',end='2026-12-31'}={}){
+async function seriesRows(id,{start='1900-01-01',end=`${new Date().getUTCFullYear()+1}-12-31`}={}){
   const url=`${SERIES_API}?ids=${encodeURIComponent(id)}&start_date=${start}&end_date=${end}&limit=1000&format=json`;
   const j=await get(url,'json'); const rows=j?.data||[];
   if(!Array.isArray(rows)||!rows.length)throw new Error(`sin datos para ${id}`);
@@ -38,6 +40,10 @@ function annualFromRows(rows,mode='last'){
 }
 function growthFromAnnualLevels(levels){const out={},ys=Object.keys(levels).map(Number).sort((a,b)=>a-b);for(const y of ys)if(levels[y-1]!=null)out[y]=round(pct(levels[y],levels[y-1]),1);return out;}
 function yoyFromRows(rows){const levels={};for(const r of rows||[]){const k=String(r.date||'').slice(0,7);if(/^\d{4}-\d{2}$/.test(k)&&Number.isFinite(Number(r.value)))levels[k]=Number(r.value);}const out={};for(const [k,v] of Object.entries(levels)){const [y,m]=k.split('-');const prev=`${Number(y)-1}-${m}`;if(Number.isFinite(levels[prev]))out[k]=round(pct(v,levels[prev]),1);}return out;}
+// v113: algunas series de Datos Argentina (EMAE, ISAC) llegan como fracción (0,064 = 6,4%).
+function fractionMapToPct(map){const vals=Object.values(map||{}).map(Number).filter(Number.isFinite);if(vals.length>=12&&Math.max(...vals.map(Math.abs))<=1.5){const out={};for(const [k,v] of Object.entries(map))out[k]=round(Number(v)*100,1);return out;}return map;}
+const MONTHS_ES=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+const periodEs=ym=>`${MONTHS_ES[Number(ym.slice(5,7))-1]} ${ym.slice(0,4)}`;
 const strip=s=>s.replace(/<script[\s\S]*?<\/script>/gi,' ').replace(/<style[\s\S]*?<\/style>/gi,' ').replace(/<[^>]+>/g,' ').replace(/&nbsp;|&#160;/gi,' ').replace(/&[a-z]+;/gi,' ').replace(/\s+/g,' ').trim();
 
 function parseCsv(text){
@@ -649,20 +655,22 @@ async function calendar(){
 
 async function isacHistorical(){
   const monthly={}; let sourceUrl='';
-  try{const x=await seriesRows('33.2_I_2004_M_4',{start:'2020-01-01'});sourceUrl=x.url;for(const r of x.rows){const k=String(r.date).slice(0,7);if(/^\d{4}-\d{2}$/.test(k)&&Number.isFinite(Number(r.value)))monthly[k]=round(r.value,1);}}catch{}
+  try{const x=await seriesRows('33.2_I_2004_M_4',{start:'2020-01-01'});sourceUrl=x.url;for(const r of x.rows){const k=String(r.date).slice(0,7);if(/^\d{4}-\d{2}$/.test(k)&&Number.isFinite(Number(r.value)))monthly[k]=Number(r.value);}}catch{}
   if(Object.keys(monthly).length<24){
-    try{const x=await bestCsv('sspm-indicador-sintetico-actividad-construccion-isac-base-2004',r=>/valores mensuales|nivel general|isac/i.test(`${r.name||''} ${r.description||''}`)?10:0);sourceUrl=x.url;const rows=parseCsv(x.text),h=rows[0].map(norm),dc=h.findIndex(v=>/indice_tiempo|fecha|periodo/.test(v)),vc=h.findIndex(v=>/isac_variacion_interanual/.test(v));if(dc>=0&&vc>=0)for(const r of rows.slice(1)){const d=String(r[dc]||'').slice(0,7),v=numberAR(r[vc]);if(/^\d{4}-\d{2}$/.test(d)&&Number.isFinite(v))monthly[d]=round(v,1);}}catch{}
+    try{const x=await bestCsv('sspm-indicador-sintetico-actividad-construccion-isac-base-2004',r=>/valores mensuales|nivel general|isac/i.test(`${r.name||''} ${r.description||''}`)?10:0);sourceUrl=x.url;const rows=parseCsv(x.text),h=rows[0].map(norm),dc=h.findIndex(v=>/indice_tiempo|fecha|periodo/.test(v)),vc=h.findIndex(v=>/isac_variacion_interanual/.test(v));if(dc>=0&&vc>=0)for(const r of rows.slice(1)){const d=String(r[dc]||'').slice(0,7),v=numberAR(r[vc]);if(/^\d{4}-\d{2}$/.test(d)&&Number.isFinite(v))monthly[d]=v;}}catch{}
   }
   if(!Object.keys(monthly).length)throw new Error('serie ISAC interanual no disponible');
+  const pctMonthly=fractionMapToPct(monthly);for(const k of Object.keys(pctMonthly))monthly[k]=round(Number(pctMonthly[k]),1);
   return {status:'ok',source:'INDEC / Datos Argentina — ISAC variación interanual',sourceUrl,monthlyYoy:monthly};
 }
 
 async function emaeHistorical(){
   const x=await seriesRows('143.3_ICE_SERVIA_2004_A_25',{start:'2020-01-01'});
   const monthlyYoy={};
-  for(const r of x.rows){const k=String(r.date).slice(0,7);if(/^\d{4}-\d{2}$/.test(k)&&Number.isFinite(Number(r.value)))monthlyYoy[k]=round(Number(r.value),1);}
+  for(const r of x.rows){const k=String(r.date).slice(0,7);if(/^\d{4}-\d{2}$/.test(k)&&Number.isFinite(Number(r.value)))monthlyYoy[k]=Number(r.value);}
   if(Object.keys(monthlyYoy).length<24)throw new Error('serie EMAE interanual insuficiente');
-  return {status:'ok',source:'INDEC / Datos Argentina — EMAE variación interanual',sourceUrl:x.url,monthlyYoy};
+  const pctMap=fractionMapToPct(monthlyYoy);for(const k of Object.keys(pctMap))pctMap[k]=round(Number(pctMap[k]),1);
+  return {status:'ok',source:'INDEC / Datos Argentina — EMAE variación interanual',sourceUrl:x.url,monthlyYoy:pctMap};
 }
 
 async function creditHistorical(){
@@ -684,16 +692,61 @@ async function arrearsFromOfficialWorkbook(){
   }finally{clearTimeout(t)}
 }
 async function arrearsHistorical(){
-  const total={'2021-08':5.3,'2021-09':5.0,'2021-10':4.9,'2021-11':4.5,'2021-12':4.3,'2022-01':4.3,'2022-02':4.2,'2022-03':3.9,'2022-04':3.6,'2022-05':3.4,'2022-06':3.2,'2022-07':3.1};
-  let sourceUrl='https://www.bcra.gob.ar/informe-sobre-bancos/';try{const x=await arrearsFromOfficialWorkbook();Object.assign(total,x.monthlyTotal);sourceUrl=x.url;}catch(e){console.warn('anexo BCRA mora',e);}
-  const recent=[['2025-12','diciembre',2025],['2026-01','enero',2026],['2026-02','febrero',2026],['2026-03','marzo',2026],['2026-04','abril',2026],['2026-05','mayo',2026],['2026-06','junio',2026],['2026-07','julio',2026]];
-  const rs=await Promise.allSettled(recent.map(async([k,mon,y])=>{const url=`https://www.bcra.gob.ar/publicaciones/informe-sobre-bancos-${mon}-de-${y}/`;const html=strip(await get(url));const re=/(?:ratio de )?irregularidad (?:del cr[eé]dito|de las financiaciones) al sector privado[^%]{0,300}?(?:ubic[oó]|ubicarse|alcanz[oó]|ascendi[oó]|totaliz[oó])[^0-9]{0,80}(\d{1,2}(?:[,.]\d+)?)%/i;const m=html.match(re);if(!m)throw new Error(`mora ${k}`);return[k,Number(m[1].replace(',','.'))];}));for(const r of rs)if(r.status==='fulfilled')total[r.value[0]]=round(r.value[1],1);
-  if(Object.keys(total).length<24)throw new Error(`histórico de mora insuficiente: ${Object.keys(total).length}`);return {status:'ok',source:'BCRA — Anexo Estadístico / Informe sobre Bancos',sourceUrl,monthlyTotal:total};
+  // v113: base oficial mensual (Datos Argentina 332.2_SISTEMA_FIADA__53) + anexo xlsx + últimos Informes sobre Bancos.
+  const total={}; let sourceUrl='https://www.bcra.gob.ar/informe-sobre-bancos/'; let latest=null;
+  try{const x=await seriesRows('332.2_SISTEMA_FIADA__53',{start:'2019-01-01'});for(const r of x.rows){const k=String(r.date).slice(0,7);if(/^\d{4}-\d{2}$/.test(k)&&Number.isFinite(r.value)&&r.value>0&&r.value<40)total[k]=round(r.value,1);}sourceUrl=x.url;}catch(e){console.warn('mora serie oficial',e);}
+  try{const x=await arrearsFromOfficialWorkbook();Object.assign(total,x.monthlyTotal);sourceUrl=x.url;}catch(e){console.warn('anexo BCRA mora',e);}
+  // Meses recientes calculados dinámicamente (el informe se publica con ~2 meses de rezago).
+  const monthsEs=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  const now=new Date(),recent=[];
+  for(let i=1;i<=8;i++){const d=new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth()-i,1));recent.push([`${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}`,monthsEs[d.getUTCMonth()],d.getUTCFullYear()]);}
+  const num=s=>Number(String(s).replace(',','.'));
+  const rs=await Promise.allSettled(recent.map(async([k,mon,y])=>{
+    const url=`https://www.bcra.gob.ar/publicaciones/informe-sobre-bancos-${mon}-de-${y}/`;const html=strip(await get(url));
+    const m=html.match(/(?:ratio de )?irregularidad (?:del cr[eé]dito|de las financiaciones) al sector privado[^%]{0,300}?(?:ubic[oó]|ubicarse|alcanz[oó]|ascendi[oó]|totaliz[oó])[^0-9]{0,80}(\d{1,2}(?:[,.]\d+)?)%/i);
+    if(!m)throw new Error(`mora ${k}`);
+    const fam=html.match(/familias[^0-9%]{0,60}(\d{1,2}(?:[,.]\d+)?)%/i);
+    const emp=html.match(/empresas[^0-9%]{0,60}(\d{1,2}(?:[,.]\d+)?)%/i);
+    return {k,total:num(m[1]),families:fam?num(fam[1]):null,companies:emp?num(emp[1]):null};
+  }));
+  for(const r of rs)if(r.status==='fulfilled'){total[r.value.k]=round(r.value.total,1);if(!latest||r.value.k>latest.k)latest=r.value;}
+  if(Object.keys(total).length<24)throw new Error(`histórico de mora insuficiente: ${Object.keys(total).length}`);
+  const out={status:'ok',source:'BCRA — Datos Argentina / Anexo Estadístico / Informe sobre Bancos',sourceUrl,monthlyTotal:total};
+  if(latest&&Number.isFinite(latest.families)&&Number.isFinite(latest.companies))out.latest={period:periodEs(latest.k),total:round(latest.total,1),families:round(latest.families,1),companies:round(latest.companies,1)};
+  return out;
+}
+
+// v113: resultado fiscal acumulado en el año como % del PIB nominal.
+// IMIG mensual (primario y financiero) / PIB INDEC a precios corrientes (trimestres anualizados: se promedian).
+// Para el año en curso, el PIB se estima con el PIB del año anterior × variación de los trimestres ya publicados.
+async function fiscalPctGdp(){
+  const [pr,fr,gr]=await Promise.all([
+    seriesRows('452.3_RESULTADO_RIO_0_M_18_54',{start:'2022-01-01'}),
+    seriesRows('452.3_RESULTADO_ERO_0_M_20_25',{start:'2022-01-01'}),
+    seriesRows('4.4_OGP_2004_T_17',{start:'2020-01-01'})]);
+  const toMap=rows=>Object.fromEntries(rows.map(r=>[String(r.date).slice(0,7),Number(r.value)]).filter(([k,v])=>/^\d{4}-\d{2}$/.test(k)&&Number.isFinite(v)));
+  const P=toMap(pr.rows),F=toMap(fr.rows),Q=toMap(gr.rows);
+  const qm=['01','04','07','10'];
+  const gdpYear=y=>{const qs=qm.map(m=>Q[`${y}-${m}`]);if(qs.every(Number.isFinite))return qs.reduce((a,b)=>a+b,0)/4;const prevYear=qm.map(m=>Q[`${y-1}-${m}`]);if(!prevYear.every(Number.isFinite))return null;const base=prevYear.reduce((a,b)=>a+b,0)/4;const idx=qs.map((v,i)=>Number.isFinite(v)?i:-1).filter(i=>i>=0);if(!idx.length)return null;return base*idx.reduce((a,i)=>a+qs[i],0)/idx.reduce((a,i)=>a+prevYear[i],0);};
+  const primary={},financial={};const years=[...new Set(Object.keys(P).map(k=>Number(k.slice(0,4))))].sort();
+  for(const y of years){const g=gdpYear(y);if(!g)continue;let cp=0,cf=0;for(let m=1;m<=12;m++){const k=`${y}-${String(m).padStart(2,'0')}`;if(!Number.isFinite(P[k])||!Number.isFinite(F[k]))break;cp+=P[k];cf+=F[k];primary[k]=round(cp/g*100,2);financial[k]=round(cf/g*100,2);}}
+  const last=Object.keys(primary).sort().at(-1);if(!last)throw new Error('resultado fiscal sin datos');
+  return {period:periodEs(last),source:'Ministerio de Economía — IMIG; PIB nominal INDEC',sourceUrl:pr.url,historyPctGDP:{primary,financial}};
+}
+// v113: esta función faltaba y hacía fallar TODO /api/macro-data (ReferenceError).
+// Devuelve sólo lo que puede refrescarse en vivo; el resto proviene del snapshot incluido (bundled-history.mjs).
+async function activityPulse(){
+  const out={status:'ok',source:'Economía / AFCP / INDEC / ACARA / BCRA'};
+  const [fiscal,isac,arrears]=await Promise.allSettled([fiscalPctGdp(),isacHistorical(),arrearsHistorical()]);
+  if(fiscal.status==='fulfilled')out.fiscal=fiscal.value;
+  if(isac.status==='fulfilled'){const e=Object.entries(isac.value.monthlyYoy||{}).sort(([a],[b])=>a.localeCompare(b)).at(-1);if(e)out.isacLatestYoy={period:periodEs(e[0]),yoy:e[1]};}
+  if(arrears.status==='fulfilled'&&arrears.value.latest)out.arrears=arrears.value.latest;
+  return out;
 }
 
 // sin KV se conserva al menos durante la vida del isolate y el frontend mantiene otra copia local.
 let MEMORY_SNAPSHOT=null;
-const SNAPSHOT_KEY='macro:snapshot:v112';
+const SNAPSHOT_KEY='macro:snapshot:v113';
 function isPlainObject(v){return !!v&&typeof v==='object'&&!Array.isArray(v);}
 function mergeSnapshot(oldValue,newValue){
   if(Array.isArray(oldValue)||Array.isArray(newValue)){
@@ -726,17 +779,23 @@ async function writeSnapshot(env,ctx,snapshot){
 }
 export default async(env={},ctx=null)=>{
   const stored=await readSnapshot(env);
-  const previous=mergeSnapshot({version:112,sources:BUNDLED_SOURCES},stored||{});
-  const out={version:112,generatedAt:new Date().toISOString(),snapshotMode:env?.MACRO_STORE?.get?'kv+bundled':'bundled+isolate',sources:{}};
-  const names=['ipcHistorical','gdpHistorical','emaeHistorical','industryHistorical','unemploymentHistorical','tradeHistorical','financialHistorical','exchangeHistorical','ipc','arca','icg','bcra','rem','salary','icl','contractIndices','isacHistorical','creditHistorical','arrearsHistorical','activityPulse'];
-  const jobs=await Promise.allSettled([ipcHistorical(),gdpHistorical(),emaeHistorical(),industryHistorical(),unemploymentHistorical(),tradeHistorical(),financialHistorical(),exchangeHistorical(),ipc(),arca(),icg(),bcra(),rem(),salaryRipte(),icl(),contractIndices(),isacHistorical(),creditHistorical(),arrearsHistorical(),activityPulse()]);
-  jobs.forEach((j,i)=>{
+  const previous=mergeSnapshot({version:113,sources:BUNDLED_SOURCES},stored||{});
+  const out={version:113,generatedAt:new Date().toISOString(),snapshotMode:env?.MACRO_STORE?.get?'kv+bundled':'bundled+isolate',sources:{}};
+  // v113: cada fuente corre aislada. Un error sincrónico o una función inexistente ya no puede tirar el endpoint completo.
+  const jobs={ipcHistorical:()=>ipcHistorical(),gdpHistorical:()=>gdpHistorical(),emaeHistorical:()=>emaeHistorical(),industryHistorical:()=>industryHistorical(),unemploymentHistorical:()=>unemploymentHistorical(),tradeHistorical:()=>tradeHistorical(),financialHistorical:()=>financialHistorical(),exchangeHistorical:()=>exchangeHistorical(),ipc:()=>ipc(),arca:()=>arca(),icg:()=>icg(),bcra:()=>bcra(),rem:()=>rem(),salary:()=>salaryRipte(),icl:()=>icl(),contractIndices:()=>contractIndices(),isacHistorical:()=>isacHistorical(),creditHistorical:()=>creditHistorical(),arrearsHistorical:()=>arrearsHistorical(),activityPulse:()=>activityPulse()};
+  const names=Object.keys(jobs);
+  const results=await Promise.allSettled(names.map(n=>Promise.resolve().then(jobs[n])));
+  results.forEach((j,i)=>{
     const name=names[i],old=previous?.sources?.[name];
     if(j.status==='fulfilled'){out.sources[name]=mergeSnapshot(old,j.value);}
     else if(old){out.sources[name]={...old,status:old.status==='error'?'snapshot':'ok',snapshotFallback:true,refreshError:String(j.reason?.message||j.reason)};}
     else out.sources[name]={status:'error',error:String(j.reason?.message||j.reason)};
   });
-  if(previous?.sources?.ipcCaba) out.sources.ipcCaba=mergeSnapshot(previous.sources.ipcCaba,out.sources.ipcCaba||{});
+  // Fuentes que sólo existen en el snapshot (p. ej. IPC CABA) se conservan siempre.
+  for(const [name,old] of Object.entries(previous?.sources||{}))if(!out.sources[name])out.sources[name]=old;
+  // Mantener el KPI de ISAC alineado con la serie si ésta se actualizó.
+  const AP=out.sources.activityPulse;
+  if(AP?.isacLatestYoy&&AP.isac&&AP.isacLatestYoy.period!==AP.isac.period){AP.isac={...AP.isac,period:AP.isacLatestYoy.period,yoy:AP.isacLatestYoy.yoy,mom:null};}
   const ok=Object.values(out.sources).some(x=>x.status==='ok'||x.status==='snapshot');
   if(ok)await writeSnapshot(env,ctx,out);
   return new Response(JSON.stringify(out),{status:ok?200:503,headers:{'content-type':'application/json; charset=utf-8','cache-control':'public, max-age=60, s-maxage=60, stale-while-revalidate=300','access-control-allow-origin':'*'}});
