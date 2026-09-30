@@ -146,12 +146,15 @@ function annualColumn(text, valueMatchers, reducer='last'){
   const vals={}; for(const r of rows.slice(1)){const m=String(r[dc]).match(/(19|20)\d{2}/);const v=numberAR(r[vc]);if(!m||!Number.isFinite(v))continue;(vals[+m[0]]??=[]).push(v);}
   const out={}; for(const [y,a] of Object.entries(vals)){out[y]=round(reducer==='avg'?a.reduce((x,z)=>x+z,0)/a.length:reducer==='sum'?a.reduce((x,z)=>x+z,0):a.at(-1),1);} return out;
 }
+// v115: variación mensual (%) de una serie desestacionalizada en niveles.
+async function saMomFromLevels(id,start='2020-06-01'){const x=await seriesRows(id,{start});const lv={};for(const r of x.rows){const k=String(r.date).slice(0,7);if(/^\d{4}-\d{2}$/.test(k)&&Number.isFinite(r.value))lv[k]=r.value;}const ks=Object.keys(lv).sort(),out={};for(let i=1;i<ks.length;i++)out[ks[i]]=round((lv[ks[i]]/lv[ks[i-1]]-1)*100,1)+0;if(Object.keys(out).length<12)throw new Error(`serie s.e. corta: ${id}`);return out;}
 async function industryHistorical(){
   const annual={}; const segments=[];
   try{const x=await seriesRows('12.1_E_2004_A_3',{start:'1994-01-01',end:'2015-12-31'});Object.assign(annual,growthFromAnnualLevels(annualFromRows(x.rows,'avg')));segments.push({range:'EMI hasta 2015',sourceUrl:x.url});}catch{}
   let monthlyYoy={};try{const x=await seriesRows('453.1_SERIE_ORIGNAL_0_0_14_46',{start:'2016-01-01'});Object.assign(annual,growthFromAnnualLevels(annualFromRows(x.rows,'avg')));monthlyYoy=yoyFromRows(x.rows);segments.push({range:'IPI desde 2016',sourceUrl:x.url});}catch{}
   if(!Object.keys(annual).length)throw new Error('series industriales no disponibles');
-  return {status:'ok',source:'INDEC / Datos Argentina — EMI + IPI manufacturero',annual,monthlyYoy,segments};
+  let monthlySaMom;try{monthlySaMom=await saMomFromLevels('453.1_SERIE_DESEADA_0_0_24_58');}catch{}
+  return {status:'ok',source:'INDEC / Datos Argentina — EMI + IPI manufacturero',annual,monthlyYoy,...(monthlySaMom?{monthlySaMom}:{}),segments};
 }
 async function unemploymentHistorical(){
   const x=await seriesRows('45.1_ECTDT_0_A_33',{start:'2003-01-01'});
@@ -423,7 +426,7 @@ async function arca(){
   return {status:'ok',source:'ARCA — Recursos Tributarios',sourceUrl:URLS.arca,history,historyMeasure:'Variación interanual nominal (%)',latest:{value:20508537,yoy:33.5,period:'agosto 2026'}};
 }
 async function icg(){
-  const history={'2025-09':1.94,'2025-10':2.10,'2025-11':2.47,'2025-12':2.46,'2026-01':2.40,'2026-02':2.38,'2026-03':2.30,'2026-04':2.02,'2026-05':1.99,'2026-06':2.07,'2026-07':1.94,'2026-08':2.06,'2026-09':1.94};
+  const history={'2025-09':1.943966,'2025-10':2.10,'2025-11':2.47,'2025-12':2.46,'2026-01':2.40,'2026-02':2.38,'2026-03':2.30,'2026-04':2.02,'2026-05':1.99,'2026-06':2.07,'2026-07':1.94,'2026-08':2.06,'2026-09':1.94};
   // Backfill histórico público (fuente primaria UTDT). Resolver el dataset por catálogo,
   // no asumir que el slug visible es también el ID interno de CKAN.
   let historicalCount=0, historicalError=null;
@@ -661,7 +664,8 @@ async function isacHistorical(){
   }
   if(!Object.keys(monthly).length)throw new Error('serie ISAC interanual no disponible');
   const pctMonthly=fractionMapToPct(monthly);for(const k of Object.keys(pctMonthly))monthly[k]=round(Number(pctMonthly[k]),1);
-  return {status:'ok',source:'INDEC / Datos Argentina — ISAC variación interanual',sourceUrl,monthlyYoy:monthly};
+  let monthlySaMom;try{monthlySaMom=await saMomFromLevels('33.2_ISAC_SIN_EDAD_0_M_23_56');}catch{}
+  return {status:'ok',source:'INDEC / Datos Argentina — ISAC',sourceUrl,monthlyYoy:monthly,...(monthlySaMom?{monthlySaMom}:{})};
 }
 
 async function emaeHistorical(){
@@ -774,7 +778,7 @@ async function activityPulse(){
 
 // sin KV se conserva al menos durante la vida del isolate y el frontend mantiene otra copia local.
 let MEMORY_SNAPSHOT=null;
-const SNAPSHOT_KEY='macro:snapshot:v114';
+const SNAPSHOT_KEY='macro:snapshot:v115';
 function isPlainObject(v){return !!v&&typeof v==='object'&&!Array.isArray(v);}
 function mergeSnapshot(oldValue,newValue){
   if(Array.isArray(oldValue)||Array.isArray(newValue)){
@@ -807,8 +811,8 @@ async function writeSnapshot(env,ctx,snapshot){
 }
 export default async(env={},ctx=null)=>{
   const stored=await readSnapshot(env);
-  const previous=mergeSnapshot({version:114,sources:BUNDLED_SOURCES},stored||{});
-  const out={version:114,generatedAt:new Date().toISOString(),snapshotMode:env?.MACRO_STORE?.get?'kv+bundled':'bundled+isolate',sources:{}};
+  const previous=mergeSnapshot({version:115,sources:BUNDLED_SOURCES},stored||{});
+  const out={version:115,generatedAt:new Date().toISOString(),snapshotMode:env?.MACRO_STORE?.get?'kv+bundled':'bundled+isolate',sources:{}};
   // v113: cada fuente corre aislada. Un error sincrónico o una función inexistente ya no puede tirar el endpoint completo.
   const jobs={ipcHistorical:()=>ipcHistorical(),gdpHistorical:()=>gdpHistorical(),emaeHistorical:()=>emaeHistorical(),industryHistorical:()=>industryHistorical(),unemploymentHistorical:()=>unemploymentHistorical(),tradeHistorical:()=>tradeHistorical(),financialHistorical:()=>financialHistorical(),exchangeHistorical:()=>exchangeHistorical(),ipc:()=>ipc(),arca:()=>arca(),icg:()=>icg(),bcra:()=>bcra(),rem:()=>rem(),salary:()=>salaryRipte(),icl:()=>icl(),contractIndices:()=>contractIndices(),isacHistorical:()=>isacHistorical(),creditHistorical:()=>creditHistorical(),arrearsHistorical:()=>arrearsHistorical(),activityPulse:()=>activityPulse()};
   const names=Object.keys(jobs);

@@ -39,3 +39,21 @@
 .kpi .tone-up{color:var(--green)!important}.kpi .tone-down{color:var(--red)!important}.kpi .tone-flat{color:var(--muted)!important}.fiscal-values{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:16px 0 8px}.fiscal-values>div{min-width:0}.fiscal-values>div+div{border-left:1px solid var(--line);padding-left:12px}.fiscal-values span{display:block;color:var(--muted);font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.05em}.fiscal-values strong{display:block;font-size:22px;letter-spacing:-.035em;margin:4px 0 0;white-space:nowrap}.fiscal-values em{display:block;margin-top:6px;font-size:10px;font-style:normal;font-weight:800}.sr-only{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}@media(max-width:420px){.fiscal-values strong{font-size:19px}}
 
 .fiscal-unit{display:block;margin-top:2px;font-size:.72rem;font-weight:500;color:#64748b;line-height:1.2}
+
+/* v115 · semáforo de tarjetas: verde favorable, amarillo neutral, rojo desfavorable */
+.kpi{position:relative;overflow:hidden}
+.kpi:before{content:'';position:absolute;left:0;top:0;right:0;height:4px;background:transparent}
+.kpi.signal-green:before{background:#1f9d55}
+.kpi.signal-yellow:before{background:#e0a100}
+.kpi.signal-red:before{background:#d64545}
+.kpi>strong{color:var(--ink)}
+.kpi em{color:var(--muted)}
+.kpi-signal{display:inline-flex;align-items:center;gap:6px;margin-top:10px;padding:3px 9px 3px 7px;border-radius:999px;font-size:10px;font-weight:800;letter-spacing:.02em;cursor:help}
+.kpi-signal i{width:8px;height:8px;border-radius:50%;display:inline-block}
+.kpi-signal[data-level="green"]{background:#e8f6ee;color:#17744a}
+.kpi-signal[data-level="green"] i{background:#1f9d55}
+.kpi-signal[data-level="yellow"]{background:#fdf4d8;color:#8a6300}
+.kpi-signal[data-level="yellow"] i{background:#e0a100}
+.kpi-signal[data-level="red"]{background:#fbe9e9;color:#a83232}
+.kpi-signal[data-level="red"] i{background:#d64545}
+.kpi em+.kpi-signal,.kpi p+.kpi-signal{display:flex;width:max-content}

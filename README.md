@@ -1,4 +1,4 @@
-# Macro Argentina — Cloudflare v114
+# Macro Argentina — Cloudflare v115
 
 Migración de la v63 desde Netlify a Cloudflare Workers + Static Assets.
 
@@ -82,3 +82,23 @@ Chequeo: `npm run validate:snapshot`.
 - **EMAE**: la tarjeta muestra grande la variación mensual desestacionalizada y abajo la interanual del mismo mes. El gráfico muestra los últimos 60 meses de la variación mensual s.e. (`143.3_ICE_SER_VM_2004_A_34`, INDEC vía Datos Argentina).
 - **Crédito privado**: el gráfico muestra la variación mensual real sin estacionalidad de los préstamos en pesos al sector privado, tal como la publica el BCRA en el Informe Monetario Mensual (no hay serie descargable). Nov-2021 y feb-2024 quedan como hueco porque el BCRA no publicó la cifra total. El Worker lee los últimos informes para incorporar meses nuevos.
 - **Mora bancaria**: gráfico de líneas con total, familias y empresas, últimos 10 años (121 meses), desde el Anexo del Informe sobre Bancos (hoja "Calidad de Cartera (por líneas)"). El Worker lee esa hoja directamente.
+
+
+## v115 — tarjetas: orden, semáforo y presentación única
+- **Orden**: las tarjetas se ordenan por período de referencia, del más reciente al más antiguo (empates: orden original). Se reordenan solas cuando llega un dato nuevo.
+- **Presentación**: todas las tarjetas se arman en `renderKpiCards()` (app.js) desde los mismos datos que los gráficos.
+  - Inflación nacional y CABA: grande la variación mensual; abajo p.p. vs mes anterior e interanual.
+  - EMAE, IPI e ISAC: grande variación mensual desestacionalizada; abajo interanual (IPI `453.1_SERIE_DESEADA_0_0_24_58`, ISAC `33.2_ISAC_SIN_EDAD_0_M_23_56`). Sus gráficos pasan a la misma medida.
+  - Recaudación: grande interanual real; abajo interanual nominal.
+  - Crédito: grande mensual real s.e.; abajo interanual nominal.
+  - Cemento y patentamientos: grande interanual; abajo volumen del mes.
+  - Confianza en el gobierno: grande variación mensual; abajo puntos e interanual.
+  - Niveles (una variación no tiene sentido): pobreza, balanza, resultado fiscal y mora; abajo la comparación en p.p. o USD.
+- **Semáforo** (verde favorable / amarillo neutral / rojo desfavorable; el motivo aparece al pasar el mouse):
+  - Inflación: baja/sube más de 0,1 p.p. vs mes anterior. Mora: ídem. Pobreza: ±0,3 p.p.
+  - EMAE, IPI, ISAC, crédito: variación mensual s.e. mayor/menor a ±0,1%.
+  - Recaudación real, cemento, patentamientos: interanual mayor/menor a ±0,5%.
+  - Confianza: variación mensual mayor/menor a ±1%.
+  - Balanza: verde superávit ≥ año anterior; amarillo superávit menor; rojo déficit.
+  - Resultado fiscal: verde superávit primario y financiero; amarillo sólo primario; rojo déficit primario.
+  - Los umbrales están en `computeKpiCards()` (función `signalFrom(valor, banda, mayorEsMejor)`).
