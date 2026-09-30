@@ -17,6 +17,8 @@ checkMap('Crédito',h.creditMonthlyYoy,60);
 const mora=checkMap('Mora',h.arrearsMonthlyTotal,60);if(Object.values(h.arrearsMonthlyTotal).some(v=>!(v>0&&v<40)))fail('Mora fuera de rango');
 for(const m of ['primary','financial'])checkMap(`Fiscal ${m}`,h.fiscalPctGDP?.[m],24);
 checkMap('Patentamientos',h.autosMonthly,48);
+// v119: Merval y riesgo país diarios
+{const D=JSON.parse(fs.readFileSync(new URL('../public/markets-daily.json',import.meta.url),'utf8'));for(const [k,min,start] of [['mervalPoints',7000,'1996-10-08'],['mervalUsd',7000,'1996-10-08'],['countryRisk',7000,'1999-01-22']]){const s=D[k];if(!s||s.v.length<min||s.start!==start||s.d.length!==s.v.length)fail(`${k}: serie diaria incompleta`);}if(Object.keys(D.usCpiMonthly||{}).length<300)fail('CPI-U mensual corto');}
 // v118: ICL/CER/UVA (calculadora)
 {const C=JSON.parse(fs.readFileSync(new URL('../public/contract-indices.json',import.meta.url),'utf8'));for(const k of ['icl','cer','uva']){const s=C.series?.[k];if(!s||!Array.isArray(s.values)||s.values.filter(v=>v!=null).length<365)fail(`${k.toUpperCase()}: respaldo local corto`);}}
 // v117: mercados y salario (gráficos de dólar, riesgo país, Merval, tasa y RIPTE)

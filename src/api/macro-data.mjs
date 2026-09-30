@@ -240,8 +240,13 @@ function latestWithChange(rows){const a=(rows||[]).map(r=>({date:String(r.fecha|
 async function financialHistorical(){
   const result={status:'ok',source:'BYMA / Banco Nación / J.P. Morgan; proveedores secundarios identificados cuando corresponde',countryRisk:{},mervalUsdCcl:{},mervalPoints:{},freeDollar:{nominal:{},real:{},baseYear:2025},interestRate:{nominal:{},real:{}},latest:{},sources:{risk:'J.P. Morgan EMBI+ Argentina',riskProvider:'ArgentinaDatos (republicación)',merval:'BYMA / S&P Merval',mervalProvider:'Zion / Yahoo Finance (fallback sin credenciales BYMA)',dollar:'BYMA / Índice Dólar BYMA (MEP)',dollarProvider:'ArgentinaDatos (fallback sin credenciales BYMA)',bna:'Banco de la Nación Argentina'}};
   const errors=[];
+  // v119: últimos 400 días diarios (el histórico diario completo viaja en public/markets-daily.json).
+  const cutoff=new Date(Date.now()-400*864e5).toISOString().slice(0,10);
+  const recentDaily=(rows,valKeys=['valor','value','venta'])=>{const o={};for(const r of rows||[]){const d=String(r.fecha||r.date||'').slice(0,10);if(!/^\d{4}-\d{2}-\d{2}$/.test(d)||d<cutoff)continue;let v=NaN;for(const k of valKeys){const n=Number(r?.[k]);if(Number.isFinite(n)){v=n;break;}}if(Number.isFinite(v))o[d]=round(v,2);}return o;};
+  result.daily={risk:{},mervalPoints:{},mervalUsd:{}};
   try{
     const j=await get('https://api.argentinadatos.com/v1/finanzas/indices/riesgo-pais','json');
+    result.daily.risk=recentDaily(Array.isArray(j)?j:findObservations(j),['valor','value']);
     result.countryRisk=annualLastGeneric(j);
     result.latest.risk=latestWithChange(j);
     // Último cierre verificado: evita que una API rezagada deje la portada un día atrás.
@@ -264,8 +269,8 @@ async function financialHistorical(){
     }catch{}
     if(Object.keys(result.countryRisk).length<20)throw new Error('cobertura EMBI+ insuficiente');
   }catch(e){errors.push('riesgo país: '+e.message)}
-  try{const j=await get('https://zion.ar/api/v1/indicators/merval-usd-ccl/history?limit=100000','json');const rows=findObservations(j);result.mervalUsdCcl=annualLastGeneric(rows);result.latest.mervalUsd=latestWithChange(rows);for(const y of Object.keys(result.mervalUsdCcl))if(+y<2013)delete result.mervalUsdCcl[y];if(Object.keys(result.mervalUsdCcl).length<10)throw new Error('cobertura Merval USD CCL insuficiente');}catch(e){errors.push('Merval USD CCL: '+e.message)}
-  try{const j=await get('https://zion.ar/api/v1/indicators/merval/history?limit=100000','json');const rows=findObservations(j);result.mervalPoints=annualLastGeneric(rows);result.latest.merval=latestWithChange(rows);if(!result.latest.merval)throw new Error('sin observaciones');}catch(e){errors.push('Merval puntos: '+e.message)}
+  try{const j=await get('https://zion.ar/api/v1/indicators/merval-usd-ccl/history?limit=100000','json');const rows=findObservations(j);result.mervalUsdCcl=annualLastGeneric(rows);result.daily.mervalUsd=recentDaily(rows,['value','valor']);result.latest.mervalUsd=latestWithChange(rows);for(const y of Object.keys(result.mervalUsdCcl))if(+y<2013)delete result.mervalUsdCcl[y];if(Object.keys(result.mervalUsdCcl).length<10)throw new Error('cobertura Merval USD CCL insuficiente');}catch(e){errors.push('Merval USD CCL: '+e.message)}
+  try{const j=await get('https://zion.ar/api/v1/indicators/merval/history?limit=100000','json');const rows=findObservations(j);result.mervalPoints=annualLastGeneric(rows);result.daily.mervalPoints=recentDaily(rows,['value','valor']);result.latest.merval=latestWithChange(rows);if(!result.latest.merval)throw new Error('sin observaciones');}catch(e){errors.push('Merval puntos: '+e.message)}
   try{const j=await get('https://api.argentinadatos.com/v1/cotizaciones/dolares/blue','json');result.freeDollar.nominal=annualLastGeneric(j);const def=arsDeflatorTo2025();for(const [y,v] of Object.entries(result.freeDollar.nominal)){if(+y<2011||!def[y])continue;result.freeDollar.real[y]=round(v*def[y],2);}if(Object.keys(result.freeDollar.nominal).length<10)throw new Error('cobertura dólar blue insuficiente');}catch(e){errors.push('dólar libre histórico: '+e.message)}
   try{const j=await get('https://api.argentinadatos.com/v1/cotizaciones/dolares/bolsa','json');result.latest.dollar=latestWithChange(j);if(!result.latest.dollar)throw new Error('sin observaciones MEP');}catch(e){errors.push('dólar MEP portada: '+e.message)}
 
@@ -843,7 +848,7 @@ async function activityPulse(){
 
 // sin KV se conserva al menos durante la vida del isolate y el frontend mantiene otra copia local.
 let MEMORY_SNAPSHOT=null;
-const SNAPSHOT_PREFIX='macro:snapshot:v118:';
+const SNAPSHOT_PREFIX='macro:snapshot:v119:';
 const MEMORY_SNAPSHOTS={};
 function isPlainObject(v){return !!v&&typeof v==='object'&&!Array.isArray(v);}
 function mergeSnapshot(oldValue,newValue){
@@ -892,8 +897,8 @@ export default async(env={},ctx=null,request=null)=>{
   const stored=await readSnapshot(env,group);
   const bundled={};for(const n of names)if(BUNDLED_SOURCES[n])bundled[n]=BUNDLED_SOURCES[n];
   if(group==='core'&&BUNDLED_SOURCES.ipcCaba)bundled.ipcCaba=BUNDLED_SOURCES.ipcCaba;
-  const previous=mergeSnapshot({version:118,sources:bundled},stored||{});
-  const out={version:118,group,generatedAt:new Date().toISOString(),snapshotMode:env?.MACRO_STORE?.get?'kv+bundled':'bundled+isolate',sources:{}};
+  const previous=mergeSnapshot({version:119,sources:bundled},stored||{});
+  const out={version:119,group,generatedAt:new Date().toISOString(),snapshotMode:env?.MACRO_STORE?.get?'kv+bundled':'bundled+isolate',sources:{}};
   const results=await Promise.allSettled(names.map(n=>Promise.resolve().then(JOBS[n])));
   results.forEach((j,i)=>{
     const name=names[i],old=previous?.sources?.[name];

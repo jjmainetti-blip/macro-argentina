@@ -1,4 +1,4 @@
-# Macro Argentina — Cloudflare v118
+# Macro Argentina — Cloudflare v119
 
 Migración de la v63 desde Netlify a Cloudflare Workers + Static Assets.
 
@@ -127,3 +127,13 @@ Chequeo: `npm run validate:snapshot`.
 - Los pedidos a sitios oficiales (BCRA, INDEC, argentina.gob.ar) se hacen con un agente de navegador estándar.
 - Resultado con más precisión: índices con hasta 4 decimales, variación con 2 y factor con 4.
 - Para actualizar el respaldo a mano: descargar `tas5_ser.txt` del BCRA y regenerar el JSON (series 7988, 3540, 7913).
+
+
+## v119 — Merval y riesgo país diarios; RIPTE en ARS constantes
+- **Merval** diario desde el 8-oct-1996 (`public/markets-daily.json`, formato compacto). Selector: **USD constantes (TCR)** (por defecto) o **Puntos**.
+  - USD: 1996–2001 a 1 peso = 1 USD (convertibilidad); ene–mar 2002 sin tipo de cambio diario (hueco); mar-2002–2010 ÷ dólar mayorista A3500 (BCRA, `168.1_T_CAMBI500_D_0_0_17`); 2011–2012 ÷ dólar libre como aproximación al CCL; desde 2013 Merval CCL (zion.ar).
+  - USD constantes: se ajusta por CPI-U de EE.UU. (FRED `CPIAUCNS`) al último mes disponible.
+- **Riesgo país** diario desde el 22-ene-1999 hasta el último cierre (ArgentinaDatos).
+- La API (`group=markets`) agrega los últimos 400 días de ambas series; el histórico completo viene del archivo local.
+- El gráfico histórico acepta datos diarios: rango 5/10/20 años, selector de período por año y zoom.
+- **RIPTE**: por defecto en ARS constantes. Si la cadena IPC completa no está disponible, se deflacta con el IPC INDEC mensual (histórico local desde 2017) y, hacia atrás, la inflación anual dic/dic repartida por mes.

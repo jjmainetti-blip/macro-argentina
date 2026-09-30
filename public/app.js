@@ -34,7 +34,26 @@ const countryRisk = {}, mervalUsdCcl = {}, freeDollarNominal = {}, freeDollarRea
 const fxOfficialNominal={}, fxOfficialReal={}, fxOfficialTcr={}, fxFreeTcr={}, fxGap={}, fxFreeMonthlyNominal={},fxFreeMonthlyReal={},fxFreeMonthlyTcr={},fxOfficialMonthlyNominal={},fxOfficialMonthlyReal={},fxOfficialMonthlyTcr={},fxFreeDailyNominal={},fxFreeDailyReal={},fxFreeDailyTcr={},fxOfficialDailyNominal={},fxOfficialDailyReal={},fxOfficialDailyTcr={},fxDailyGap={}; let fxSeriesMode='free', fxPriceMode='tcr', fxFrequency='auto', fxRange='max', fxChart, fxZoomFactor=1, fxCustomFrom='',fxCustomTo='',fxBasePeriod='';
 let dollarPriceMode='real'; // real | nominal
 let interestMode='real'; // real | nominal
-let salaryMode='arsNominal'; // arsReal | arsNominal | usdReal | usdNominal
+let salaryMode='arsReal'; // arsReal | arsNominal | usdReal | usdNominal
+// v119: series diarias (Merval y riesgo país). Merval: 'usdReal' = USD constantes (TCR, deflactado por CPI-U) | 'points' = puntos.
+const mervalPointsDaily={}, mervalUsdDaily={}, mervalUsdRealDaily={}, countryRiskDaily={}, usCpiMonthlyMap={};
+let mervalMode='usdReal', mervalRealBase='';
+const DAILY_SERIES=new Set(['countryRisk','mervalUsd']);
+function expandCompactDaily(s,target){if(!s?.start||!Array.isArray(s.d)||!Array.isArray(s.v))return;let dt=new Date(s.start+'T00:00:00Z');for(let i=0;i<s.v.length;i++){dt=new Date(dt.getTime()+(Number(s.d[i])||0)*864e5);const v=Number(s.v[i]);if(Number.isFinite(v))target[dt.toISOString().slice(0,10)]=v;}}
+function rebuildMervalReal(){for(const k of Object.keys(mervalUsdRealDaily))delete mervalUsdRealDaily[k];
+  const months=Object.keys(usCpiMonthlyMap).filter(k=>Number.isFinite(Number(usCpiMonthlyMap[k]))).sort();if(!months.length)return;
+  const baseYm=months.at(-1),base=Number(usCpiMonthlyMap[baseYm]);mervalRealBase=baseYm;
+  const cpiFor=ym=>{if(usCpiMonthlyMap[ym]!=null)return Number(usCpiMonthlyMap[ym]);if(ym>baseYm)return base;const prev=months.filter(m=>m<=ym).at(-1);return prev?Number(usCpiMonthlyMap[prev]):null;};
+  for(const [d,v] of Object.entries(mervalUsdDaily)){const c=cpiFor(d.slice(0,7));if(c)mervalUsdRealDaily[d]=Number((Number(v)*base/c).toFixed(2));}}
+function applyMervalMode(){const c=seriesConfig.mervalUsd;if(!c)return;
+  if(mervalMode==='points'){c.data=mervalPointsDaily;c.title='Merval';c.subtitle='S&P Merval · puntos · diario';}
+  else{c.data=Object.keys(mervalUsdRealDaily).length?mervalUsdRealDaily:mervalUsdDaily;c.title='Merval en USD constantes';c.subtitle=`S&P Merval en USD · constantes de ${mervalRealBase?displayMonth(mervalRealBase):'último CPI-U'} (TCR) · diario`;}}
+let marketsDailyPromise=null;
+function loadMarketsDaily(){return marketsDailyPromise??=(async()=>{try{const r=await fetch('/markets-daily.json?v=119',{cache:'no-store'});if(!r.ok)return;const j=await r.json();
+  expandCompactDaily(j.mervalPoints,mervalPointsDaily);expandCompactDaily(j.mervalUsd,mervalUsdDaily);expandCompactDaily(j.countryRisk,countryRiskDaily);Object.assign(usCpiMonthlyMap,j.usCpiMonthly||{});
+  rebuildMervalReal();applyMervalMode();seriesConfig.countryRisk.data=countryRiskDaily;
+  if(window.Chart&&DAILY_SERIES.has(currentSeries))renderHistory(currentSeries);}catch(e){console.warn('markets daily',e);}})();}
+function displayDay(d){const [y,m,dd]=String(d).split('-');return `${Number(dd)} ${MONTH_LABELS[+m-1]} ${y}`;}
 const tradeBalance = {}, exportsSeries = {}, importsSeries = {}, tradeBalanceMonthly = {}, cementMonthlyYoy = {};
 let tradePriceMode='real'; // real | nominal
 let tradeBasePeriod='';
@@ -170,13 +189,28 @@ async function loadPublicHistorical(){
 function updateCoverage(){const coverage=document.getElementById('seriesCoverage');if(!coverage)return;coverage.innerHTML=Object.entries(seriesConfig).map(([k,c])=>{const ys=Object.keys(c.data).map(Number).filter(Number.isFinite).sort((a,b)=>a-b);return `<span><b>${c.title}</b> ${ys.length?`${ys[0]}–${ys.at(-1)} (${ys.length})`:'sin datos'}</span>`}).join('');}
 
 
+// v119: índice de precios para el RIPTE real. Usa la cadena IPC completa si está cargada;
+// si no, IPC INDEC mensual (histórico local, desde dic-2016) y, hacia atrás, la inflación anual dic/dic repartida en partes iguales por mes.
+function salaryPriceIndex(months){
+  const need=months||[];const covered=need.filter(ym=>Number.isFinite(Number(inflationIndex[ym]))).length;
+  if(need.length&&covered>=need.length-2)return inflationIndex;
+  const out={};const rows=(Array.isArray(kpiSourceCache?.ipc?.monthly)?kpiSourceCache.ipc.monthly:[]).filter(r=>Number.isFinite(Number(r.index))).sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+  if(!rows.length)return inflationIndex;
+  for(const r of rows)out[String(r.date).slice(0,7)]=Number(r.index);
+  let anchorYm=String(rows[0].date).slice(0,7);if(!anchorYm.endsWith('-12')){const y=Number(anchorYm.slice(0,4))-1;if(out[`${y}-12`]==null){const r0=rows[0];if(anchorYm.endsWith('-01')&&Number.isFinite(Number(r0.value)))out[`${y}-12`]=Number(r0.index)/(1+Number(r0.value)/100);else return out;}anchorYm=`${y}-12`;}
+  let decIdx=out[anchorYm];
+  for(let y=Number(anchorYm.slice(0,4));y>=1994;y--){const inf=Number(inflation[y]);if(!Number.isFinite(inf))break;const prevDec=decIdx/(1+inf/100),g=Math.pow(1+inf/100,1/12);
+    for(let m=1;m<=12;m++){const k=`${y}-${String(m).padStart(2,'0')}`;if(out[k]==null)out[k]=prevDec*Math.pow(g,m);}decIdx=prevDec;}
+  return out;
+}
 function rebuildSalaryViews(){
   for(const o of [salaryArsReal,salaryUsdNominal,salaryUsdReal,salaryArsRealMonthly,salaryUsdNominalMonthly,salaryUsdRealMonthly])for(const k of Object.keys(o))delete o[k];
   // Vistas mensuales. Nunca se rellenan meses sin los insumos necesarios.
   const ripteMonths=Object.keys(salaryRipteMonthly).sort();
-  const argCommon=ripteMonths.filter(ym=>Number.isFinite(Number(inflationIndex[ym])));
-  const argBaseYm=argCommon.at(-1), argBase=Number(inflationIndex[argBaseYm]);
-  if(Number.isFinite(argBase))for(const ym of argCommon){const sal=Number(salaryRipteMonthly[ym]),idx=Number(inflationIndex[ym]);if(Number.isFinite(sal)&&Number.isFinite(idx)&&idx>0)salaryArsRealMonthly[ym]=sal*argBase/idx;}
+  const P=salaryPriceIndex(ripteMonths);
+  const argCommon=ripteMonths.filter(ym=>Number.isFinite(Number(P[ym])));
+  const argBaseYm=argCommon.at(-1), argBase=Number(P[argBaseYm]);
+  if(Number.isFinite(argBase))for(const ym of argCommon){const sal=Number(salaryRipteMonthly[ym]),idx=Number(P[ym]);if(Number.isFinite(sal)&&Number.isFinite(idx)&&idx>0)salaryArsRealMonthly[ym]=sal*argBase/idx;}
   for(const ym of ripteMonths){
     const sal=Number(salaryRipteMonthly[ym]);
     // Desde 2011 usamos dólar libre mensual. Para 1994–2010, donde la fuente histórica
@@ -222,8 +256,8 @@ const seriesConfig = {
   tradeBalance:{title:'Balanza comercial',subtitle:'Saldo anual · millones de USD constantes al último CPI-U',source:'INDEC + BLS',data:tradeBalance,note:'<strong>Metodología:</strong> saldo comercial anual deflactado por el CPI-U de Estados Unidos (promedio anual), expresado por defecto en dólares constantes al último CPI-U disponible. Puede alternarse a USD corrientes.'},
   exports:{title:'Exportaciones',subtitle:'Total anual · millones de USD constantes al último CPI-U',source:'INDEC + BLS',data:exportsSeries,note:'<strong>Metodología:</strong> exportaciones FOB anuales deflactadas por CPI-U de EE.UU., expresadas por defecto en dólares constantes al último CPI-U disponible. Puede alternarse a USD corrientes.'},
   imports:{title:'Importaciones',subtitle:'Total anual · millones de USD constantes al último CPI-U',source:'INDEC + BLS',data:importsSeries,note:'<strong>Metodología:</strong> importaciones anuales deflactadas por CPI-U de EE.UU., expresadas por defecto en dólares constantes al último CPI-U disponible; consultar notas de fuente para FOB/CIF según tramo.'},
-  countryRisk:{title:'Riesgo país',subtitle:'EMBI+ Argentina · cierre anual · puntos básicos',source:'J.P. Morgan vía republicadores trazables',data:countryRisk,note:'<strong>Metodología:</strong> EMBI+ Argentina en puntos básicos. Se conserva la serie comparable desde diciembre de 1998; no se empalma hacia atrás con spreads de bonos de definición diferente.'},
-  mervalUsd:{title:'Merval en USD CCL',subtitle:'Índice Merval / CCL · cierre anual',source:'Merval + dólar CCL',data:mervalUsdCcl,note:'<strong>Metodología:</strong> valor del índice Merval expresado en dólares usando contado con liquidación (CCL), para reducir las distorsiones de controles cambiarios. La cobertura homogénea comienza en 2013. El índice local presenta un cambio metodológico Merval → S&P Merval en 2019.'},
+  countryRisk:{title:'Riesgo país',subtitle:'EMBI Argentina · diario · puntos básicos',source:'J.P. Morgan vía republicadores trazables',data:countryRisk,note:'<strong>Metodología:</strong> EMBI Argentina (J.P. Morgan) en puntos básicos, dato diario hasta el último cierre disponible. Se conserva la serie comparable desde enero de 1999; no se empalma hacia atrás con spreads de bonos de definición diferente.'},
+  mervalUsd:{title:'Merval en USD constantes',subtitle:'S&P Merval en USD constantes (TCR) · diario',source:'BYMA vía zion.ar · BCRA (A3500) · ArgentinaDatos · BLS (CPI-U)',data:mervalUsdDaily,note:'<strong>Metodología:</strong> Merval diario desde octubre de 1996. En USD: 1996–2001 a 1 peso = 1 USD (convertibilidad); enero–marzo de 2002 sin tipo de cambio diario (hueco); marzo 2002–2010 dividido por el dólar mayorista A3500 del BCRA; 2011–2012 por el dólar libre como aproximación al CCL; desde 2013 Merval CCL. <b>USD constantes (TCR)</b>: el valor en dólares se ajusta por la inflación de EE.UU. (CPI-U) al último mes disponible. En 2019 el índice pasó a S&P Merval.'},
   freeDollar:{title:'Dólar libre',subtitle:'Venta · ARS constantes al último IPC por USD',source:'ArgentinaDatos / DolarApi + IPC compuesto',data:freeDollarReal,note:'<strong>Metodología:</strong> dólar blue/libre, punta vendedora, cierre anual. En modo real se expresa en pesos constantes al último IPC disponible usando la misma cadena de IPC del dashboard. No se empalma con mercados libres/paralelos históricos de regímenes cambiarios distintos.'},
   interestRate:{title:'Tasa de interés',subtitle:'Plazo fijo 30–59 días · tasa real anual · %',source:'BCRA / Datos Argentina',data:interestReal,note:'<strong>Metodología:</strong> tasa de depósitos a plazo fijo de 30–59 días, promedio anual. La tasa real se calcula exactamente con Fisher: (1+i)/(1+π)−1, usando la inflación anual compatible con el IPC compuesto del dashboard.'},
   salary:{title:'Salario promedio (RIPTE)',subtitle:'Remuneración imponible promedio de trabajadores estables · ARS',source:'Secretaría de Seguridad Social',data:salaryRipte,note:'<strong>Cobertura:</strong> RIPTE mide la remuneración imponible promedio de trabajadores estables registrados con al menos 13 meses continuos bajo las condiciones del SIPA. No representa el salario promedio de toda la población ocupada.'}
@@ -248,7 +282,7 @@ function cumulativeSummary(key, shown){
   // IMPORTANTE: first/last salen directamente de `shown`, el mismo array que
   // alimenta Chart.js. Así gráfico y resumen nunca pueden usar capas distintas.
   const first=Number(shown[0][1]), last=Number(shown.at(-1)[1]);
-  const da=key==='salary'?displayMonth(a):a, db=key==='salary'?displayMonth(b):b;
+  const da=key==='salary'?displayMonth(a):DAILY_SERIES.has(key)?displayDay(a):a, db=key==='salary'?displayMonth(b):DAILY_SERIES.has(key)?displayDay(b):b;
   if(key==='gdp'){
     const start=Number(a), end=Number(b); let f=1; const missing=[];
     for(let y=start+1;y<=end;y++){if(gdpGrowth[y]==null){missing.push(y);continue;}f*=1+(+gdpGrowth[y]/100);}
@@ -270,12 +304,13 @@ function cumulativeSummary(key, shown){
 function displayMonth(ym){const [y,m]=ym.split('-');return `${MONTH_LABELS[+m-1]} ${y}`;}
 function inflationDisplayData(){return inflationFrequency==='monthly'?inflationMonthly:inflation;}
 function syncPeriodSelectors(data){
-  const keys=Object.keys(data).sort(); const monthly=(currentSeries==='inflation'&&inflationFrequency==='monthly')||currentSeries==='salary'; if(!keys.length){for(const id of ['periodFrom','periodTo']){const el=document.getElementById(id);if(el)el.innerHTML='<option value="">—</option>';}return;}
+  let keys=Object.keys(data).sort(); const monthly=(currentSeries==='inflation'&&inflationFrequency==='monthly')||currentSeries==='salary';
+  if(DAILY_SERIES.has(currentSeries))keys=[...new Set(keys.map(k=>k.slice(0,4)))]; if(!keys.length){for(const id of ['periodFrom','periodTo']){const el=document.getElementById(id);if(el)el.innerHTML='<option value="">—</option>';}return;}
   for(const id of ['periodFrom','periodTo']){const el=document.getElementById(id); if(!el)continue; const old=el.value; el.innerHTML=keys.map(k=>`<option value="${k}">${monthly?displayMonth(k):k}</option>`).join(''); el.value=keys.includes(old)?old:(id==='periodFrom'?keys[0]:keys.at(-1));}
 }
 function seriesValueLabel(key,v){
   if(key==='countryRisk') return `${fmt.format(v)} pb`;
-  if(key==='mervalUsd') return `USD ${fmt.format(v)}`;
+  if(key==='mervalUsd') return mervalMode==='points'?`${fmt.format(v)} pts`:`USD ${fmt.format(v)}`;
   if(key==='salary') return salaryMode.startsWith('usd')?`USD ${fmt.format(v)}`:money.format(v);
   if(key==='freeDollar') return `$ ${fmt.format(v)} / USD`;
   if(['tradeBalance','exports','imports'].includes(key)) return `${fmt.format(v)} M USD`;
@@ -283,7 +318,7 @@ function seriesValueLabel(key,v){
 }
 function seriesTickLabel(key,v){
   if(key==='countryRisk') return `${fmt.format(v)} pb`;
-  if(key==='mervalUsd') return `USD ${fmt.format(v)}`;
+  if(key==='mervalUsd') return mervalMode==='points'?new Intl.NumberFormat('es-AR',{notation:'compact',maximumFractionDigits:1}).format(v):`USD ${fmt.format(v)}`;
   if(key==='salary') return salaryMode.startsWith('usd')?`USD ${fmt.format(v)}`:money.format(v);
   if(key==='freeDollar') return `$ ${fmt.format(v)}`;
   if(['tradeBalance','exports','imports'].includes(key)) return fmt.format(v);
@@ -295,18 +330,19 @@ function renderHistory(key){
     tradeControls:['tradeBalance','exports','imports'].includes(key),
     dollarControls:key==='freeDollar',
     rateControls:key==='interestRate',
-    salaryControls:key==='salary'
+    salaryControls:key==='salary',
+    mervalControls:key==='mervalUsd'
   };
   for(const [id,show] of Object.entries(visibility)){const el=document.getElementById(id);if(el){el.hidden=!show;el.classList.toggle('hidden',!show);}}
-  currentSeries=key; const cfg=seriesConfig[key]; const isInflationMonthly=key==='inflation'&&inflationFrequency==='monthly'; const isSalaryMonthly=key==='salary'; const isMonthly=isInflationMonthly||isSalaryMonthly; let data;if(isInflationMonthly)data=inflationMonthly;else if(key==='salary'){applySalaryMode();data=cfg.data;if(!Object.keys(data||{}).length)data=salaryRipteMonthly;}else data=cfg.data;
+  currentSeries=key; if(key==='mervalUsd')applyMervalMode(); const cfg=seriesConfig[key]; const isDaily=DAILY_SERIES.has(key); const isInflationMonthly=key==='inflation'&&inflationFrequency==='monthly'; const isSalaryMonthly=key==='salary'; const isMonthly=isInflationMonthly||isSalaryMonthly; let data;if(isInflationMonthly)data=inflationMonthly;else if(key==='salary'){applySalaryMode();data=cfg.data;if(!Object.keys(data||{}).length)data=salaryRipteMonthly;}else data=cfg.data;
   // RIPTE usa una ruta explícita: filtra cualquier valor no numérico antes de Chart.js.
-  const cleanData=Object.fromEntries(Object.entries(data||{}).filter(([k,v])=>/^\d{4}(?:-\d{2})?$/.test(k)&&Number.isFinite(Number(v))).map(([k,v])=>[k,Number(v)]));
+  const cleanData=Object.fromEntries(Object.entries(data||{}).filter(([k,v])=>/^\d{4}(?:-\d{2}(?:-\d{2})?)?$/.test(k)&&Number.isFinite(Number(v))).map(([k,v])=>[k,Number(v)]));
   syncPeriodSelectors(cleanData);
   const all=Object.entries(cleanData).sort((a,b)=>a[0].localeCompare(b[0])); let shown=all;
   const from=document.getElementById('periodFrom')?.value, to=document.getElementById('periodTo')?.value;
-  if(currentRange==='custom'&&from&&to)shown=all.filter(([x])=>x>=from&&x<=to); else if(['5','10','20'].includes(String(currentRange))&&all.length){const lastKey=all.at(-1)[0];const lastYear=Number(String(lastKey).slice(0,4));const cutoffYear=lastYear-Number(currentRange);shown=all.filter(([x])=>Number(String(x).slice(0,4))>=cutoffYear);}
+  if(currentRange==='custom'&&from&&to)shown=all.filter(([x])=>x.slice(0,from.length)>=from&&x.slice(0,to.length)<=to); else if(['5','10','20'].includes(String(currentRange))&&all.length){const lastKey=all.at(-1)[0];const lastYear=Number(String(lastKey).slice(0,4));const cutoffYear=lastYear-Number(currentRange);shown=all.filter(([x])=>Number(String(x).slice(0,4))>=cutoffYear);}
   if(zoomFactor>1&&shown.length>4)shown=shown.slice(-Math.max(4,Math.ceil(shown.length/zoomFactor)));
-  const labels=shown.map(x=>isMonthly?displayMonth(x[0]):x[0]), values=shown.map(x=>x[1]);
+  const labels=shown.map(x=>isDaily?displayDay(x[0]):isMonthly?displayMonth(x[0]):x[0]), values=shown.map(x=>x[1]);
   const empty=document.getElementById('chartEmpty');if(empty){empty.hidden=shown.length>0;empty.textContent=shown.length?'':`No se recibieron observaciones para ${cfg.title}.`;}
   const annualLabel=inflationAnnualMode==='eop'?'punta a punta (dic./dic.)':'promedio anual';
   document.getElementById('chartTitle').textContent=key==='inflation'?(isInflationMonthly?'Inflación mensual':`Inflación anual · ${annualLabel}`):cfg.title;
@@ -325,6 +361,7 @@ document.querySelectorAll('[data-trade-price]').forEach(btn=>btn.addEventListene
 document.querySelectorAll('[data-dollar-price]').forEach(btn=>btn.addEventListener('click',()=>{dollarPriceMode=btn.dataset.dollarPrice;document.querySelectorAll('[data-dollar-price]').forEach(b=>b.classList.toggle('active',b===btn));seriesConfig.freeDollar.data=dollarPriceMode==='real'?freeDollarReal:freeDollarNominal;seriesConfig.freeDollar.subtitle=`Venta · ARS ${dollarPriceMode==='real'?`constantes de ${tradeBasePeriod||'último CPI-U'}`:'corrientes'} por USD`;renderHistory('freeDollar');}));
 document.querySelectorAll('[data-rate-mode]').forEach(btn=>btn.addEventListener('click',()=>{interestMode=btn.dataset.rateMode;document.querySelectorAll('[data-rate-mode]').forEach(b=>b.classList.toggle('active',b===btn));seriesConfig.interestRate.data=interestMode==='real'?interestReal:interestNominal;seriesConfig.interestRate.subtitle=`Plazo fijo 30–59 días · tasa ${interestMode==='real'?'real':'nominal'} anual · %`;renderHistory('interestRate');}));
 document.querySelectorAll('[data-salary-mode]').forEach(btn=>btn.addEventListener('click',()=>{salaryMode=btn.dataset.salaryMode;document.querySelectorAll('[data-salary-mode]').forEach(b=>b.classList.toggle('active',b===btn));applySalaryMode();renderHistory('salary');}));
+document.querySelectorAll('[data-merval-mode]').forEach(btn=>btn.addEventListener('click',()=>{mervalMode=btn.dataset.mervalMode;document.querySelectorAll('[data-merval-mode]').forEach(b=>b.classList.toggle('active',b===btn));applyMervalMode();renderHistory('mervalUsd');}));
 document.getElementById('zoomIn')?.addEventListener('click',()=>{zoomFactor=Math.min(8,zoomFactor*1.6);renderHistory(currentSeries)});
 document.getElementById('zoomOut')?.addEventListener('click',()=>{zoomFactor=Math.max(1,zoomFactor/1.6);renderHistory(currentSeries)});
 
@@ -526,7 +563,7 @@ async function loadOfficialSeriesFallback(){
 
 // v117: la API se pide por grupos (cada uno con pocos pedidos externos) y cada grupo se procesa al llegar.
 const MACRO_GROUPS=['core','history','markets','activity','leading'];
-const MACRO_LS_KEY='macroArgentinaSnapshotV118';
+const MACRO_LS_KEY='macroArgentinaSnapshotV119';
 // Series históricas (dólar, riesgo país, Merval, tasa, RIPTE, PIB, industria, desempleo, comercio).
 // Recibe la fusión histórico local + API, así los gráficos funcionan aunque la API no responda.
 function applyHistorySources(S){
@@ -549,7 +586,7 @@ function applyHistorySources(S){
     merge(industry,S.industryHistorical); if(srcOk(S.unemploymentHistorical)&&S.unemploymentHistorical.annual){for(const [y,v0] of Object.entries(S.unemploymentHistorical.annual)){const v=Number(v0);if(Number.isFinite(v))unemployment[y]=Number((Math.abs(v)<=1?v*100:v).toFixed(1));}}
     if(srcOk(S.tradeHistorical)){if(Object.keys(tradeBalanceMonthly).length<55)Object.assign(tradeBalanceMonthly,S.tradeHistorical.monthlyBalance||{});const from1913=o=>Object.fromEntries(Object.entries(o||{}).filter(([y])=>Number(y)>=1913));Object.assign(tradeBalanceNominal,from1913(S.tradeHistorical.balance));Object.assign(exportsNominal,from1913(S.tradeHistorical.exports));Object.assign(importsNominal,from1913(S.tradeHistorical.imports));if(S.tradeHistorical.real){tradeBasePeriod=S.tradeHistorical.real.basePeriod||'';Object.assign(tradeBalance,from1913(S.tradeHistorical.real.balance));Object.assign(exportsSeries,from1913(S.tradeHistorical.real.exports));Object.assign(importsSeries,from1913(S.tradeHistorical.real.imports));}else rebuildRealTrade();}
     safeApply('financialHistorical',()=>{
-    if(srcOk(S.financialHistorical)){const F=S.financialHistorical;Object.assign(countryRisk,F.countryRisk||{});Object.assign(mervalUsdCcl,F.mervalUsdCcl||{});Object.assign(freeDollarNominal,F.freeDollar?.nominal||{});Object.assign(freeDollarReal,F.freeDollar?.real||{});Object.assign(interestNominal,F.interestRate?.nominal||{});Object.assign(interestReal,F.interestRate?.real||{});seriesConfig.freeDollar.data=dollarPriceMode==='real'?freeDollarReal:freeDollarNominal;seriesConfig.interestRate.data=interestMode==='real'?interestReal:interestNominal;const L=F.latest||{};if(!marketsFastLoaded)paintMarkets(L);}
+    if(srcOk(S.financialHistorical)){const F=S.financialHistorical;if(F.daily){Object.assign(countryRiskDaily,F.daily.risk||{});Object.assign(mervalPointsDaily,F.daily.mervalPoints||{});Object.assign(mervalUsdDaily,F.daily.mervalUsd||{});rebuildMervalReal();applyMervalMode();seriesConfig.countryRisk.data=countryRiskDaily;}Object.assign(countryRisk,F.countryRisk||{});Object.assign(mervalUsdCcl,F.mervalUsdCcl||{});Object.assign(freeDollarNominal,F.freeDollar?.nominal||{});Object.assign(freeDollarReal,F.freeDollar?.real||{});Object.assign(interestNominal,F.interestRate?.nominal||{});Object.assign(interestReal,F.interestRate?.real||{});seriesConfig.freeDollar.data=dollarPriceMode==='real'?freeDollarReal:freeDollarNominal;seriesConfig.interestRate.data=interestMode==='real'?interestReal:interestNominal;const L=F.latest||{};if(!marketsFastLoaded)paintMarkets(L);}
     });
     safeApply('exchangeHistorical',()=>{
     if(srcOk(S.exchangeHistorical)){const X=S.exchangeHistorical;Object.assign(freeDollarNominal,X.free?.nominal||{});Object.assign(freeDollarReal,X.free?.real||{});Object.assign(fxOfficialNominal,X.official?.nominal||{});Object.assign(fxOfficialReal,X.official?.real||{});Object.assign(fxFreeTcr,X.free?.tcr||{});Object.assign(fxOfficialTcr,X.official?.tcr||{});Object.assign(fxFreeMonthlyNominal,X.free?.monthly?.nominal||{});Object.assign(fxFreeMonthlyReal,X.free?.monthly?.real||{});Object.assign(fxFreeMonthlyTcr,X.free?.monthly?.tcr||{});Object.assign(fxOfficialMonthlyNominal,X.official?.monthly?.nominal||{});Object.assign(fxOfficialMonthlyReal,X.official?.monthly?.real||{});Object.assign(fxOfficialMonthlyTcr,X.official?.monthly?.tcr||{});Object.assign(fxFreeDailyNominal,X.free?.daily?.nominal||{});Object.assign(fxFreeDailyReal,X.free?.daily?.real||{});Object.assign(fxFreeDailyTcr,X.free?.daily?.tcr||{});Object.assign(fxOfficialDailyNominal,X.official?.daily?.nominal||{});Object.assign(fxOfficialDailyReal,X.official?.daily?.real||{});Object.assign(fxOfficialDailyTcr,X.official?.daily?.tcr||{});
@@ -715,7 +752,7 @@ function normalizedMonthlyRows(rows,valueField='value',n=60){const byMonth=new M
 let bundledMacroHistoryPromise=null;
 function loadBundledMacroHistory(){return bundledMacroHistoryPromise??=(async()=>{
   try{
-    const r=await fetch('/macro-history.json?v=118',{cache:'no-store'}); if(!r.ok)return;
+    const r=await fetch('/macro-history.json?v=119',{cache:'no-store'}); if(!r.ok)return;
     const h=await r.json(), B={};
     if(h.povertyAnnual)Object.assign(poverty,h.povertyAnnual);
     if(h.tradeMonthly)Object.assign(tradeBalanceMonthly,h.tradeMonthly);
@@ -902,3 +939,4 @@ function renderKpiCards(){
 
 // v105: preload bundled histories independently of remote APIs/KV.
 loadBundledMacroHistory();
+loadMarketsDaily();
