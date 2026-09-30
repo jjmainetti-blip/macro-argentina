@@ -486,14 +486,26 @@ let marketsFastLoaded=false;
 function paintMarkets(L){
   if(!L)return;
   const marketChange=(id,x,inverse=false)=>{const el=document.getElementById(id);if(!el)return;const c=x?.changePct;if(c==null||!Number.isFinite(Number(c))){el.textContent='—';el.className='market-change neutral';return;}const n=Number(c),good=inverse?n<0:n>0;el.textContent=`${n>0?'↑':n<0?'↓':'→'} ${n>0?'+':''}${fmt.format(n)}%`;el.className='market-change '+(n===0?'neutral':good?'positive':'negative');};
-  if(L.merval){document.getElementById('heroMerval').textContent=`${fmt.format(L.merval.value)} pts`;marketChange('heroMervalChange',L.merval,false);document.getElementById('heroMervalDate').textContent=L.merval.date||'';}
-  if(L.dollar){document.getElementById('heroDollar').textContent=`$ ${fmt.format(L.dollar.value)}`;marketChange('heroDollarChange',L.dollar,true);document.getElementById('heroDollarDate').textContent=L.dollar.date||'';}
-  if(L.risk){document.getElementById('heroRisk').textContent=`${fmt.format(L.risk.value)} pb`;marketChange('heroRiskChange',L.risk,true);document.getElementById('heroRiskDate').textContent=L.risk.date||'';}
-  if(L.bna){document.getElementById('heroBna').textContent=`$ ${fmt.format(L.bna.sell)} venta`;marketChange('heroBnaChange',L.bna,true);document.getElementById('heroBnaDate').textContent=`${L.bna.date||''} · compra $ ${fmt.format(L.bna.buy)}`;}
+  // v120: sello de tiempo claro — "Hoy · 17:58" si el dato es de la rueda de hoy; si no, "Cierre 29/09/2026".
+  const today=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Argentina/Buenos_Aires'}).format(new Date());
+  const stamp=x=>{const d=String(x?.date||'').slice(0,10);if(!d)return '';const [yy,mm,dd]=d.split('-');
+    if(d===today){let hm='';try{if(x.updatedAt)hm=new Date(x.updatedAt).toLocaleTimeString('es-AR',{timeZone:'America/Argentina/Buenos_Aires',hour:'2-digit',minute:'2-digit',hour12:false});}catch{}return `Hoy${hm?` · ${hm}`:''}${x.source?` · ${x.source}`:''}`;}
+    return `Cierre ${dd}/${mm}/${yy}${x.source?` · ${x.source}`:''}`;};
+  if(L.merval){document.getElementById('heroMerval').textContent=`${new Intl.NumberFormat('es-AR',{maximumFractionDigits:0}).format(L.merval.value)} pts`;marketChange('heroMervalChange',L.merval,false);document.getElementById('heroMervalDate').textContent=stamp(L.merval);}
+  if(L.dollar){document.getElementById('heroDollar').textContent=`$ ${fmt.format(L.dollar.value)}`;marketChange('heroDollarChange',L.dollar,true);document.getElementById('heroDollarDate').textContent=stamp(L.dollar);}
+  if(L.risk){document.getElementById('heroRisk').textContent=`${fmt.format(L.risk.value)} pb`;marketChange('heroRiskChange',L.risk,true);document.getElementById('heroRiskDate').textContent=stamp(L.risk);}
+  if(L.bna){document.getElementById('heroBna').textContent=`$ ${fmt.format(L.bna.sell)} venta`;marketChange('heroBnaChange',L.bna,true);document.getElementById('heroBnaDate').textContent=`${stamp(L.bna)} · compra $ ${fmt.format(L.bna.buy)}`;}
 }
+// v120: "Mercados ahora" se refresca cada 30 s mientras la pestaña está visible (y al volver a ella).
+const MARKETS_REFRESH_MS=30000;let marketsTimer=null,marketsInFlight=false;
+function paintMarketsPill(ok){const el=document.getElementById('marketsPill');if(!el)return;const hm=new Date().toLocaleTimeString('es-AR',{timeZone:'America/Argentina/Buenos_Aires',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});el.textContent=ok?`Actualizado ${hm} · cada 30 s`:`Reintentando · último intento ${hm}`;el.classList.toggle('stale',!ok);}
 async function loadMarketsFast(){
-  try{const cached=JSON.parse(localStorage.getItem('macroMarketsSnapshot')||'null');if(cached?.latest)paintMarkets(cached.latest);}catch{}
-  try{const r=await fetch('/api/markets',{headers:{accept:'application/json'}});if(!r.ok)throw new Error(`markets ${r.status}`);const d=await r.json();paintMarkets(d.latest);marketsFastLoaded=true;try{localStorage.setItem('macroMarketsSnapshot',JSON.stringify(d));}catch{}}catch(e){console.warn('markets fast',e);}
+  if(marketsInFlight)return;marketsInFlight=true;
+  if(!marketsFastLoaded){try{const cached=JSON.parse(localStorage.getItem('macroMarketsSnapshot')||'null');if(cached?.latest)paintMarkets(cached.latest);}catch{}}
+  try{const r=await fetch(`/api/markets?_=${Date.now()}`,{headers:{accept:'application/json'},cache:'no-store'});if(!r.ok)throw new Error(`markets ${r.status}`);const d=await r.json();paintMarkets(d.latest);marketsFastLoaded=true;paintMarketsPill(true);try{localStorage.setItem('macroMarketsSnapshot',JSON.stringify(d));}catch{}}
+  catch(e){console.warn('markets fast',e);paintMarketsPill(false);}
+  finally{marketsInFlight=false;}
+  if(!marketsTimer){marketsTimer=setInterval(()=>{if(document.visibilityState==='visible')loadMarketsFast();},MARKETS_REFRESH_MS);document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')loadMarketsFast();});}
 }
 async function loadTradeMonthlyFast(){
   try{

@@ -1,4 +1,4 @@
-# Macro Argentina — Cloudflare v119
+# Macro Argentina — Cloudflare v120
 
 Migración de la v63 desde Netlify a Cloudflare Workers + Static Assets.
 
@@ -137,3 +137,11 @@ Chequeo: `npm run validate:snapshot`.
 - La API (`group=markets`) agrega los últimos 400 días de ambas series; el histórico completo viene del archivo local.
 - El gráfico histórico acepta datos diarios: rango 5/10/20 años, selector de período por año y zoom.
 - **RIPTE**: por defecto en ARS constantes. Si la cadena IPC completa no está disponible, se deflacta con el IPC INDEC mensual (histórico local desde 2017) y, hacia atrás, la inflación anual dic/dic repartida por mes.
+
+
+## v120 — "Mercados ahora" en vivo (cada 30 s)
+- **Refresco**: el bloque consulta `/api/markets` cada 30 segundos mientras la pestaña está visible, y de inmediato al volver a ella. La insignia muestra la hora de la última actualización.
+- **Sello de tiempo** en cada valor: "Hoy · HH:MM · fuente" si es de la rueda del día; "Cierre dd/mm/aaaa · fuente" si es un cierre anterior.
+- **Riesgo país**: Ámbito (JSON público) → Rava (sólo si dice "actualizado" hoy) → Infobae → último cierre de ArgentinaDatos. Antes se caía casi siempre al último cierre (fecha de ayer).
+- **Merval**: BYMA (API pública BYMADATA, cotización del día y cierre anterior) → Rava (~10 min de demora) → zion.ar (último cierre).
+- **Carga sobre las fuentes**: `/api/markets` comparte una respuesta de 20 s (Cache API + memoria del isolate); los históricos usados para el cierre anterior se reutilizan 1 hora.

@@ -27,7 +27,7 @@ export default {
       return new Response(upstream.body, { status: 200, headers });
     }
     if (request.method === 'GET' && url.pathname === '/api/markets') {
-      return withHeaders(await marketsData());
+      return withHeaders(await marketsData(request, ctx));
     }
     if (request.method === 'GET' && url.pathname === '/api/trade-monthly') {
       return withHeaders(await tradeMonthly());
