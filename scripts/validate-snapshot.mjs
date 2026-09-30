@@ -17,6 +17,13 @@ checkMap('Crédito',h.creditMonthlyYoy,60);
 const mora=checkMap('Mora',h.arrearsMonthlyTotal,60);if(Object.values(h.arrearsMonthlyTotal).some(v=>!(v>0&&v<40)))fail('Mora fuera de rango');
 for(const m of ['primary','financial'])checkMap(`Fiscal ${m}`,h.fiscalPctGDP?.[m],24);
 checkMap('Patentamientos',h.autosMonthly,48);
+// v117: mercados y salario (gráficos de dólar, riesgo país, Merval, tasa y RIPTE)
+{const M=h.marketsHistory||{};const n=o=>Object.keys(o||{}).length;
+ if(n(M.financialHistorical?.countryRisk)<20)fail('Riesgo país: histórico local corto');
+ if(n(M.financialHistorical?.mervalUsdCcl)<10)fail('Merval USD: histórico local corto');
+ if(n(M.financialHistorical?.interestRate?.nominal)<20)fail('Tasa: histórico local corto');
+ if(n(M.exchangeHistorical?.free?.nominal)<40||n(M.exchangeHistorical?.official?.nominal)<40||n(M.exchangeHistorical?.gap)<40)fail('Dólar: histórico local corto');
+ if(n(M.salary?.monthly)<300)fail('RIPTE: histórico local corto');}
 // v116
 checkMap('ILA',h.ilaMonthly,120);for(const [k,v] of Object.entries(h.ilaMonthly))if(!Number.isFinite(v.level)||!Number.isFinite(v.mom))fail(`ILA inválido ${k}`);
 checkMap('IGA',h.igaMonthly,36);for(const [k,v] of Object.entries(h.igaMonthly))if(!Number.isFinite(v.momSa)||!Number.isFinite(v.yoy))fail(`IGA inválido ${k}`);

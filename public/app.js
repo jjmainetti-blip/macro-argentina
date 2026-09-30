@@ -524,26 +524,17 @@ async function loadOfficialSeriesFallback(){
   }finally{officialFallbackRunning=false;}
 }
 
-async function loadAutomaticData(){
-  const status=document.getElementById('autoStatus');
-  try{
-    let data=null;
-    try{
-      const r=await fetch('/api/macro-data',{headers:{accept:'application/json'}}); if(!r.ok)throw new Error(`API ${r.status}`);
-      data=await r.json();
-      if(data?.sources)try{localStorage.setItem('macroArgentinaSnapshotV116',JSON.stringify(data));}catch{}
-    }catch(networkError){
-      try{data=JSON.parse(localStorage.getItem('macroArgentinaSnapshotV116')||'null');}catch{}
-      if(!data?.sources)throw networkError;
-      console.warn('macro-data: usando snapshot local',networkError);
-    }
-    const S=data.sources||{}; apiKpiSources=S; rebuildKpiSourceCache();
-    loadOfficialSeriesFallback();
-    safeApply('calculatorHydration',()=>hydrateCalculatorSources(S));
-
+// v117: la API se pide por grupos (cada uno con pocos pedidos externos) y cada grupo se procesa al llegar.
+const MACRO_GROUPS=['core','history','markets','activity','leading'];
+const MACRO_LS_KEY='macroArgentinaSnapshotV117';
+// Series históricas (dólar, riesgo país, Merval, tasa, RIPTE, PIB, industria, desempleo, comercio).
+// Recibe la fusión histórico local + API, así los gráficos funcionan aunque la API no responda.
+function applyHistorySources(S){
+  if(!S)return;
+  const srcOk=x=>!!x&&['ok','snapshot','partial'].includes(x.status);
     // RIPTE se hidrata primero y de forma independiente. Ningún error posterior de
     // mercados, FX, calendario o calculadoras puede dejar vacía esta serie.
-    if(S.salary?.status==='ok'){
+    if(srcOk(S.salary)){
       for(const k of Object.keys(salaryRipte))delete salaryRipte[k];
       for(const k of Object.keys(salaryRipteMonthly))delete salaryRipteMonthly[k];
       Object.assign(salaryRipte,S.salary.annual||{});
@@ -554,27 +545,27 @@ async function loadAutomaticData(){
       if(diag)diag.textContent=`RIPTE cargado: ${n} meses${last?` · último ${displayMonth(last)}`:''}`;
     }
 
-    const merge=(target,src)=>{if(src?.status==='ok'&&src.annual)Object.assign(target,src.annual)};
-    merge(industry,S.industryHistorical); if(S.unemploymentHistorical?.status==='ok'&&S.unemploymentHistorical.annual){for(const [y,v0] of Object.entries(S.unemploymentHistorical.annual)){const v=Number(v0);if(Number.isFinite(v))unemployment[y]=Number((Math.abs(v)<=1?v*100:v).toFixed(1));}}
-    if(S.tradeHistorical?.status==='ok'){if(Object.keys(tradeBalanceMonthly).length<55)Object.assign(tradeBalanceMonthly,S.tradeHistorical.monthlyBalance||{});const from1913=o=>Object.fromEntries(Object.entries(o||{}).filter(([y])=>Number(y)>=1913));Object.assign(tradeBalanceNominal,from1913(S.tradeHistorical.balance));Object.assign(exportsNominal,from1913(S.tradeHistorical.exports));Object.assign(importsNominal,from1913(S.tradeHistorical.imports));if(S.tradeHistorical.real){tradeBasePeriod=S.tradeHistorical.real.basePeriod||'';Object.assign(tradeBalance,from1913(S.tradeHistorical.real.balance));Object.assign(exportsSeries,from1913(S.tradeHistorical.real.exports));Object.assign(importsSeries,from1913(S.tradeHistorical.real.imports));}else rebuildRealTrade();}
+    const merge=(target,src)=>{if(srcOk(src)&&src.annual)Object.assign(target,src.annual)};
+    merge(industry,S.industryHistorical); if(srcOk(S.unemploymentHistorical)&&S.unemploymentHistorical.annual){for(const [y,v0] of Object.entries(S.unemploymentHistorical.annual)){const v=Number(v0);if(Number.isFinite(v))unemployment[y]=Number((Math.abs(v)<=1?v*100:v).toFixed(1));}}
+    if(srcOk(S.tradeHistorical)){if(Object.keys(tradeBalanceMonthly).length<55)Object.assign(tradeBalanceMonthly,S.tradeHistorical.monthlyBalance||{});const from1913=o=>Object.fromEntries(Object.entries(o||{}).filter(([y])=>Number(y)>=1913));Object.assign(tradeBalanceNominal,from1913(S.tradeHistorical.balance));Object.assign(exportsNominal,from1913(S.tradeHistorical.exports));Object.assign(importsNominal,from1913(S.tradeHistorical.imports));if(S.tradeHistorical.real){tradeBasePeriod=S.tradeHistorical.real.basePeriod||'';Object.assign(tradeBalance,from1913(S.tradeHistorical.real.balance));Object.assign(exportsSeries,from1913(S.tradeHistorical.real.exports));Object.assign(importsSeries,from1913(S.tradeHistorical.real.imports));}else rebuildRealTrade();}
     safeApply('financialHistorical',()=>{
-    if(S.financialHistorical?.status==='ok'){const F=S.financialHistorical;Object.assign(countryRisk,F.countryRisk||{});Object.assign(mervalUsdCcl,F.mervalUsdCcl||{});Object.assign(freeDollarNominal,F.freeDollar?.nominal||{});Object.assign(freeDollarReal,F.freeDollar?.real||{});Object.assign(interestNominal,F.interestRate?.nominal||{});Object.assign(interestReal,F.interestRate?.real||{});seriesConfig.freeDollar.data=dollarPriceMode==='real'?freeDollarReal:freeDollarNominal;seriesConfig.interestRate.data=interestMode==='real'?interestReal:interestNominal;const L=F.latest||{};if(!marketsFastLoaded)paintMarkets(L);}
+    if(srcOk(S.financialHistorical)){const F=S.financialHistorical;Object.assign(countryRisk,F.countryRisk||{});Object.assign(mervalUsdCcl,F.mervalUsdCcl||{});Object.assign(freeDollarNominal,F.freeDollar?.nominal||{});Object.assign(freeDollarReal,F.freeDollar?.real||{});Object.assign(interestNominal,F.interestRate?.nominal||{});Object.assign(interestReal,F.interestRate?.real||{});seriesConfig.freeDollar.data=dollarPriceMode==='real'?freeDollarReal:freeDollarNominal;seriesConfig.interestRate.data=interestMode==='real'?interestReal:interestNominal;const L=F.latest||{};if(!marketsFastLoaded)paintMarkets(L);}
     });
     safeApply('exchangeHistorical',()=>{
-    if(S.exchangeHistorical?.status==='ok'){const X=S.exchangeHistorical;Object.assign(freeDollarNominal,X.free?.nominal||{});Object.assign(freeDollarReal,X.free?.real||{});Object.assign(fxOfficialNominal,X.official?.nominal||{});Object.assign(fxOfficialReal,X.official?.real||{});Object.assign(fxFreeTcr,X.free?.tcr||{});Object.assign(fxOfficialTcr,X.official?.tcr||{});Object.assign(fxFreeMonthlyNominal,X.free?.monthly?.nominal||{});Object.assign(fxFreeMonthlyReal,X.free?.monthly?.real||{});Object.assign(fxFreeMonthlyTcr,X.free?.monthly?.tcr||{});Object.assign(fxOfficialMonthlyNominal,X.official?.monthly?.nominal||{});Object.assign(fxOfficialMonthlyReal,X.official?.monthly?.real||{});Object.assign(fxOfficialMonthlyTcr,X.official?.monthly?.tcr||{});Object.assign(fxFreeDailyNominal,X.free?.daily?.nominal||{});Object.assign(fxFreeDailyReal,X.free?.daily?.real||{});Object.assign(fxFreeDailyTcr,X.free?.daily?.tcr||{});Object.assign(fxOfficialDailyNominal,X.official?.daily?.nominal||{});Object.assign(fxOfficialDailyReal,X.official?.daily?.real||{});Object.assign(fxOfficialDailyTcr,X.official?.daily?.tcr||{});
+    if(srcOk(S.exchangeHistorical)){const X=S.exchangeHistorical;Object.assign(freeDollarNominal,X.free?.nominal||{});Object.assign(freeDollarReal,X.free?.real||{});Object.assign(fxOfficialNominal,X.official?.nominal||{});Object.assign(fxOfficialReal,X.official?.real||{});Object.assign(fxFreeTcr,X.free?.tcr||{});Object.assign(fxOfficialTcr,X.official?.tcr||{});Object.assign(fxFreeMonthlyNominal,X.free?.monthly?.nominal||{});Object.assign(fxFreeMonthlyReal,X.free?.monthly?.real||{});Object.assign(fxFreeMonthlyTcr,X.free?.monthly?.tcr||{});Object.assign(fxOfficialMonthlyNominal,X.official?.monthly?.nominal||{});Object.assign(fxOfficialMonthlyReal,X.official?.monthly?.real||{});Object.assign(fxOfficialMonthlyTcr,X.official?.monthly?.tcr||{});Object.assign(fxFreeDailyNominal,X.free?.daily?.nominal||{});Object.assign(fxFreeDailyReal,X.free?.daily?.real||{});Object.assign(fxFreeDailyTcr,X.free?.daily?.tcr||{});Object.assign(fxOfficialDailyNominal,X.official?.daily?.nominal||{});Object.assign(fxOfficialDailyReal,X.official?.daily?.real||{});Object.assign(fxOfficialDailyTcr,X.official?.daily?.tcr||{});
       const fillDailyTcr=(nominal,monthlyNominal,monthlyTcr,dailyTcr)=>{for(const [d,v] of Object.entries(nominal)){if(dailyTcr[d]!=null)continue;const ym=d.slice(0,7),mn=Number(monthlyNominal[ym]),mt=Number(monthlyTcr[ym]);if(Number.isFinite(mn)&&mn!==0&&Number.isFinite(mt))dailyTcr[d]=Number((Number(v)*(mt/mn)).toFixed(4));}};
       fillDailyTcr(fxFreeDailyNominal,fxFreeMonthlyNominal,fxFreeMonthlyTcr,fxFreeDailyTcr);fillDailyTcr(fxOfficialDailyNominal,fxOfficialMonthlyNominal,fxOfficialMonthlyTcr,fxOfficialDailyTcr);Object.assign(fxGap,X.gap||{});Object.assign(fxDailyGap,X.dailyGap||{});fxBasePeriod=X.free?.basePeriod||X.official?.basePeriod||'';const dailyKeys=Object.keys(fxFreeDailyNominal);if(dailyKeys.length){const annualKeys=Object.keys(freeDollarNominal).map(fxDateKey).sort(),mn=annualKeys[0]||dailyKeys.sort()[0],mx=dailyKeys.sort().at(-1);const a=document.getElementById('fxPeriodFrom'),b=document.getElementById('fxPeriodTo');if(a){a.min=mn;a.max=mx;}if(b){b.min=mn;b.max=mx;b.value=mx;}}renderFx();}
     });
     if(Object.keys(salaryRipteMonthly).length)applySalaryMode();
     if(currentSeries && window.Chart) renderHistory(currentSeries);
-    if(S.gdpHistorical?.status==='ok' && S.gdpHistorical.annual){Object.assign(gdpGrowth,S.gdpHistorical.annual);fillSelect('gdpStart',gdpGrowth,1980);fillSelect('gdpEnd',gdpGrowth,2025);}
+    if(srcOk(S.gdpHistorical) && S.gdpHistorical.annual){Object.assign(gdpGrowth,S.gdpHistorical.annual);fillSelect('gdpStart',gdpGrowth,1980);fillSelect('gdpEnd',gdpGrowth,2025);}
     // v115: EMAE y demás tarjetas → renderKpiCards().
-    if(S.ipcHistorical?.status==='ok'){
+    if(srcOk(S.ipcHistorical)){
       // No sobrescribir 1944–2006: el respaldo local auditado evita cortes por respuestas parciales o diferencias de transformación de la API.
       fillSelect('infStart',inflation,Math.min(...Object.keys(inflation).map(Number))); fillSelect('infEnd',inflation,2025);
       const active=document.querySelector('[data-series="inflation"].active'); if(active&&window.Chart)renderHistory('inflation');
     }
-    if(S.ipc?.status==='ok'){
+    if(srcOk(S.ipc)){
       const x=S.ipc.latest, per=periodFromYm(S.ipc.updated);
       // v115: la tarjeta de IPC la arma renderKpiCards().
       // La API entrega monthly como [{date,index,value}]. Usamos el nivel publicado directamente
@@ -584,18 +575,42 @@ async function loadAutomaticData(){
         if(/^\d{4}-\d{2}$/.test(k)&&Number.isFinite(v)&&v>0) ipcCalcIndex[k]=v;
       }
     }
-    safeApply('kpiCards',renderKpiCards);
-
+}
+function applyReleases(S){
     if(S.salary?.status==='ok'&&currentSeries==='salary'&&window.Chart)safeApply('salaryRender',()=>renderHistory('salary'));
     const releases=[{releaseDate:'2026-09-28',date:'sep 2026',displayDate:'Publicado 28 sep 2026 · período sep 2026',title:'ICG UTDT',value:'1,94 puntos · −5,9% mensual'}];if(S.ipc?.status==='ok')releases.push({date:S.ipc.updated||'',title:'IPC Nacional',value:`${fmt.format(S.ipc.latest.value)}% mensual · ${fmt.format(S.ipc.latest.yoy)}% interanual`});if(S.salary?.status==='ok'&&S.salary.latest)releases.push({date:S.salary.latest.period,title:'RIPTE',value:money.format(S.salary.latest.value)});if(S.arca?.status==='ok')releases.push({date:S.arca.latest.period||'',title:'Recaudación ARCA',value:moneyMillionsToBillions(S.arca.latest.value)});if(S.icg?.status==='ok')releases.push({releaseDate:S.icg.publicationDate||'',date:S.icg.latest.period||'',title:'ICG UTDT',value:`${fmt.format(S.icg.latest.value)} puntos${Number.isFinite(Number(S.icg.latest.mom))?` · ${Number(S.icg.latest.mom)>0?'+':''}${fmt.format(S.icg.latest.mom)}% mensual`:''}`});renderLatestRelease(releases);
-    const when=new Date(data.generatedAt).toLocaleString('es-AR',{dateStyle:'medium',timeStyle:'short'});
-    if(status){
-      const ok=Object.entries(S).filter(([,v])=>v?.status==='ok').length, errors=Object.entries(S).filter(([,v])=>v?.status==='error').map(([k])=>k);
-      status.innerHTML=`<strong>Datos verificados</strong><small>Última comprobación: ${when} · ${ok}/${Object.keys(S).length} fuentes activas${errors.length?' · algunos datos usan respaldo':''}</small>`;
-    }
-    updateCoverage();
-    if(window.Chart)renderHistory(currentSeries);
-  }catch(err){if(status)status.innerHTML='<strong>Datos verificados</strong><small>Actualización automática activa · se reintentará la conexión con las fuentes</small>';console.warn(err);loadOfficialSeriesFallback();}
+}
+function paintAutoStatus(when){const status=document.getElementById('autoStatus');if(!status)return;const S=apiKpiSources||{};const ok=Object.values(S).filter(v=>v?.status==='ok'||v?.status==='snapshot'||v?.status==='partial').length,total=Object.keys(S).length,errors=Object.values(S).filter(v=>v?.status==='error').length;
+  status.innerHTML=total?`<strong>Datos verificados</strong><small>Última comprobación: ${when||'—'} · ${ok}/${total} fuentes activas${errors?' · algunos datos usan respaldo':''}</small>`:'<strong>Datos verificados</strong><small>Mostrando el último dato incluido · se reintentará la conexión con las fuentes</small>';}
+function applyMacroSources(when){
+  const S=kpiSourceCache||{};
+  safeApply('calculatorHydration',()=>hydrateCalculatorSources(S));
+  safeApply('historySources',()=>applyHistorySources(S));
+  safeApply('kpiCards',renderKpiCards);
+  safeApply('releases',()=>applyReleases(apiKpiSources||{}));
+  paintAutoStatus(when);
+  safeApply('coverage',updateCoverage);
+  if(window.Chart)safeApply('history',()=>renderHistory(currentSeries));
+}
+async function loadAutomaticData(){
+  let received=0;
+  const fmtWhen=d=>{try{return new Date(d).toLocaleString('es-AR',{dateStyle:'medium',timeStyle:'short'});}catch{return '';}};
+  const jobs=MACRO_GROUPS.map(async g=>{
+    const r=await fetch(`/api/macro-data?group=${g}`,{headers:{accept:'application/json'}});if(!r.ok)throw new Error(`API ${g} ${r.status}`);
+    const d=await r.json();if(!d?.sources)throw new Error(`API ${g} sin fuentes`);
+    received++;apiKpiSources={...apiKpiSources,...d.sources};rebuildKpiSourceCache();applyMacroSources(fmtWhen(d.generatedAt));
+    try{localStorage.setItem(MACRO_LS_KEY,JSON.stringify({generatedAt:d.generatedAt,sources:apiKpiSources}));}catch{}
+  });
+  const res=await Promise.allSettled(jobs);
+  const failed=res.filter(x=>x.status==='rejected');
+  if(failed.length)console.warn('macro-data: grupos con error',failed.map(x=>String(x.reason)));
+  if(!received){
+    // Ningún grupo respondió: usar el último snapshot guardado en este navegador (si existe) + histórico local.
+    let data=null;try{data=JSON.parse(localStorage.getItem(MACRO_LS_KEY)||'null');}catch{}
+    if(data?.sources){apiKpiSources=data.sources;rebuildKpiSourceCache();applyMacroSources(fmtWhen(data.generatedAt));}
+    else{paintAutoStatus('');}
+  }
+  loadOfficialSeriesFallback();
 }
 window.addEventListener('load',()=>{
   initKpiExplorer();
@@ -700,7 +715,7 @@ function normalizedMonthlyRows(rows,valueField='value',n=60){const byMonth=new M
 let bundledMacroHistoryPromise=null;
 function loadBundledMacroHistory(){return bundledMacroHistoryPromise??=(async()=>{
   try{
-    const r=await fetch('/macro-history.json?v=116',{cache:'no-store'}); if(!r.ok)return;
+    const r=await fetch('/macro-history.json?v=117',{cache:'no-store'}); if(!r.ok)return;
     const h=await r.json(), B={};
     if(h.povertyAnnual)Object.assign(poverty,h.povertyAnnual);
     if(h.tradeMonthly)Object.assign(tradeBalanceMonthly,h.tradeMonthly);
@@ -720,7 +735,10 @@ function loadBundledMacroHistory(){return bundledMacroHistoryPromise??=(async()=
     if(AP.fiscal||AP.autos||AP.cement)B.activityPulse=AP;
     if(h.ilaMonthly)B.ilaHistorical={status:'ok',source:'CICEc — Bolsas de Comercio de Santa Fe y Rosario',monthly:h.ilaMonthly};
     if(h.igaMonthly)B.igaHistorical={status:'ok',source:'OJF & Asociados — IGA-OJF',monthly:h.igaMonthly};
+    if(h.marketsHistory){for(const k of ['financialHistorical','exchangeHistorical','salary'])if(h.marketsHistory[k])B[k]=h.marketsHistory[k];}
     bundledKpiSources=B; rebuildKpiSourceCache();
+    safeApply('historySources',()=>applyHistorySources(kpiSourceCache));
+    if(window.Chart){safeApply('history',()=>renderHistory(currentSeries));safeApply('fx',renderFx);}
     if(currentSeries==='trade'&&window.Chart)renderHistory('trade');
   }catch(e){console.warn('bundled macro history',e);}
 })();}

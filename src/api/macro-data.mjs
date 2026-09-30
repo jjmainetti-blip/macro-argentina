@@ -176,9 +176,10 @@ async function usCpiMonthly(){
   const end=new Date().getFullYear(), start=Math.max(2024,end-2);
   const c=new AbortController(); const t=setTimeout(()=>c.abort(),9000);
   try{
-    const r=await fetch('https://api.bls.gov/publicAPI/v2/timeseries/data/',{method:'POST',signal:c.signal,headers:{'content-type':'application/json','user-agent':'MacroArgentinaDashboard/4.0'},body:JSON.stringify({seriesid:['CUUR0000SA0'],startyear:String(start),endyear:String(end)})});
-    if(!r.ok)throw new Error(`BLS ${r.status}`); const j=await r.json();
-    const rows=j?.Results?.series?.[0]?.data||[], monthly={};
+    let rows=[];const monthly={};
+    // v117: si BLS no responde se usa el respaldo (antes se perdía el TCR completo).
+    try{const r=await fetch('https://api.bls.gov/publicAPI/v2/timeseries/data/',{method:'POST',signal:c.signal,headers:{'content-type':'application/json','user-agent':'MacroArgentinaDashboard/4.0'},body:JSON.stringify({seriesid:['CUUR0000SA0'],startyear:String(start),endyear:String(end)})});
+    if(!r.ok)throw new Error(`BLS ${r.status}`); const j=await r.json();rows=j?.Results?.series?.[0]?.data||[];}catch(e){console.warn('BLS',e);}
     for(const x of rows){if(!/^M(0[1-9]|1[0-2])$/.test(x.period))continue;const v=Number(x.value);if(Number.isFinite(v))monthly[`${x.year}-${x.period.slice(1)}`]=v;}
     // Snapshot de respaldo para que la base nunca retroceda si la API BLS limita el rango o falla parcialmente.
     const fallback={'2025-08':323.976,'2026-07':333.918,'2026-08':334.980};
@@ -520,9 +521,12 @@ async function salaryRipte(){
     }
   }catch(e){}
   // La página oficial es la autoridad para los meses más recientes y además evita depender de que el catálogo replique inmediatamente la publicación.
+  // v117: la página oficial es opcional; si no responde (frecuente desde Cloudflare) no se pierde la serie ya leída del CSV/API.
+  try{
   const text=strip(await get(officialUrl)), monthMap={enero:'01',febrero:'02',marzo:'03',abril:'04',mayo:'05',junio:'06',julio:'07',agosto:'08',septiembre:'09',octubre:'10',noviembre:'11',diciembre:'12'};
   const direct=new RegExp('(Enero|Febrero|Marzo|Abril|Mayo|Junio|Julio|Agosto|Septiembre|Octubre|Noviembre|Diciembre)\\s*\\/?\\s*(20\\d{2}|19\\d{2})\\s*\\$?\\s*([\\d.]+(?:,\\d{1,2})?)','gi');
   let m;while((m=direct.exec(text))){const ym=`${m[2]}-${monthMap[m[1].toLowerCase()]}`,v=Number(m[3].replace(/\./g,'').replace(',','.'));if(ym>='1994-07'&&Number.isFinite(v))monthly[ym]=v;}
+  }catch(e){console.warn('RIPTE página oficial',e);}
   const fallback={'2025-01':1234658.40,'2025-02':1310357.80,'2025-03':1363510.33,'2025-04':1402606.61,'2025-05':1428661.30,'2025-06':1468135.75,'2025-07':1510680.81,'2025-08':1530297.32,'2025-09':1551831.75,'2025-10':1593047.33,'2025-11':1611851.61,'2025-12':1633547,'2026-01':1646344.54,'2026-02':1734357.18,'2026-03':1775664.12,'2026-04':1837609.35,'2026-05':1849727.96,'2026-06':1915878.76,'2026-07':1946028.12};for(const [k,v] of Object.entries(fallback))monthly[k]=v;
   const annual={};for(const [ym,v] of Object.entries(monthly).sort())annual[ym.slice(0,4)]=v;
   const k=Object.keys(monthly).sort().at(-1);
@@ -828,17 +832,17 @@ async function fiscalPctGdp(){
 // Devuelve sólo lo que puede refrescarse en vivo; el resto proviene del snapshot incluido (bundled-history.mjs).
 async function activityPulse(){
   const out={status:'ok',source:'Economía / AFCP / INDEC / ACARA / BCRA'};
-  const [fiscal,isac,arrears,credit]=await Promise.allSettled([fiscalPctGdp(),isacHistorical(),arrearsHistorical(),immCreditSaMom()]);
+  // v117: ISAC y mora se toman de sus propias fuentes (mismo grupo) en el handler; aquí no se vuelven a descargar.
+  const [fiscal,credit]=await Promise.allSettled([fiscalPctGdp(),immCreditSaMom()]);
   if(credit.status==='fulfilled'){const e=Object.entries(credit.value).sort(([a],[b])=>a.localeCompare(b)).at(-1);if(e)out.creditLatest={ym:e[0],period:periodEs(e[0]),arsRealMom:e[1]};}
   if(fiscal.status==='fulfilled')out.fiscal=fiscal.value;
-  if(isac.status==='fulfilled'){const e=Object.entries(isac.value.monthlyYoy||{}).sort(([a],[b])=>a.localeCompare(b)).at(-1);if(e)out.isacLatestYoy={ym:e[0],period:periodEs(e[0]),yoy:e[1]};}
-  if(arrears.status==='fulfilled'&&arrears.value.latest)out.arrears=arrears.value.latest;
   return out;
 }
 
 // sin KV se conserva al menos durante la vida del isolate y el frontend mantiene otra copia local.
 let MEMORY_SNAPSHOT=null;
-const SNAPSHOT_KEY='macro:snapshot:v116';
+const SNAPSHOT_PREFIX='macro:snapshot:v117:';
+const MEMORY_SNAPSHOTS={};
 function isPlainObject(v){return !!v&&typeof v==='object'&&!Array.isArray(v);}
 function mergeSnapshot(oldValue,newValue){
   if(Array.isArray(oldValue)||Array.isArray(newValue)){
@@ -861,36 +865,53 @@ function mergeSnapshot(oldValue,newValue){
   }
   return newValue===null||newValue===undefined?oldValue:newValue;
 }
-async function readSnapshot(env){
-  if(env?.MACRO_STORE?.get){try{const x=await env.MACRO_STORE.get(SNAPSHOT_KEY,'json');if(x?.sources)return x;}catch{}}
-  return MEMORY_SNAPSHOT;
+async function readSnapshot(env,group){
+  if(env?.MACRO_STORE?.get){try{const x=await env.MACRO_STORE.get(SNAPSHOT_PREFIX+group,'json');if(x?.sources)return x;}catch{}}
+  return MEMORY_SNAPSHOTS[group]||null;
 }
-async function writeSnapshot(env,ctx,snapshot){
-  MEMORY_SNAPSHOT=snapshot;
-  if(env?.MACRO_STORE?.put){const job=env.MACRO_STORE.put(SNAPSHOT_KEY,JSON.stringify(snapshot));if(ctx?.waitUntil)ctx.waitUntil(job);else try{await job}catch{}}
+async function writeSnapshot(env,ctx,snapshot,group){
+  MEMORY_SNAPSHOTS[group]=snapshot;
+  if(env?.MACRO_STORE?.put){const job=env.MACRO_STORE.put(SNAPSHOT_PREFIX+group,JSON.stringify(snapshot));if(ctx?.waitUntil)ctx.waitUntil(job);else try{await job}catch{}}
 }
-export default async(env={},ctx=null)=>{
-  const stored=await readSnapshot(env);
-  const previous=mergeSnapshot({version:116,sources:BUNDLED_SOURCES},stored||{});
-  const out={version:116,generatedAt:new Date().toISOString(),snapshotMode:env?.MACRO_STORE?.get?'kv+bundled':'bundled+isolate',sources:{}};
-  // v113: cada fuente corre aislada. Un error sincrónico o una función inexistente ya no puede tirar el endpoint completo.
-  const jobs={ipcHistorical:()=>ipcHistorical(),gdpHistorical:()=>gdpHistorical(),emaeHistorical:()=>emaeHistorical(),industryHistorical:()=>industryHistorical(),unemploymentHistorical:()=>unemploymentHistorical(),tradeHistorical:()=>tradeHistorical(),financialHistorical:()=>financialHistorical(),exchangeHistorical:()=>exchangeHistorical(),ipc:()=>ipc(),arca:()=>arca(),icg:()=>icg(),bcra:()=>bcra(),rem:()=>rem(),salary:()=>salaryRipte(),icl:()=>icl(),contractIndices:()=>contractIndices(),isacHistorical:()=>isacHistorical(),creditHistorical:()=>creditHistorical(),arrearsHistorical:()=>arrearsHistorical(),activityPulse:()=>activityPulse(),ilaHistorical:()=>ilaHistorical(),igaHistorical:()=>igaHistorical()};
-  const names=Object.keys(jobs);
-  const results=await Promise.allSettled(names.map(n=>Promise.resolve().then(jobs[n])));
+// v117: el endpoint se divide en grupos. Cloudflare limita los pedidos externos por invocación
+// (50 en el plan gratuito); con todas las fuentes juntas se superaban (66+) y las últimas fallaban.
+// Cada grupo queda holgadamente por debajo del límite y tiene su propio snapshot.
+const JOBS={ipcHistorical:()=>ipcHistorical(),gdpHistorical:()=>gdpHistorical(),emaeHistorical:()=>emaeHistorical(),industryHistorical:()=>industryHistorical(),unemploymentHistorical:()=>unemploymentHistorical(),tradeHistorical:()=>tradeHistorical(),financialHistorical:()=>financialHistorical(),exchangeHistorical:()=>exchangeHistorical(),ipc:()=>ipc(),arca:()=>arca(),icg:()=>icg(),bcra:()=>bcra(),rem:()=>rem(),salary:()=>salaryRipte(),icl:()=>icl(),contractIndices:()=>contractIndices(),isacHistorical:()=>isacHistorical(),creditHistorical:()=>creditHistorical(),arrearsHistorical:()=>arrearsHistorical(),activityPulse:()=>activityPulse(),ilaHistorical:()=>ilaHistorical(),igaHistorical:()=>igaHistorical()};
+export const GROUPS={
+  core:['ipc','arca','icg','bcra','rem','salary','icl','contractIndices'],
+  history:['ipcHistorical','gdpHistorical','industryHistorical','unemploymentHistorical','tradeHistorical'],
+  markets:['financialHistorical','exchangeHistorical'],
+  activity:['emaeHistorical','isacHistorical','creditHistorical','arrearsHistorical','activityPulse'],
+  leading:['ilaHistorical','igaHistorical']
+};
+export default async(env={},ctx=null,request=null)=>{
+  let group='all';try{const g=new URL(request?.url||'http://x/').searchParams.get('group');if(g&&GROUPS[g])group=g;}catch{}
+  const names=group==='all'?Object.keys(JOBS):GROUPS[group];
+  const stored=await readSnapshot(env,group);
+  const bundled={};for(const n of names)if(BUNDLED_SOURCES[n])bundled[n]=BUNDLED_SOURCES[n];
+  if(group==='core'&&BUNDLED_SOURCES.ipcCaba)bundled.ipcCaba=BUNDLED_SOURCES.ipcCaba;
+  const previous=mergeSnapshot({version:117,sources:bundled},stored||{});
+  const out={version:117,group,generatedAt:new Date().toISOString(),snapshotMode:env?.MACRO_STORE?.get?'kv+bundled':'bundled+isolate',sources:{}};
+  const results=await Promise.allSettled(names.map(n=>Promise.resolve().then(JOBS[n])));
   results.forEach((j,i)=>{
     const name=names[i],old=previous?.sources?.[name];
     if(j.status==='fulfilled'){out.sources[name]=mergeSnapshot(old,j.value);}
     else if(old){out.sources[name]={...old,status:old.status==='error'?'snapshot':'ok',snapshotFallback:true,refreshError:String(j.reason?.message||j.reason)};}
     else out.sources[name]={status:'error',error:String(j.reason?.message||j.reason)};
   });
-  // Fuentes que sólo existen en el snapshot (p. ej. IPC CABA) se conservan siempre.
   for(const [name,old] of Object.entries(previous?.sources||{}))if(!out.sources[name])out.sources[name]=old;
-  // Mantener el KPI de ISAC alineado con la serie si ésta se actualizó.
+  // Tarjetas: alinear ISAC, mora y crédito con sus series (mismo grupo "activity").
   const AP=out.sources.activityPulse;
-  if(AP?.isacLatestYoy&&AP.isac&&AP.isacLatestYoy.ym>(AP.isac.ym||'')){AP.isac={...AP.isac,ym:AP.isacLatestYoy.ym,period:AP.isacLatestYoy.period,yoy:AP.isacLatestYoy.yoy,mom:null};}
-  // Crédito: si el IMM trae un mes más nuevo, se actualiza el dato en pesos y se omite el detalle en USD (quedaría desfasado).
-  if(AP?.creditLatest&&AP.credit&&AP.creditLatest.ym>(AP.credit.ym||'')){AP.credit={source:AP.credit.source,ym:AP.creditLatest.ym,period:AP.creditLatest.period,arsRealMom:AP.creditLatest.arsRealMom};}
+  if(AP){
+    const lastOf=o=>Object.entries(o||{}).filter(([k,v])=>/^\d{4}-\d{2}$/.test(k)&&Number.isFinite(Number(v))).sort(([a],[b])=>a.localeCompare(b)).at(-1);
+    const iy=lastOf(out.sources.isacHistorical?.monthlyYoy);
+    if(iy&&AP.isac&&iy[0]>(AP.isac.ym||'')){const sa=out.sources.isacHistorical?.monthlySaMom?.[iy[0]];AP.isac={...AP.isac,ym:iy[0],period:periodEs(iy[0]),yoy:iy[1],mom:Number.isFinite(Number(sa))?Number(sa):null};}
+    const A=out.sources.arrearsHistorical;const at=lastOf(A?.monthlyTotal);
+    if(at&&(!AP.arrears||at[0]>(AP.arrears.ym||ymFromPeriodEs(AP.arrears.period)||''))){const f=A.monthlyFamilies?.[at[0]],c=A.monthlyCompanies?.[at[0]];AP.arrears={...(AP.arrears||{}),ym:at[0],period:periodEs(at[0]),total:at[1],families:Number.isFinite(Number(f))?Number(f):null,companies:Number.isFinite(Number(c))?Number(c):null};}
+    if(AP.creditLatest&&AP.credit&&AP.creditLatest.ym>(AP.credit.ym||'')){AP.credit={source:AP.credit.source,ym:AP.creditLatest.ym,period:AP.creditLatest.period,arsRealMom:AP.creditLatest.arsRealMom};}
+  }
   const ok=Object.values(out.sources).some(x=>x.status==='ok'||x.status==='snapshot');
-  if(ok)await writeSnapshot(env,ctx,out);
+  if(ok)await writeSnapshot(env,ctx,out,group);
   return new Response(JSON.stringify(out),{status:ok?200:503,headers:{'content-type':'application/json; charset=utf-8','cache-control':'public, max-age=60, s-maxage=60, stale-while-revalidate=300','access-control-allow-origin':'*'}});
 };
+function ymFromPeriodEs(s){const m=String(s||'').match(/(ene|feb|mar|abr|may|jun|jul|ago|sep|oct|nov|dic)[a-z]*\s+(20\d{2})/i);if(!m)return null;const i=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'].indexOf(m[1].toLowerCase());return `${m[2]}-${String(i+1).padStart(2,'0')}`;}

@@ -1,4 +1,4 @@
-# Macro Argentina — Cloudflare v116
+# Macro Argentina — Cloudflare v117
 
 Migración de la v63 desde Netlify a Cloudflare Workers + Static Assets.
 
@@ -108,3 +108,14 @@ Chequeo: `npm run validate:snapshot`.
 - **Índice Líder de Actividad (ILA-ARG)**, CICEc (Bolsas de Comercio de Santa Fe y Rosario). El Worker busca el Excel vigente en `cicec.ar/base-de-datos` (`Data_ARG_AAAAMM.xlsx`, hoja "CICEC") y lee nivel, tasa mensual, interanual e índice de difusión. Ojo: en esa hoja los meses son números de Excel y octubre llega como `AAAA.1`; el lector lo contempla. Tarjeta: grande variación mensual; abajo interanual e índice de difusión. Gráfico: variación mensual, últimos 60 meses. CICEc publica ~fin de cada mes.
 - **Índice General de Actividad (IGA-OJF)**, Orlando J. Ferreres & Asociados. El Worker toma el enlace vigente a la síntesis pública (PDF en Google Drive) desde `ojf.com/Informes-Libre-Acceso`, lo descarga y lee la tabla de los últimos ~37 meses con un extractor de texto de PDF propio (sin dependencias). Tarjeta: grande variación mensual desestacionalizada; abajo interanual (igual que EMAE). Gráfico: variación mensual s.e. de los meses publicados. La serie completa de OJF es sólo para clientes; el sitio acumula los meses nuevos a medida que salen (con KV), sin borrar los anteriores. Los últimos 4 meses los revisa OJF y se actualizan solos.
 - Si OJF cambia el formato del PDF o CICEc el de la planilla, el sitio sigue mostrando el último dato incluido y la API informa el error en `refreshError`.
+
+
+## v117 — gráficos de dólar, riesgo país, Merval, tasa y salario
+**Causa**: una sola llamada a `/api/macro-data` hacía 66+ pedidos externos. Cloudflare limita los pedidos por invocación (50 en el plan gratuito) y los que exceden fallan; esos cinco gráficos no tenían histórico local, así que quedaban vacíos.
+
+**Cambios**
+- La API se divide en grupos: `/api/macro-data?group=core|history|markets|activity|leading` (entre 4 y 24 pedidos cada uno). El sitio los pide en paralelo y procesa cada uno al llegar. Sin `group` sigue devolviendo todo (compatibilidad), pero el sitio ya no lo usa.
+- Snapshot por grupo en KV (`macro:snapshot:v117:<grupo>`).
+- Histórico local para mercados y salario (`marketsHistory` en `macro-history.json` y en `bundled-history.mjs`), generado con las mismas funciones del backend sobre datos reales al 30-sep-2026. Diario: últimos 400 días; el resto mensual/anual. La API agrega el diario completo cuando responde.
+- RIPTE: la página de argentina.gob.ar pasa a ser opcional (antes, si no respondía, se perdía toda la serie aunque el CSV oficial ya se hubiera leído).
+- CPI de EE.UU. (BLS): si la API no responde se usa el respaldo; antes se perdía el tipo de cambio real (TCR).

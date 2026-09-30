@@ -36,7 +36,7 @@ export default {
       return withHeaders(await cementMonthly(request));
     }
     if (request.method === 'GET' && url.pathname === '/api/macro-data') {
-      return withHeaders(await macroData(env, ctx));
+      return withHeaders(await macroData(env, ctx, request));
     }
     if (request.method === 'GET' && url.pathname === '/api/calendar-data') {
       return withHeaders(await calendarData());
