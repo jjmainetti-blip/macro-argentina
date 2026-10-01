@@ -147,6 +147,14 @@ Chequeo: `npm run validate:snapshot`.
 - **Carga sobre las fuentes**: `/api/markets` comparte una respuesta de 20 s (Cache API + memoria del isolate); los históricos usados para el cierre anterior se reutilizan 1 hora.
 
 
+## v122 — tarjeta de balanza de pagos (INDEC)
+
+- Nueva tarjeta **Balanza de pagos** (INDEC, trimestral): grande el saldo de la cuenta corriente en millones de USD (superávit/déficit); abajo la diferencia contra el mismo trimestre del año anterior y la variación de reservas internacionales por transacciones.
+- Semáforo: verde = superávit igual o mayor que un año atrás; amarillo = superávit menor, o déficit pero menor que un año atrás; rojo = déficit igual o mayor.
+- Gráfico (últimos 10 años): barras apiladas con los saldos de bienes, servicios, ingreso primario e ingreso secundario, y línea con el saldo de la cuenta corriente.
+- Actualización automática: el Worker lee el archivo SDMX oficial `https://www.indec.gob.ar/ftp/cuadros/economia/BOP.xml`, que INDEC reemplaza en cada publicación trimestral. Va en un grupo propio de la API (`/api/macro-data?group=external`, 1 pedido externo) para no sumar CPU a los otros grupos. Si INDEC no responde, se usa el último snapshot o la línea de base incluida (2006-T1 a 2026-T2, publicada el 29/09/2026).
+- `scripts/validate-snapshot.mjs` verifica que la cuenta corriente sea igual a la suma de sus componentes en todos los trimestres.
+
 ## v121 — gráfico del dólar: series diarias y mensuales desde 1991
 - `public/fx-daily.json` (≈120 KB, formato compacto) con el dólar **libre** y el **oficial** diarios desde el 1-abr-1991:
   - 1991-04 a 2001-12: 1 peso = 1 USD (convertibilidad, días hábiles).

@@ -851,7 +851,7 @@ async function activityPulse(){
 
 // sin KV se conserva al menos durante la vida del isolate y el frontend mantiene otra copia local.
 let MEMORY_SNAPSHOT=null;
-const SNAPSHOT_PREFIX='macro:snapshot:v121:';
+const SNAPSHOT_PREFIX='macro:snapshot:v122:';
 const MEMORY_SNAPSHOTS={};
 function isPlainObject(v){return !!v&&typeof v==='object'&&!Array.isArray(v);}
 function mergeSnapshot(oldValue,newValue){
@@ -883,16 +883,54 @@ async function writeSnapshot(env,ctx,snapshot,group){
   MEMORY_SNAPSHOTS[group]=snapshot;
   if(env?.MACRO_STORE?.put){const job=env.MACRO_STORE.put(SNAPSHOT_PREFIX+group,JSON.stringify(snapshot));if(ctx?.waitUntil)ctx.waitUntil(job);else try{await job}catch{}}
 }
+// ===================== v122 · Balanza de pagos (INDEC) =====================
+// INDEC publica la balanza de pagos trimestral completa en SDMX-ML (estructura IMF BOP 1.8):
+// https://www.indec.gob.ar/ftp/cuadros/economia/BOP.xml (2006-T1 en adelante, se reemplaza en cada publicación).
+// Se recorren sólo los encabezados <Series> (≈420) y se leen las observaciones de las series necesarias.
+const BOP_URL='https://www.indec.gob.ar/ftp/cuadros/economia/BOP.xml';
+const BOP_WANT={ // clave: [REF_SECTOR, ACCOUNTING_ENTRY, INT_ACC_ITEM, FUNCTIONAL_CAT, INSTR_ASSET|null]
+  CA:['S1','B','CA','_Z',null],G:['S1','B','G','_Z',null],S:['S1','B','S','_Z',null],IN1:['S1','B','IN1','_Z',null],IN2:['S1','B','IN2','_Z',null],
+  KA:['S1','B','KA','_Z',null],FA:['S1','N','FA','_T','F'],EO:['S1','N','EO','_Z',null],RES:['S121','A','FA','R','F']
+};
+export function parseBopXml(t){
+  const out={};let prepared=null;const pm=t.match(/<message:Prepared>([^<]+)</);if(pm)prepared=pm[1].slice(0,10);
+  let pos=0;
+  while(true){
+    const i=t.indexOf('<Series ',pos);if(i<0)break;const j=t.indexOf('>',i);const head=t.slice(i+8,j);const end=t.indexOf('</Series>',j);pos=end<0?j:end;
+    const a={};for(const m of head.matchAll(/(\w+)="([^"]*)"/g))a[m[1]]=m[2];
+    if(a.FREQ!=='Q'||a.COUNTERPART_AREA!=='W1'||a.UNIT_MEASURE!=='USD')continue;
+    for(const [k,[sec,acc,item,cat,inst]] of Object.entries(BOP_WANT)){
+      if(out[k]||a.REF_SECTOR!==sec||a.ACCOUNTING_ENTRY!==acc||a.INT_ACC_ITEM!==item||a.FUNCTIONAL_CAT!==cat||(inst&&a.INSTR_ASSET!==inst))continue;
+      const mult=10**(Number(a.UNIT_MULT||6)-6),q={};
+      for(const o of t.slice(j,end).matchAll(/TIME_PERIOD="(\d{4})-Q([1-4])" OBS_VALUE="(-?[\d.eE+-]+)"/g)){const v=Number(o[3])*mult;if(Number.isFinite(v))q[`${o[1]}-Q${o[2]}`]=Math.round(v*10)/10;}
+      if(Object.keys(q).length)out[k]=q;
+    }
+    if(end<0)break;
+  }
+  return {prepared,series:out};
+}
+async function bopHistorical(){
+  const c=new AbortController(),tm=setTimeout(()=>c.abort(),25000);
+  try{
+    const r=await fetch(BOP_URL,{signal:c.signal,headers:{'user-agent':'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36','accept':'application/xml,text/xml,*/*'}});
+    if(!r.ok)throw new Error(`INDEC BOP ${r.status}`);
+    const {prepared,series}=parseBopXml(await r.text());
+    if(!series.CA||Object.keys(series.CA).length<20)throw new Error('INDEC BOP: cuenta corriente no encontrada');
+    const last=Object.keys(series.CA).sort().at(-1);
+    return {status:'ok',source:'INDEC — Balanza de pagos (SDMX)',url:BOP_URL,prepared,latest:last,quarterly:series};
+  }finally{clearTimeout(tm);}
+}
 // v117: el endpoint se divide en grupos. Cloudflare limita los pedidos externos por invocación
 // (50 en el plan gratuito); con todas las fuentes juntas se superaban (66+) y las últimas fallaban.
 // Cada grupo queda holgadamente por debajo del límite y tiene su propio snapshot.
-const JOBS={ipcHistorical:()=>ipcHistorical(),gdpHistorical:()=>gdpHistorical(),emaeHistorical:()=>emaeHistorical(),industryHistorical:()=>industryHistorical(),unemploymentHistorical:()=>unemploymentHistorical(),tradeHistorical:()=>tradeHistorical(),financialHistorical:()=>financialHistorical(),exchangeHistorical:()=>exchangeHistorical(),ipc:()=>ipc(),arca:()=>arca(),icg:()=>icg(),bcra:()=>bcra(),rem:()=>rem(),salary:()=>salaryRipte(),icl:()=>icl(),contractIndices:()=>contractIndices(),isacHistorical:()=>isacHistorical(),creditHistorical:()=>creditHistorical(),arrearsHistorical:()=>arrearsHistorical(),activityPulse:()=>activityPulse(),ilaHistorical:()=>ilaHistorical(),igaHistorical:()=>igaHistorical()};
+const JOBS={ipcHistorical:()=>ipcHistorical(),gdpHistorical:()=>gdpHistorical(),emaeHistorical:()=>emaeHistorical(),industryHistorical:()=>industryHistorical(),unemploymentHistorical:()=>unemploymentHistorical(),tradeHistorical:()=>tradeHistorical(),financialHistorical:()=>financialHistorical(),exchangeHistorical:()=>exchangeHistorical(),ipc:()=>ipc(),arca:()=>arca(),icg:()=>icg(),bcra:()=>bcra(),rem:()=>rem(),salary:()=>salaryRipte(),icl:()=>icl(),contractIndices:()=>contractIndices(),isacHistorical:()=>isacHistorical(),creditHistorical:()=>creditHistorical(),arrearsHistorical:()=>arrearsHistorical(),activityPulse:()=>activityPulse(),ilaHistorical:()=>ilaHistorical(),igaHistorical:()=>igaHistorical(),bopHistorical:()=>bopHistorical()};
 export const GROUPS={
   core:['ipc','arca','icg','bcra','rem','salary','icl','contractIndices'],
   history:['ipcHistorical','gdpHistorical','industryHistorical','unemploymentHistorical','tradeHistorical'],
   markets:['financialHistorical','exchangeHistorical'],
   activity:['emaeHistorical','isacHistorical','creditHistorical','arrearsHistorical','activityPulse'],
-  leading:['ilaHistorical','igaHistorical']
+  leading:['ilaHistorical','igaHistorical'],
+  external:['bopHistorical'] // v122: grupo propio (XML de 3,3 MB) para no sumar CPU a la invocación del ILA
 };
 export default async(env={},ctx=null,request=null)=>{
   let group='all';try{const g=new URL(request?.url||'http://x/').searchParams.get('group');if(g&&GROUPS[g])group=g;}catch{}
@@ -900,8 +938,8 @@ export default async(env={},ctx=null,request=null)=>{
   const stored=await readSnapshot(env,group);
   const bundled={};for(const n of names)if(BUNDLED_SOURCES[n])bundled[n]=BUNDLED_SOURCES[n];
   if(group==='core'&&BUNDLED_SOURCES.ipcCaba)bundled.ipcCaba=BUNDLED_SOURCES.ipcCaba;
-  const previous=mergeSnapshot({version:121,sources:bundled},stored||{});
-  const out={version:121,group,generatedAt:new Date().toISOString(),snapshotMode:env?.MACRO_STORE?.get?'kv+bundled':'bundled+isolate',sources:{}};
+  const previous=mergeSnapshot({version:122,sources:bundled},stored||{});
+  const out={version:122,group,generatedAt:new Date().toISOString(),snapshotMode:env?.MACRO_STORE?.get?'kv+bundled':'bundled+isolate',sources:{}};
   const results=await Promise.allSettled(names.map(n=>Promise.resolve().then(JOBS[n])));
   results.forEach((j,i)=>{
     const name=names[i],old=previous?.sources?.[name];

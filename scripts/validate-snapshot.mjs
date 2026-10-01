@@ -30,7 +30,9 @@ checkMap('Patentamientos',h.autosMonthly,48);
  if(n(M.salary?.monthly)<300)fail('RIPTE: histórico local corto');}
 // v116
 checkMap('ILA',h.ilaMonthly,120);for(const [k,v] of Object.entries(h.ilaMonthly))if(!Number.isFinite(v.level)||!Number.isFinite(v.mom))fail(`ILA inválido ${k}`);
-checkMap('IGA',h.igaMonthly,36);for(const [k,v] of Object.entries(h.igaMonthly))if(!Number.isFinite(v.momSa)||!Number.isFinite(v.yoy))fail(`IGA inválido ${k}`);
+checkMap('IGA',h.igaMonthly,36);
+{const Q=h.bopQuarterly||{};for(const k of ['CA','G','S','IN1','IN2','FA','RES']){const n=Object.keys(Q[k]||{}).filter(q=>/^\d{4}-Q[1-4]$/.test(q)).length;if(n<60)fail(`Balanza de pagos ${k}: ${n} trimestres`);}
+ const ca=Q.CA||{};for(const q of Object.keys(ca)){const sum=['G','S','IN1','IN2'].reduce((t,k)=>t+Number(Q[k]?.[q]||0),0);if(Math.abs(sum-ca[q])>5)fail(`BdP ${q}: componentes ${sum.toFixed(1)} ≠ CC ${ca[q]}`);}}for(const [k,v] of Object.entries(h.igaMonthly))if(!Number.isFinite(v.momSa)||!Number.isFinite(v.yoy))fail(`IGA inválido ${k}`);
 // v114
 checkMap('EMAE s.e.',h.emaeMonthlySaMom,60);notFraction('EMAE s.e.',h.emaeMonthlySaMom);
 checkMap('Crédito s.e.',h.creditMonthlySaRealMom,55);
