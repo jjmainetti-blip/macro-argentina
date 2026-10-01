@@ -7,9 +7,10 @@
   <meta name="theme-color" content="#071b35">
   <title>Macro Argentina | Indicadores económicos</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 rx=%2222%22 fill=%22%230b5bd3%22/><path d=%22M22 69V50h12v19zm22 0V36h12v33zm22 0V22h12v47z%22 fill=%22white%22/></svg>">
-  <link rel="stylesheet" href="styles.css?v=122">
+  <link rel="stylesheet" href="styles.css?v=123">
   <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
-  <script defer src="app.js?v=122"></script>
+  <script defer src="app.js?v=123"></script>
+  <script defer src="birth.js?v=123"></script>
 </head>
 <body>
 <a class="skip-link" href="#main">Saltar al contenido</a>
@@ -20,7 +21,7 @@
   </a>
   <button class="menu-btn" id="menuBtn" aria-expanded="false" aria-controls="nav">☰<span class="sr-only">Abrir menú</span></button>
   <nav id="nav" aria-label="Navegación principal">
-    <a href="#tablero">Tablero</a><a href="#tipo-cambio">Tipo de cambio</a><a href="#historicos">Históricos</a><a href="#expectativas">Expectativas</a><a href="#calculadoras">Calculadoras</a><a href="#agenda">Agenda</a><a href="#fuentes">Fuentes</a>
+    <a href="#tablero">Tablero</a><a href="#tipo-cambio">Tipo de cambio</a><a href="#historicos">Históricos</a><a href="#expectativas">Expectativas</a><a href="#calculadoras">Calculadoras</a><a href="#nacimiento">Cuando naciste</a><a href="#agenda">Agenda</a><a href="#fuentes">Fuentes</a>
   </nav>
 </header>
 
@@ -104,6 +105,12 @@
   <div class="calc-grid single-calc">
     <form class="calc-card calc-card-wide" id="updateCalc"><div class="calc-icon">↻</div><h3>Calculadora de actualización</h3><p>Actualizá un monto entre dos períodos usando el índice pactado.</p><label>Índice<select id="updateIndex"><option value="ipc">IPC · INDEC</option><option value="icl">ICL · BCRA</option><option value="cer">CER · BCRA</option><option value="uva">UVA · BCRA</option></select></label><div class="calc-latest" id="updateLatest">Último dato vigente: cargando…</div><label>Desde<div class="date-pair"><span id="updateStartDayWrap" hidden><select id="updateStartDay" aria-label="Día inicial"></select></span><select id="updateStartMonth"></select><select id="updateStartYear"></select></div></label><label>Hasta<div class="date-pair"><span id="updateEndDayWrap" hidden><select id="updateEndDay" aria-label="Día final"></select></span><select id="updateEndMonth"></select><select id="updateEndYear"></select></div></label><label>Monto inicial<input id="updateAmount" type="number" min="0" step="100" placeholder="$ 500.000"></label><button class="btn primary" type="submit">Calcular actualización</button><div class="result" id="updateResult" aria-live="polite">Elegí el índice y el período.</div><small id="updateMethod">IPC: se compone la variación mensual publicada por INDEC. CER, UVA e ICL permiten seleccionar fecha exacta y utilizan el valor diario oficial vigente del BCRA.</small></form>
   </div>
+</section>
+
+<section class="section birth-section" id="nacimiento" aria-labelledby="beTitle">
+  <div class="section-title"><div><span class="eyebrow">Viaje en el tiempo</span><h2 id="beTitle">La economía cuando naciste</h2></div><p>Elegí tu mes y año de nacimiento para ver quién gobernaba, cuánto subían los precios, cuánto rendía un sueldo y cuánto costaban algunas cosas. Sólo se muestran datos publicados, nunca estimaciones.</p></div>
+  <div class="be-picker"><label>Mes<select id="beMonth" aria-label="Mes de nacimiento"></select></label><label>Año<select id="beYear" aria-label="Año de nacimiento"></select></label></div>
+  <div class="be-result" id="beResult" aria-live="polite"><p class="be-na">Cargando series históricas…</p></div>
 </section>
 
 <section class="section" id="agenda">

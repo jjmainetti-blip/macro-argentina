@@ -147,6 +147,19 @@ Chequeo: `npm run validate:snapshot`.
 - **Carga sobre las fuentes**: `/api/markets` comparte una respuesta de 20 s (Cache API + memoria del isolate); los históricos usados para el cierre anterior se reutilizan 1 hora.
 
 
+## v123 — “La economía cuando naciste”
+
+- Nueva sección (menú: **Cuando naciste**, ancla `#nacimiento`, se puede compartir un mes con `#nacimiento-AAAA-MM`). Se elige mes y año (enero 1943 → hoy) y muestra:
+  - **Presidente/a y ministro/a de Economía** de ese mes, con foto (Wikipedia / Wikimedia Commons) y período en el cargo; si hubo cambios durante el mes, se listan también.
+  - **Inflación** mensual e interanual (IPC INDEC 1943–2006, IPC San Luis 2007–2016, IPC Nacional desde 2017; la misma cadena del gráfico histórico).
+  - **PBI**: variación real del año (Cuentas Nacionales 1935–62 hasta 1960; Banco Mundial/INDEC desde 1961).
+  - **Sueldo a valores de hoy**: RIPTE desde julio 1994. Antes no existe una serie oficial de sueldo promedio, así que se usa el **salario mínimo, vital y móvil** (desde 1965), con la aclaración en pantalla. Se compara con el valor actual de la misma serie.
+  - **Dólar oficial** en la moneda de la época y a valores de hoy (**TCR bilateral**: ajustado por IPC de Argentina y de EE.UU.); dólar libre y brecha cuando hay dato (mensual desde 1991, referencia anual antes).
+  - **Moneda vigente** (m$n, $ ley 18.188, $a, austral, peso) y su equivalencia con el peso actual; avisa si la moneda cambió ese mes.
+  - **¿Cuánto costaba?**: pan, asado, leche (INDEC, precios promedio GBA), auto 0 km más barato y departamento de 50 m² en CABA, expresados en sueldos (o kg/litros por sueldo) entonces y hoy. Se usa el precio publicado más cercano (≤ 12 meses para alimentos, ≤ 18 para auto y departamento) y cada precio enlaza a su fuente. No se estima nada: sin dato, se indica “Sin dato para esa época”.
+- Datos: `public/birth-economy.json` (≈165 KB, se carga sólo cuando la sección se acerca a la pantalla) y `public/birth.js`. Todos los montos están guardados en pesos actuales equivalentes; el navegador los convierte a la moneda de cada época.
+- Para regenerar el JSON: `python3 scripts/build-birth-economy.py <carpeta>` con los insumos descriptos en el encabezado del script.
+
 ## v122 — tarjeta de balanza de pagos (INDEC)
 
 - Nueva tarjeta **Balanza de pagos** (INDEC, trimestral): grande el saldo de la cuenta corriente en millones de USD (superávit/déficit); abajo la diferencia contra el mismo trimestre del año anterior y la variación de reservas internacionales por transacciones.

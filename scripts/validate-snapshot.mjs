@@ -41,3 +41,10 @@ for(const [n,o] of [['Mora familias',h.arrearsMonthlyFamilies],['Mora empresas',
 const idx=Object.fromEntries(h.ipcRows.map(x=>[x.date,x.index]));
 for(const d of monthKeys(h.arcaYoy).slice(-60)){const [y,m]=d.split('-'),p=`${+y-1}-${m}`;if(!Number.isFinite(idx[d])||!Number.isFinite(idx[p]))fail(`Recaudación real sin IPC: ${d}`);}
 console.log(JSON.stringify({ok:true,counts:{ipc:h.ipcRows.length,ipi:monthKeys(h.ipiMonthlyYoy).length,isac:monthKeys(h.isacMonthlyYoy).length,trade:monthKeys(h.tradeMonthly).length,arca:monthKeys(h.arcaYoy).length,icg:icg.length,emae:monthKeys(h.emaeMonthlyYoy).length,credit:monthKeys(h.creditMonthlyYoy).length,arrears:mora.length,fiscal:monthKeys(h.fiscalPctGDP.primary).length,autos:monthKeys(h.autosMonthly).length},ranges:{trade:[monthKeys(h.tradeMonthly).at(-60),monthKeys(h.tradeMonthly).at(-1)],arca:[monthKeys(h.arcaYoy).at(-60),monthKeys(h.arcaYoy).at(-1)],icg:[icg[0],icg.at(-1)]}},null,2));
+
+// v123 · La economía cuando naciste
+{const B=JSON.parse(fs.readFileSync(new URL('../public/birth-economy.json',import.meta.url)));const n=B.cpi.length;
+ for(const k of ['cpi','usCpi','fx','fxFree','smvm','ripte'])if(B[k].length!==n)fail(`birth ${k}: largo ${B[k].length} ≠ ${n}`);
+ if(B.cpi.filter(Number.isFinite).length<990)fail('birth: IPC incompleto');
+ for(const L of [B.presidents,B.ministers]){for(let i=1;i<L.length;i++)if(L[i].start<L[i-1].start)fail(`birth: orden ${L[i].name}`);if(L.at(-1).end!==null)fail('birth: falta el cargo vigente');}
+ if(B.presidents[0].start>'1943-01-01')fail('birth: presidentes no cubren 1943');}
