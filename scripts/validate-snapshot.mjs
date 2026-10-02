@@ -8,7 +8,7 @@ const ipcDates=h.ipcRows.map(x=>x.date);if(new Set(ipcDates).size!==ipcDates.len
 checkMap('IPI',h.ipiMonthlyYoy,60);
 checkMap('ISAC',h.isacMonthlyYoy,60);
 checkMap('Balanza',h.tradeMonthly,60,'2021-09','2026-08');
-checkMap('Recaudación',h.arcaYoy,60,'2021-09','2026-08');
+checkMap('Recaudación',h.arcaYoy,60,'2021-10','2026-09');
 const icg=checkMap('ICG',h.icgMonthly,250);if(icg[0]!=='2001-11')fail(`ICG inicio ${icg[0]}`);
 // v113: históricos de tarjetas que antes dependían sólo de /api/macro-data.
 const notFraction=(name,o)=>{const v=Object.values(o||{}).map(Number);if(Math.max(...v.map(Math.abs))<=1.5)fail(`${name}: valores parecen fracción, no %`);};
@@ -39,7 +39,7 @@ checkMap('Crédito s.e.',h.creditMonthlySaRealMom,55);
 for(const [n,o] of [['Mora familias',h.arrearsMonthlyFamilies],['Mora empresas',h.arrearsMonthlyCompanies]]){checkMap(n,o,120);if(monthKeys(o).at(-1)!==mora.at(-1))fail(`${n}: no termina en ${mora.at(-1)}`);}
 // Real revenue must be computable for all of the last 60 months.
 const idx=Object.fromEntries(h.ipcRows.map(x=>[x.date,x.index]));
-for(const d of monthKeys(h.arcaYoy).slice(-60)){const [y,m]=d.split('-'),p=`${+y-1}-${m}`;if(!Number.isFinite(idx[d])||!Number.isFinite(idx[p]))fail(`Recaudación real sin IPC: ${d}`);}
+{const lastIpc=Object.keys(idx).sort().at(-1);for(const d of monthKeys(h.arcaYoy).slice(-60)){if(d>lastIpc)continue;/* ARCA publica antes que el IPC: ese mes se muestra nominal */const [y,m]=d.split('-'),p=`${+y-1}-${m}`;if(!Number.isFinite(idx[d])||!Number.isFinite(idx[p]))fail(`Recaudación real sin IPC: ${d}`);}}
 console.log(JSON.stringify({ok:true,counts:{ipc:h.ipcRows.length,ipi:monthKeys(h.ipiMonthlyYoy).length,isac:monthKeys(h.isacMonthlyYoy).length,trade:monthKeys(h.tradeMonthly).length,arca:monthKeys(h.arcaYoy).length,icg:icg.length,emae:monthKeys(h.emaeMonthlyYoy).length,credit:monthKeys(h.creditMonthlyYoy).length,arrears:mora.length,fiscal:monthKeys(h.fiscalPctGDP.primary).length,autos:monthKeys(h.autosMonthly).length},ranges:{trade:[monthKeys(h.tradeMonthly).at(-60),monthKeys(h.tradeMonthly).at(-1)],arca:[monthKeys(h.arcaYoy).at(-60),monthKeys(h.arcaYoy).at(-1)],icg:[icg[0],icg.at(-1)]}},null,2));
 
 // v123 · La economía cuando naciste

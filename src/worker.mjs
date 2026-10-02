@@ -1,4 +1,4 @@
-import macroData from './api/macro-data.mjs';
+import macroData, { GROUPS } from './api/macro-data.mjs';
 import calendarData from './api/calendar-data.mjs';
 import marketsData from './api/markets.mjs';
 import tradeMonthly from './api/trade-monthly.mjs';
@@ -48,5 +48,18 @@ export default {
       });
     }
     return withHeaders(await env.ASSETS.fetch(request));
+  },
+
+  // v125 · Revisión programada (Cron Trigger, una vez por hora). Cada ejecución actualiza UN grupo para
+  // respetar el límite de 50 pedidos externos por invocación del plan gratuito. El grupo "core"
+  // (IPC, ARCA, ICG, BCRA, REM, salarios, índices) va en las horas pares; el resto rota en las impares.
+  // Los resultados quedan en KV (MACRO_STORE), así el sitio conserva cada dato nuevo aunque nadie lo visite.
+  async scheduled(event, env, ctx) {
+    const hour = new Date(event.scheduledTime || Date.now()).getUTCHours();
+    const others = Object.keys(GROUPS).filter(g => g !== 'core');
+    const group = hour % 2 === 0 ? 'core' : others[((hour - 1) / 2) % others.length];
+    ctx.waitUntil(macroData(env, ctx, new Request(`https://cron.invalid/api/macro-data?group=${group}`), { force: true })
+      .then(r => r.json()).then(j => console.log(`cron ${group}: guardado=${j.stored} fuentes=${Object.keys(j.sources || {}).length}`))
+      .catch(e => console.log(`cron ${group}: error ${e?.message || e}`)));
   }
 };

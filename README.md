@@ -147,6 +147,26 @@ Chequeo: `npm run validate:snapshot`.
 - **Carga sobre las fuentes**: `/api/markets` comparte una respuesta de 20 s (Cache API + memoria del isolate); los históricos usados para el cierre anterior se reutilizan 1 hora.
 
 
+## v126 — recaudación real estimada con el REM
+
+- Mientras INDEC no publica el IPC del mes, la tarjeta de recaudación calcula la variación **real** con la inflación mensual esperada por el **REM del BCRA** (mediana): índice IPC del último mes publicado × (1 + REM). Hasta dos meses encadenados.
+- La tarjeta lo indica: “interanual real estimada” y “IPC estimado con REM (1,8% en sep 2026)”; el gráfico marca ese mes como “(est.)”. Cuando INDEC publica el IPC, se reemplaza solo por el cálculo oficial.
+- Backend: `rem()` ahora lee el Excel de tablas del REM más reciente (`relevamiento-expectativas-mercado-tablas-AAAA-MM.xlsx`, hoja “Cuadros de resultados”, bloque IPC nivel general, filas “var. % mensual”) → `sources.rem.cpiExpected.monthly`. Línea de base: REM de agosto 2026 en `macro-history.json` (`remCpiExpected`).
+
+## v125 — revisión automática y memoria permanente (Cloudflare KV + Cron)
+
+- `wrangler.jsonc`: KV `MACRO_STORE` (namespace `macro-argentina-store`, id `e8a8039f8ebd44eaac002420f0174a38`) y Cron Trigger `17 * * * *`.
+- `src/worker.mjs` → `scheduled()`: cada hora actualiza un grupo de `/api/macro-data` (horas pares: `core`; impares: rotan `history`, `markets`, `activity`, `leading`, `external`). Así cada invocación respeta el límite de 50 pedidos externos del plan gratuito.
+- Snapshots en KV (`macro:snapshot:v125:<grupo>`): sólo se escriben si cambian los datos y como máximo cada 20 minutos por grupo en visitas (la revisión programada siempre puede escribir) → < 500 escrituras/día, dentro del límite gratuito de 1.000.
+- Control: Workers → macro-argentina-dashboard → Logs muestra `cron <grupo>: guardado=kv|unchanged …` en cada ejecución.
+
+## v124 — recaudación ARCA: se toma siempre el último comunicado
+
+- Causa del atraso: el Worker leía siempre la misma página de ARCA (la novedad de agosto, `id=5882`), pero ARCA publica cada mes una novedad nueva con otro `id`. Además, el dato leído quedaba sólo como “último dato” y no se agregaba a la serie que usa la tarjeta.
+- Ahora el Worker abre la última novedad conocida, sigue los enlaces “Recaudación tributaria de <mes>” del recuadro *Últimas novedades* y se queda con el mes más reciente; ese mes se agrega al histórico (tarjeta y gráfico). El año se deduce de la fecha “Publicado: dd/mm/aaaa” (la de diciembre sale en enero).
+- Lectura de texto más tolerante (acentos como entidades HTML, “incremento/aumento interanual”, montos en millones o billones) y agente de navegador para ARCA.
+- Línea de base actualizada con septiembre 2026: $ 21.358.918 millones, +38,3% interanual. Mientras INDEC no publique el IPC de septiembre, la tarjeta muestra la variación nominal; cuando salga, pasa sola a real.
+
 ## v123 — “La economía cuando naciste”
 
 - Nueva sección (menú: **Cuando naciste**, ancla `#nacimiento`, se puede compartir un mes con `#nacimiento-AAAA-MM`). Se elige mes y año (enero 1943 → hoy) y muestra:

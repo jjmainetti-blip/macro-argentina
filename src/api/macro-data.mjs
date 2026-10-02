@@ -6,7 +6,7 @@ import { BUNDLED_SOURCES } from './bundled-history.mjs';
 const SERIES_API='https://apis.datos.gob.ar/series/api/series/';
 const IPC_ID='148.3_INIVELNAL_DICI_M_26';
 const URLS={
-  arca:'https://servicioscf.arca.gob.ar/publico/sitio/contenido/novedad/ver.aspx?id=5882',
+  arca:'https://servicioscf.arca.gob.ar/publico/sitio/contenido/novedad/ver.aspx?id=5938',
   icg:'https://www.utdt.edu/ver_contenido.php?id_contenido=1439&id_item_menu=2964',
   rem:'https://www.bcra.gob.ar/relevamiento-expectativas-mercado-rem/',
   bcra:'https://www.bcra.gob.ar/principales-variables/',
@@ -21,7 +21,7 @@ async function get(url,type='text'){
   const promise=(async()=>{
     const c=new AbortController(); const t=setTimeout(()=>c.abort(),25000);
     // v118: algunos sitios oficiales (BCRA) rechazan agentes no-navegador; se usa uno estándar.
-    const ua=/bcra\.gob\.ar|argentina\.gob\.ar|indec\.gob\.ar/.test(url)?'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36':'MacroArgentinaDashboard/3.0 (+public economic dashboard)';
+    const ua=/bcra\.gob\.ar|argentina\.gob\.ar|indec\.gob\.ar|arca\.gob\.ar|afip\.gob\.ar/.test(url)?'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36':'MacroArgentinaDashboard/3.0 (+public economic dashboard)';
     try{const r=await fetch(url,{signal:c.signal,headers:{'user-agent':ua,'accept-language':'es-AR,es;q=.9'}});if(!r.ok)throw new Error(`${r.status} ${r.statusText}`);return type==='json'?r.json():r.text();}
     finally{clearTimeout(t)}
   })();
@@ -46,7 +46,7 @@ function yoyFromRows(rows){const levels={};for(const r of rows||[]){const k=Stri
 function fractionMapToPct(map){const vals=Object.values(map||{}).map(Number).filter(Number.isFinite);if(vals.length>=12&&Math.max(...vals.map(Math.abs))<=1.5){const out={};for(const [k,v] of Object.entries(map))out[k]=round(Number(v)*100,1);return out;}return map;}
 const MONTHS_ES=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
 const periodEs=ym=>`${MONTHS_ES[Number(ym.slice(5,7))-1]} ${ym.slice(0,4)}`;
-const strip=s=>s.replace(/<script[\s\S]*?<\/script>/gi,' ').replace(/<style[\s\S]*?<\/style>/gi,' ').replace(/<[^>]+>/g,' ').replace(/&nbsp;|&#160;/gi,' ').replace(/&[a-z]+;/gi,' ').replace(/\s+/g,' ').trim();
+const strip=s=>s.replace(/<script[\s\S]*?<\/script>/gi,' ').replace(/<style[\s\S]*?<\/style>/gi,' ').replace(/<[^>]+>/g,' ').replace(/&nbsp;|&#160;/gi,' ').replace(/&#(\d+);/g,(_,n)=>String.fromCharCode(+n)).replace(/&#x([0-9a-f]+);/gi,(_,n)=>String.fromCharCode(parseInt(n,16))).replace(/&([aeiouAEIOU])(acute|uml);/g,'$1').replace(/&([nN])tilde;/g,(_,c)=>c==='n'?'ñ':'Ñ').replace(/&amp;/gi,'&').replace(/&[a-z]+;/gi,' ').replace(/\s+/g,' ').trim();
 
 function parseCsv(text){
   const first=(text.split(/\r?\n/).find(Boolean)||''); const sep=(first.match(/;/g)||[]).length>(first.match(/,/g)||[]).length?';':',';
@@ -414,8 +414,25 @@ async function ipc(){
   const year=last.date.slice(0,4), decPrev=rows.find(r=>r.date===`${Number(year)-1}-12`);
   return {status:'ok',source:'Datos Argentina / INDEC',sourceUrl:'https://www.datos.gob.ar/series/api',updated:last.date,latest:{value:monthly.at(-1).value,yoy:round(pct(last.index,prevYear.index),1),ytd:decPrev?round(pct(last.index,decPrev.index),1):null},monthly,displayMonthly:monthly.slice(-72)};
 }
+const ARCA_MONTHS={enero:1,febrero:2,marzo:3,abril:4,mayo:5,junio:6,julio:7,agosto:8,septiembre:9,setiembre:9,octubre:10,noviembre:11,diciembre:12};
+export function parseArcaRelease(text,now=new Date()){
+  const t=String(text||'').replace(/\s+/g,' ');const MON='(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)';
+  const re=new RegExp(`(?:recursos tributarios|recaudaci[oó]n(?: tributaria)?(?: total)?(?: nacional)?)[^.]{0,60}?\\b${MON}\\b(?:\\s+(?:de|del)?\\s*(20\\d{2}))?([^%]{0,400}?)(-?[\\d.]+(?:,\\d+)?)\\s*%`,'gi');
+  let m;const found=[];
+  while((m=re.exec(t))){
+    const mid=m[3]||'';if(!/interanual|respecto (?:de|a|al) (?:igual|mismo)|i\.a\./i.test(mid+t.slice(re.lastIndex,re.lastIndex+40)))continue;
+    if(!/(variaci[oó]n|increment|aument|suba|crec|ca[ií]d|baj)/i.test(mid))continue;
+    const amt=mid.match(/\$\s*([\d.]+(?:,\d+)?)\s*(millones|billones|mil millones)?/i);
+    const month=ARCA_MONTHS[m[1].toLowerCase()];let year=m[2]?Number(m[2]):now.getUTCFullYear();
+    if(!m[2]&&month>now.getUTCMonth()+1)year--;
+    let yoy=Number(m[4].replace(/\./g,'').replace(',','.'));if(/ca[ií]d|baj/i.test(mid)&&yoy>0)yoy=-yoy;
+    let value=null;if(amt){value=Number(amt[1].replace(/\./g,'').replace(',','.'));const u=(amt[2]||'millones').toLowerCase();if(u==='billones')value*=1e6;else if(u==='mil millones')value*=1e3;}
+    if(Number.isFinite(yoy)&&Math.abs(yoy)<1000)found.push({ym:`${year}-${String(month).padStart(2,'0')}`,yoy:round(yoy,1),value,period:`${m[1].toLowerCase()} ${year}`});
+  }
+  return found.sort((a,b)=>b.ym.localeCompare(a.ym))[0]||null;
+}
 async function arca(){
-  const history={'2025-09':20.2,'2025-10':26.5,'2025-11':19.7,'2025-12':27.0,'2026-01':22.0,'2026-02':20.1,'2026-03':26.2,'2026-04':27.2,'2026-05':35.6,'2026-06':23.7,'2026-07':35.1,'2026-08':33.5};
+  const history={'2025-09':20.2,'2025-10':26.5,'2025-11':19.7,'2025-12':27.0,'2026-01':22.0,'2026-02':20.1,'2026-03':26.2,'2026-04':27.2,'2026-05':35.6,'2026-06':23.7,'2026-07':35.1,'2026-08':33.5,'2026-09':38.3};
   try{const x=await seriesRows('142.3_TOTAL_2001_M_26',{start:'2020-01-01'});const levels={};for(const r of x.rows){const d=String(r.date).slice(0,7);if(/^\d{4}-\d{2}$/.test(d))levels[d]=r.value;}for(const [d,v] of Object.entries(levels)){const [y,m]=d.split('-');const prev=`${Number(y)-1}-${m}`;if(Number.isFinite(levels[prev]))history[d]=round(pct(v,levels[prev]),1);}}catch{}
   try{
     const x=await bestCsv('sspm-recursos-tributarios-totales-por-tributo',r=>/mensual/i.test(`${r.name||''} ${r.description||''}`)?10:0);
@@ -425,16 +442,21 @@ async function arca(){
     const levels={}; if(dc>=0&&vc>=0)for(const r of rows.slice(1)){const d=String(r[dc]||'').slice(0,7),v=numberAR(r[vc]);if(/^\d{4}-\d{2}$/.test(d)&&Number.isFinite(v))levels[d]=v;}
     for(const [d,v] of Object.entries(levels)){const y=Number(d.slice(0,4)),prev=`${y-1}${d.slice(4)}`;if(levels[prev])history[d]=round(pct(v,levels[prev]),1);}
   }catch{}
+  // v124: ARCA publica cada mes una novedad NUEVA ("Recaudación tributaria de <mes>", con otro id).
+  // Antes se leía siempre la misma página (id fija), por eso el sitio quedaba en el mes anterior.
+  // Ahora se lee la última novedad conocida y su recuadro "Últimas novedades", se siguen los enlaces
+  // de recaudación y se toma el mes más reciente. El dato se agrega también al histórico.
   try{
-    const text=strip(await get(URLS.arca));
-    const m=text.match(/recursos tributarios de\s+([A-Za-zÁÉÍÓÚáéíóú]+)\s+(?:de\s+)?(20\d{2})?\s*alcanzaron\s*\$\s*([\d\.]+)\s*millones[^.]*variaci[oó]n interanual de\s*([\d,]+)%/i)||text.match(/recursos tributarios de\s+([A-Za-zÁÉÍÓÚáéíóú]+)\s*alcanzaron\s*\$\s*([\d\.]+)\s*millones[^.]*variaci[oó]n interanual de\s*([\d,]+)%/i);
-    if(m){
-      const hasYear=!!m[4], month=m[1], year=hasYear?(m[2]||String(new Date().getFullYear())):String(new Date().getFullYear());
-      const value=Number((hasYear?m[3]:m[2]).replace(/\./g,'')),yoy=Number((hasYear?m[4]:m[3]).replace(',','.'));
-      return {status:'ok',source:'ARCA — Recursos Tributarios',sourceUrl:URLS.arca,history,historyMeasure:'Variación interanual nominal (%)',latest:{value,yoy,period:`${month} ${year}`}};
-    }
+    const base=URLS.arca,pages=[{url:base,html:await get(base)}];
+    const re=/titulo-noticia-anterior">\s*Recaudaci(?:ó|o|&oacute;)n tributaria de [^<]*<\/h3>\s*<a href="(ver\.aspx\?id=(\d+))"/gi;let m;const seen=new Set([base]);
+    const links=[];while((m=re.exec(pages[0].html)))links.push({id:+m[2],url:new URL(m[1],base).href});
+    for(const l of links.sort((a,b)=>b.id-a.id).slice(0,2)){if(seen.has(l.url))continue;seen.add(l.url);try{pages.push({url:l.url,html:await get(l.url)});}catch{}}
+    let best=null;
+    for(const pg of pages){const text=strip(pg.html);const pub=text.match(/publicado:?\s*(\d{1,2})\/(\d{1,2})\/(20\d{2})/i);const ref=pub?new Date(Date.UTC(+pub[3],+pub[2]-1,+pub[1])):new Date();
+      const p=parseArcaRelease(text,ref);if(p&&(!best||p.ym>best.ym))best={...p,url:pg.url};}
+    if(best){history[best.ym]=best.yoy;return {status:'ok',source:'ARCA — Recursos Tributarios',sourceUrl:best.url,history,historyMeasure:'Variación interanual nominal (%)',latest:{value:best.value,yoy:best.yoy,period:best.period,ym:best.ym}};}
   }catch{}
-  return {status:'ok',source:'ARCA — Recursos Tributarios',sourceUrl:URLS.arca,history,historyMeasure:'Variación interanual nominal (%)',latest:{value:20508537,yoy:33.5,period:'agosto 2026'}};
+  return {status:'ok',source:'ARCA — Recursos Tributarios',sourceUrl:URLS.arca,history,historyMeasure:'Variación interanual nominal (%)',latest:{value:21358918,yoy:38.3,period:'septiembre 2026',ym:'2026-09'}};
 }
 async function icg(){
   const history={'2025-09':1.943966,'2025-10':2.10,'2025-11':2.47,'2025-12':2.46,'2026-01':2.40,'2026-02':2.38,'2026-03':2.30,'2026-04':2.02,'2026-05':1.99,'2026-06':2.07,'2026-07':1.94,'2026-08':2.06,'2026-09':1.94};
@@ -503,12 +525,41 @@ async function bcra(){
   const exp=text.match(/Inflaci[oó]n esperada[^%]*?(?:[0-9]{2}\/[0-9]{2}\/20[0-9]{2})[^\d]*([\d,]+)/i);
   return {status:'ok',source:'BCRA',sourceUrl:URLS.bcra,latest:{inflation:inf?Number(inf[2].replace(',','.')):null,expected12m:exp?Number(exp[1].replace(',','.')):null}};
 }
+// v126: además de los datos del texto, se leen las tablas del REM (xlsx) para tener la inflación mensual
+// esperada (mediana) de cada mes. La tarjeta de recaudación la usa para estimar la variación real
+// mientras INDEC no publica el IPC del mes.
+const REM_CPI_FALLBACK={survey:'2026-08',published:'2026-09-03',monthly:{'2026-08':1.7,'2026-09':1.8,'2026-10':1.7,'2026-11':1.6,'2026-12':1.8,'2027-01':1.6,'2027-02':1.6}};
+async function remCpiMonthly(html){
+  const links=[...String(html||'').matchAll(/href="([^"]*relevamiento-expectativas-mercado-tablas-(\d{4})-(\d{2})\.xlsx)"/gi)].map(m=>({url:new URL(m[1],URLS.rem).href,ym:`${m[2]}-${m[3]}`})).sort((a,b)=>b.ym.localeCompare(a.ym));
+  const cand=links[0]||(()=>{const d=new Date();const p=new Date(Date.UTC(d.getUTCFullYear(),d.getUTCMonth()-1,1));const ym=`${p.getUTCFullYear()}-${String(p.getUTCMonth()+1).padStart(2,'0')}`;return {ym,url:`https://www.bcra.gob.ar/archivos/Pdfs/PublicacionesEstadisticas/informes/relevamiento-expectativas-mercado-tablas-${ym}.xlsx`};})();
+  const c=new AbortController(),tm=setTimeout(()=>c.abort(),20000);
+  try{
+    const r=await fetch(cand.url,{signal:c.signal,headers:{'user-agent':'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36'}});if(!r.ok)throw new Error(`REM xlsx ${r.status}`);
+    const wb=XLSX.read(await r.arrayBuffer(),{type:'array'});const ws=wb.Sheets[wb.SheetNames.find(n=>/cuadros/i.test(n))||wb.SheetNames[0]];
+    const rows=XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:null});
+    const start=rows.findIndex(r=>r&&r.some(v=>/IPC nivel general/i.test(String(v??''))));if(start<0)throw new Error('REM: bloque IPC no encontrado');
+    const monthly={};
+    for(const r of rows.slice(start+1,start+20)){
+      if(!r||r.every(v=>v==null))break;
+      const ref=r.find(v=>/var\.?\s*%\s*mensual/i.test(String(v??'')));if(!ref)continue;
+      const iRef=r.indexOf(ref),per=r[iRef-1],med=Number(r[iRef+1]);let ym=null;
+      if(typeof per==='number'){const d=new Date(Math.round((per-25569)*864e5));ym=`${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}`;}
+      else if(per instanceof Date)ym=`${per.getUTCFullYear()}-${String(per.getUTCMonth()+1).padStart(2,'0')}`;
+      else{const m=String(per??'').match(/(20\d{2})-(\d{2})/);if(m)ym=`${m[1]}-${m[2]}`;}
+      if(ym&&Number.isFinite(med))monthly[ym]=round(med,2);
+    }
+    if(Object.keys(monthly).length<3)throw new Error('REM: pocas filas mensuales');
+    return {survey:cand.ym,url:cand.url,monthly};
+  }finally{clearTimeout(tm);}
+}
 async function rem(){
-  const text=strip(await get(URLS.rem));
+  let html='',text='';try{html=await get(URLS.rem);text=strip(html);}catch{}
   const participants=text.match(/contemplando a\s*(\d+)\s*participantes, entre\s*(\d+)\s*consultoras[^\d]+(\d+)\s*entidades financieras/i);
   const gdp=text.match(/PIB real\s*([\d,]+)%\s*superior al promedio de 2025/i) || text.match(/nivel de PIB real\s*([\d,]+)%\s*superior/i);
   const fx=text.match(/diciembre de 2026[^$]{0,100}\$\s*([\d\.]+)\/USD/i);
-  return {status:'ok',source:'REM BCRA',sourceUrl:URLS.rem,latest:{participants:participants?+participants[1]:null,consultants:participants?+participants[2]:null,banks:participants?+participants[3]:null,gdp2026:gdp?Number(gdp[1].replace(',','.')):null,fxDec2026:fx?Number(fx[1].replace(/\./g,'')):null}};
+  let cpi=null;try{cpi=await remCpiMonthly(html);}catch(e){cpi={...REM_CPI_FALLBACK,fallback:true,error:String(e?.message||e)};}
+  if(!text&&cpi.fallback)throw new Error('REM no disponible');
+  return {status:'ok',source:'REM BCRA',sourceUrl:URLS.rem,latest:{participants:participants?+participants[1]:null,consultants:participants?+participants[2]:null,banks:participants?+participants[3]:null,gdp2026:gdp?Number(gdp[1].replace(',','.')):null,fxDec2026:fx?Number(fx[1].replace(/\./g,'')):null},cpiExpected:cpi};
 }
 async function salaryRipte(){
   // Serie oficial Datos Argentina: mensual desde julio de 1994. Se completa con la publicación vigente de Seguridad Social.
@@ -851,7 +902,7 @@ async function activityPulse(){
 
 // sin KV se conserva al menos durante la vida del isolate y el frontend mantiene otra copia local.
 let MEMORY_SNAPSHOT=null;
-const SNAPSHOT_PREFIX='macro:snapshot:v122:';
+const SNAPSHOT_PREFIX='macro:snapshot:v126:';
 const MEMORY_SNAPSHOTS={};
 function isPlainObject(v){return !!v&&typeof v==='object'&&!Array.isArray(v);}
 function mergeSnapshot(oldValue,newValue){
@@ -879,9 +930,18 @@ async function readSnapshot(env,group){
   if(env?.MACRO_STORE?.get){try{const x=await env.MACRO_STORE.get(SNAPSHOT_PREFIX+group,'json');if(x?.sources)return x;}catch{}}
   return MEMORY_SNAPSHOTS[group]||null;
 }
-async function writeSnapshot(env,ctx,snapshot,group){
+// v125: con KV activo, el plan gratuito permite 1.000 escrituras por día. Sólo se escribe si los datos
+// cambiaron y como máximo una vez cada 20 minutos por grupo (la revisión programada siempre puede escribir).
+function snapshotHash(sources){const t=JSON.stringify(sources||{});let h=2166136261;for(let i=0;i<t.length;i++){h^=t.charCodeAt(i);h=Math.imul(h,16777619);}return (h>>>0).toString(36)+':'+t.length;}
+async function writeSnapshot(env,ctx,snapshot,group,stored=null,force=false){
   MEMORY_SNAPSHOTS[group]=snapshot;
-  if(env?.MACRO_STORE?.put){const job=env.MACRO_STORE.put(SNAPSHOT_PREFIX+group,JSON.stringify(snapshot));if(ctx?.waitUntil)ctx.waitUntil(job);else try{await job}catch{}}
+  if(!env?.MACRO_STORE?.put)return 'memory';
+  const hash=snapshotHash(snapshot.sources);
+  if(stored?.hash===hash)return 'unchanged';
+  if(!force&&stored?.savedAt&&Date.now()-Date.parse(stored.savedAt)<20*60*1000)return 'throttled';
+  const job=env.MACRO_STORE.put(SNAPSHOT_PREFIX+group,JSON.stringify({...snapshot,hash,savedAt:new Date().toISOString()}));
+  if(ctx?.waitUntil&&!force)ctx.waitUntil(job.catch(()=>{}));else{try{await job}catch{return 'error'}}
+  return 'kv';
 }
 // ===================== v122 · Balanza de pagos (INDEC) =====================
 // INDEC publica la balanza de pagos trimestral completa en SDMX-ML (estructura IMF BOP 1.8):
@@ -932,14 +992,14 @@ export const GROUPS={
   leading:['ilaHistorical','igaHistorical'],
   external:['bopHistorical'] // v122: grupo propio (XML de 3,3 MB) para no sumar CPU a la invocación del ILA
 };
-export default async(env={},ctx=null,request=null)=>{
+export default async(env={},ctx=null,request=null,opts={})=>{
   let group='all';try{const g=new URL(request?.url||'http://x/').searchParams.get('group');if(g&&GROUPS[g])group=g;}catch{}
   const names=group==='all'?Object.keys(JOBS):GROUPS[group];
   const stored=await readSnapshot(env,group);
   const bundled={};for(const n of names)if(BUNDLED_SOURCES[n])bundled[n]=BUNDLED_SOURCES[n];
   if(group==='core'&&BUNDLED_SOURCES.ipcCaba)bundled.ipcCaba=BUNDLED_SOURCES.ipcCaba;
-  const previous=mergeSnapshot({version:122,sources:bundled},stored||{});
-  const out={version:122,group,generatedAt:new Date().toISOString(),snapshotMode:env?.MACRO_STORE?.get?'kv+bundled':'bundled+isolate',sources:{}};
+  const previous=mergeSnapshot({version:126,sources:bundled},stored||{});
+  const out={version:126,group,generatedAt:new Date().toISOString(),snapshotMode:env?.MACRO_STORE?.get?'kv+bundled':'bundled+isolate',sources:{}};
   const results=await Promise.allSettled(names.map(n=>Promise.resolve().then(JOBS[n])));
   results.forEach((j,i)=>{
     const name=names[i],old=previous?.sources?.[name];
@@ -959,7 +1019,7 @@ export default async(env={},ctx=null,request=null)=>{
     if(AP.creditLatest&&AP.credit&&AP.creditLatest.ym>(AP.credit.ym||'')){AP.credit={source:AP.credit.source,ym:AP.creditLatest.ym,period:AP.creditLatest.period,arsRealMom:AP.creditLatest.arsRealMom};}
   }
   const ok=Object.values(out.sources).some(x=>x.status==='ok'||x.status==='snapshot');
-  if(ok)await writeSnapshot(env,ctx,out,group);
+  if(ok)out.stored=await writeSnapshot(env,ctx,out,group,stored,!!opts.force);
   return new Response(JSON.stringify(out),{status:ok?200:503,headers:{'content-type':'application/json; charset=utf-8','cache-control':'public, max-age=60, s-maxage=60, stale-while-revalidate=300','access-control-allow-origin':'*'}});
 };
 function ymFromPeriodEs(s){const m=String(s||'').match(/(ene|feb|mar|abr|may|jun|jul|ago|sep|oct|nov|dic)[a-z]*\s+(20\d{2})/i);if(!m)return null;const i=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'].indexOf(m[1].toLowerCase());return `${m[2]}-${String(i+1).padStart(2,'0')}`;}

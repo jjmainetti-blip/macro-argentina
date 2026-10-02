@@ -609,7 +609,7 @@ async function loadOfficialSeriesFallback(){
 
 // v117: la API se pide por grupos (cada uno con pocos pedidos externos) y cada grupo se procesa al llegar.
 const MACRO_GROUPS=['core','history','markets','activity','leading','external'];
-const MACRO_LS_KEY='macroArgentinaSnapshotV122';
+const MACRO_LS_KEY='macroArgentinaSnapshotV126';
 // Series históricas (dólar, riesgo país, Merval, tasa, RIPTE, PIB, industria, desempleo, comercio).
 // Recibe la fusión histórico local + API, así los gráficos funcionan aunque la API no responda.
 function applyHistorySources(S){
@@ -799,7 +799,7 @@ function normalizedMonthlyRows(rows,valueField='value',n=60){const byMonth=new M
 let bundledMacroHistoryPromise=null;
 function loadBundledMacroHistory(){return bundledMacroHistoryPromise??=(async()=>{
   try{
-    const r=await fetch('/macro-history.json?v=122',{cache:'no-store'}); if(!r.ok)return;
+    const r=await fetch('/macro-history.json?v=126',{cache:'no-store'}); if(!r.ok)return;
     const h=await r.json(), B={};
     if(h.povertyAnnual)Object.assign(poverty,h.povertyAnnual);
     if(h.tradeMonthly)Object.assign(tradeBalanceMonthly,h.tradeMonthly);
@@ -819,6 +819,7 @@ function loadBundledMacroHistory(){return bundledMacroHistoryPromise??=(async()=
     if(AP.fiscal||AP.autos||AP.cement)B.activityPulse=AP;
     if(h.ilaMonthly)B.ilaHistorical={status:'ok',source:'CICEc — Bolsas de Comercio de Santa Fe y Rosario',monthly:h.ilaMonthly};
     if(h.bopQuarterly)B.bopHistorical={status:'ok',source:'INDEC — Balanza de pagos (SDMX)',prepared:h.bopPrepared||null,quarterly:h.bopQuarterly};
+    if(h.remCpiExpected)B.rem={status:'ok',source:'REM BCRA',cpiExpected:h.remCpiExpected};
     if(h.igaMonthly)B.igaHistorical={status:'ok',source:'OJF & Asociados — IGA-OJF',monthly:h.igaMonthly};
     if(h.marketsHistory){for(const k of ['financialHistorical','exchangeHistorical','salary'])if(h.marketsHistory[k])B[k]=h.marketsHistory[k];}
     // v118: ICL, CER y UVA (calculadora) — respaldo local desde el archivo plano del BCRA.
@@ -839,7 +840,7 @@ function kpiSeries(key){const S=kpiSourceCache||{},A=S.activityPulse||{};
   if(key==='ipc'){const x=normalizedMonthlyRows(S.ipc?.monthly,'value',60);if(x.length)return {labels:x.map(([d])=>displayMonth(d)),rawPeriods:x.map(([d])=>d),datasets:[{label:'Inflación mensual (%)',data:x.map(([,v])=>v)}],source:'INDEC',legend:`Últimas ${x.length} observaciones mensuales publicadas.`};}
   if(key==='ipcCaba'&&S.ipcCaba?.history){const x=recentEntries(S.ipcCaba.history,60);return {labels:x.map(([d])=>displayMonth(d)),datasets:[{label:'Inflación CABA mensual (%)',data:x.map(([,v])=>Number(v))}],source:'IDECBA',legend:'Hasta 5 años de observaciones mensuales disponibles.'};}
   // Recaudación: barras con variación interanual real, deflactada con IPC Nacional del mismo mes.
-  if(key==='arca'&&S.arca?.history){const nominal=recentEntries(S.arca.history,60),ipcRows=normalizedMonthlyRows(S.ipc?.monthly,'index',999),idx=Object.fromEntries(ipcRows),labels=[],real=[];for(const [d,n] of nominal){const prev=`${Number(d.slice(0,4))-1}${d.slice(4)}`,iNow=Number(idx[d]),iPrev=Number(idx[prev]);if(!Number.isFinite(iNow)||!Number.isFinite(iPrev)||iPrev===0)continue;const inflation=(iNow/iPrev-1)*100,r=Number((((1+n/100)/(1+inflation/100)-1)*100).toFixed(1))+0;labels.push(d);real.push(r);}if(labels.length)return {chartType:'bar',labels:labels.map(displayMonth),rawPeriods:labels,datasets:[{label:'Recaudación · variación interanual real (%)',data:real}],source:'ARCA + INDEC',legend:`Últimas ${labels.length} variaciones interanuales reales de la recaudación, deflactadas con IPC Nacional del mismo mes.`};}
+  if(key==='arca'&&S.arca?.history){const nominal=recentEntries(arcaHistory(S),60),ipcRows=normalizedMonthlyRows(S.ipc?.monthly,'index',999),idx=Object.fromEntries(ipcRows),labels=[],real=[];let est=null;for(const [d,n] of nominal){const R=arcaRealYoy(S,d,n);if(!R)continue;if(R.estimated)est=d;labels.push(d);real.push(Number(R.real.toFixed(1))+0);}if(labels.length)return {chartType:'bar',labels:labels.map(d=>d===est?`${displayMonth(d)} (est.)`:displayMonth(d)),rawPeriods:labels,datasets:[{label:'Recaudación · variación interanual real (%)',data:real}],source:est?'ARCA + INDEC; último mes con IPC estimado por REM (BCRA)':'ARCA + INDEC',legend:`Últimas ${labels.length} variaciones interanuales reales de la recaudación, deflactadas con IPC Nacional del mismo mes.${est?` ${displayMonth(est)}: estimada con la inflación esperada del REM hasta que INDEC publique el IPC.`:''}`};}
   // ICG: sólo observaciones mensuales válidas; se conserva toda la historia disponible y los cambios presidenciales.
   if(key==='icg'&&S.icg?.history){const x=recentEntries(S.icg.history,9999);if(x.length)return {labels:x.map(([d])=>displayMonth(d)),rawPeriods:x.map(([d])=>d),presidentOverlay:true,datasets:[{label:'ICG',data:x.map(([,v])=>Number(v)),borderColor:'#0b5bd3',backgroundColor:'rgba(11,91,211,.06)'}],source:'UTDT',legend:`Serie histórica mensual: ${x.length} observaciones · líneas verticales = cambios presidenciales.`};}
   // v122 · Balanza de pagos (INDEC): componentes de la cuenta corriente apilados + saldo de cuenta corriente (línea), últimos 10 años.
@@ -935,9 +936,13 @@ function computeKpiCards(){
    if(L){const r=H[L[0]]||{},yoy=numOrNull(r.yoy),dif=numOrNull(r.diffusion);
      C.ila={ym:L[0],value:kpiPct(L[1]),period:`${displayMonth(L[0])} · variación mensual`,detail:[yoy!==null?`${kpiPct(yoy)} interanual`:null,dif!==null?`difusión ${new Intl.NumberFormat('es-AR',{maximumFractionDigits:0}).format(dif)}%`:null].filter(Boolean).join(' · '),signal:signalFrom(L[1],0.1,true),why:`El Índice Líder ${L[1]>0?'subió':L[1]<0?'bajó':'no varió'} ${kpiNum(Math.abs(L[1]))}% en el mes${dif!==null?`; ${kpiNum(dif)}% de las series líderes en alza`:''}.`};}}
   // Recaudación: grande interanual real (deflactada con IPC del mismo mes); chico interanual nominal.
-  {const L=kpiLastEntries(S.arca?.history,1)[0];
-   if(L){const idx=Object.fromEntries((S.ipc?.monthly||[]).map(r=>[String(r.date).slice(0,7),Number(r.index)])),i1=idx[L[0]],i0=idx[ymShift(L[0],-12)];const real=Number.isFinite(i1)&&Number.isFinite(i0)?((1+L[1]/100)/(i1/i0)-1)*100+0:null;
-     C.arca={ym:L[0],value:real!==null?kpiPct(real):kpiPct(L[1]),period:`${displayMonth(L[0])} · ${real!==null?'interanual real':'interanual nominal'}`,detail:real!==null?`${kpiPct(L[1])} interanual nominal`:'Real: sin IPC del mes',signal:signalFrom(real,0.5,true),why:real===null?'Sin IPC del mes para deflactar.':(Math.abs(real)<0.05?'La recaudación no varió en términos reales interanuales.':`La recaudación ${real>0?'creció':'cayó'} ${kpiNum(Math.abs(real))}% real interanual.`)};}}
+  {const L=kpiLastEntries(arcaHistory(S),1)[0];
+   if(L){const R=arcaRealYoy(S,L[0],L[1]),real=R?R.real:null;
+     const remTxt=R?.estimated?R.remMonths.map(([k,e])=>`${kpiNum(e)}% en ${displayMonth(k)}`).join(' y '):'';
+     C.arca={ym:L[0],value:real!==null?kpiPct(real):kpiPct(L[1]),period:`${displayMonth(L[0])} · ${real===null?'interanual nominal':R.estimated?'interanual real estimada':'interanual real'}`,
+       detail:real===null?'Real: sin IPC del mes':`${kpiPct(L[1])} interanual nominal${R.estimated?` · IPC estimado con REM (${remTxt})`:''}`,
+       signal:signalFrom(real,0.5,true),
+       why:real===null?'Sin IPC del mes para deflactar.':`${Math.abs(real)<0.05?'La recaudación no varió en términos reales interanuales':`La recaudación ${real>0?'creció':'cayó'} ${kpiNum(Math.abs(real))}% real interanual`}${R.estimated?`. Estimación: INDEC todavía no publicó el IPC; se usa la inflación mensual esperada por el REM del BCRA (mediana: ${remTxt}), que se reemplaza automáticamente por el dato oficial.`:'.'}`};}}
   // Pobreza: nivel; chico p.p. vs dato anterior (+ indigencia publicada).
   {const e=Object.entries(poverty||{}).filter(([y,v])=>/^\d{4}$/.test(y)&&Number.isFinite(Number(v))).sort(([a],[b])=>Number(a)-Number(b));const L=e.at(-1),P=e.at(-2);
    if(L){const per=kpiInitial.poverty?.period||`${L[0]}`,sem=per.match(/([12])S\s*(20\d{2})/),ym=sem?`${sem[2]}-${sem[1]==='1'?'06':'12'}`:`${L[0]}-12`;const pp=P?Number(L[1])-Number(P[1]):null;const ind=(kpiInitial.poverty?.detail||'').match(/[\d,]+%\s*indigencia/);
@@ -987,6 +992,24 @@ function sortKpiGrid(){const grid=document.getElementById('kpiGrid');if(!grid)re
   cards.sort((a,b)=>String(b.dataset.ym||'').localeCompare(String(a.dataset.ym||''))||Number(a.dataset.order)-Number(b.dataset.order));
   for(const c of cards)grid.appendChild(c);}
 function bopQuarterLabel(k){const m=String(k).match(/^(\d{4})-Q([1-4])$/);return m?`${m[2]}T ${m[1]}`:String(k);}
+// v126: índice de IPC para deflactar la recaudación. Si INDEC todavía no publicó el mes, se extiende
+// el último índice publicado con la inflación mensual esperada por el REM (mediana), hasta 2 meses.
+function ipcIndexWithRem(S,ym){
+  const idx=Object.fromEntries((S.ipc?.monthly||[]).map(r=>[String(r.date).slice(0,7),Number(r.index)]).filter(([,v])=>Number.isFinite(v)));
+  if(Number.isFinite(idx[ym]))return {value:idx[ym],estimated:false};
+  const rem=S.rem?.cpiExpected?.monthly||{};let k=ym;const chain=[];
+  while(!Number.isFinite(idx[k])&&chain.length<3){const e=Number(rem[k]);if(!Number.isFinite(e))return null;chain.unshift([k,e]);k=ymShift(k,-1);}
+  if(!Number.isFinite(idx[k])||chain.length>2)return null;
+  let v=idx[k];for(const [,e] of chain)v*=1+e/100;
+  return {value:v,estimated:true,remMonths:chain,survey:S.rem?.cpiExpected?.survey||null};
+}
+function arcaRealYoy(S,ym,nominal){
+  const i1=ipcIndexWithRem(S,ym),i0=ipcIndexWithRem(S,ymShift(ym,-12));
+  if(!i1||!i0||i0.estimated)return null;
+  return {real:((1+nominal/100)/(i1.value/i0.value)-1)*100+0,estimated:i1.estimated,remMonths:i1.remMonths||[],survey:i1.survey,inflation:(i1.value/i0.value-1)*100};
+}
+// v124: el comunicado de ARCA (latest) puede ser más nuevo que la serie mensual; se incorpora al histórico.
+function arcaHistory(S){const h={...(S?.arca?.history||{})},L=S?.arca?.latest;if(L&&Number.isFinite(Number(L.yoy))){const ym=L.ym||ymFromSpanishPeriod(L.period||'');if(ym&&/^\d{4}-\d{2}$/.test(ym))h[ym]=Number(L.yoy);}return h;}
 function renderKpiCards(){
   document.querySelectorAll('.kpi[data-kpi]').forEach((c,i)=>{if(c.dataset.order===undefined)c.dataset.order=String(i);const k=c.dataset.kpi;if(!kpiInitial[k])kpiInitial[k]={period:c.querySelector('[data-period]')?.textContent||'',detail:c.querySelector('[data-detail]')?.textContent||''};
     if(!c.dataset.ym){const ym=ymFromSpanishPeriod(kpiInitial[k].period);const sem=kpiInitial[k].period.match(/([12])S\s*(20\d{2})/);c.dataset.ym=ym||(sem?`${sem[2]}-${sem[1]==='1'?'06':'12'}`:'');}});
