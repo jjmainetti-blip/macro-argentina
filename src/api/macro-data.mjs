@@ -453,10 +453,10 @@ async function arca(){
     for(const l of links.sort((a,b)=>b.id-a.id).slice(0,2)){if(seen.has(l.url))continue;seen.add(l.url);try{pages.push({url:l.url,html:await get(l.url)});}catch{}}
     let best=null;
     for(const pg of pages){const text=strip(pg.html);const pub=text.match(/publicado:?\s*(\d{1,2})\/(\d{1,2})\/(20\d{2})/i);const ref=pub?new Date(Date.UTC(+pub[3],+pub[2]-1,+pub[1])):new Date();
-      const p=parseArcaRelease(text,ref);if(p&&(!best||p.ym>best.ym))best={...p,url:pg.url};}
-    if(best){history[best.ym]=best.yoy;return {status:'ok',source:'ARCA — Recursos Tributarios',sourceUrl:best.url,history,historyMeasure:'Variación interanual nominal (%)',latest:{value:best.value,yoy:best.yoy,period:best.period,ym:best.ym}};}
+      const p=parseArcaRelease(text,ref);if(p&&(!best||p.ym>best.ym))best={...p,url:pg.url,published:pub?ref.toISOString().slice(0,10):null};}
+    if(best){history[best.ym]=best.yoy;return {status:'ok',source:'ARCA — Recursos Tributarios',sourceUrl:best.url,history,historyMeasure:'Variación interanual nominal (%)',latest:{value:best.value,yoy:best.yoy,period:best.period,ym:best.ym,published:best.published}};}
   }catch{}
-  return {status:'ok',source:'ARCA — Recursos Tributarios',sourceUrl:URLS.arca,history,historyMeasure:'Variación interanual nominal (%)',latest:{value:21358918,yoy:38.3,period:'septiembre 2026',ym:'2026-09'}};
+  return {status:'ok',source:'ARCA — Recursos Tributarios',sourceUrl:URLS.arca,history,historyMeasure:'Variación interanual nominal (%)',latest:{value:21358918,yoy:38.3,period:'septiembre 2026',ym:'2026-09',published:'2026-10-01'}};
 }
 async function icg(){
   const history={'2025-09':1.943966,'2025-10':2.10,'2025-11':2.47,'2025-12':2.46,'2026-01':2.40,'2026-02':2.38,'2026-03':2.30,'2026-04':2.02,'2026-05':1.99,'2026-06':2.07,'2026-07':1.94,'2026-08':2.06,'2026-09':1.94};
@@ -902,7 +902,7 @@ async function activityPulse(){
 
 // sin KV se conserva al menos durante la vida del isolate y el frontend mantiene otra copia local.
 let MEMORY_SNAPSHOT=null;
-const SNAPSHOT_PREFIX='macro:snapshot:v126:';
+const SNAPSHOT_PREFIX='macro:snapshot:v127:';
 const MEMORY_SNAPSHOTS={};
 function isPlainObject(v){return !!v&&typeof v==='object'&&!Array.isArray(v);}
 function mergeSnapshot(oldValue,newValue){
@@ -998,8 +998,8 @@ export default async(env={},ctx=null,request=null,opts={})=>{
   const stored=await readSnapshot(env,group);
   const bundled={};for(const n of names)if(BUNDLED_SOURCES[n])bundled[n]=BUNDLED_SOURCES[n];
   if(group==='core'&&BUNDLED_SOURCES.ipcCaba)bundled.ipcCaba=BUNDLED_SOURCES.ipcCaba;
-  const previous=mergeSnapshot({version:126,sources:bundled},stored||{});
-  const out={version:126,group,generatedAt:new Date().toISOString(),snapshotMode:env?.MACRO_STORE?.get?'kv+bundled':'bundled+isolate',sources:{}};
+  const previous=mergeSnapshot({version:127,sources:bundled},stored||{});
+  const out={version:127,group,generatedAt:new Date().toISOString(),snapshotMode:env?.MACRO_STORE?.get?'kv+bundled':'bundled+isolate',sources:{}};
   const results=await Promise.allSettled(names.map(n=>Promise.resolve().then(JOBS[n])));
   results.forEach((j,i)=>{
     const name=names[i],old=previous?.sources?.[name];

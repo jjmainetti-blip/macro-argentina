@@ -147,6 +147,12 @@ Chequeo: `npm run validate:snapshot`.
 - **Carga sobre las fuentes**: `/api/markets` comparte una respuesta de 20 s (Cache API + memoria del isolate); los históricos usados para el cierre anterior se reutilizan 1 hora.
 
 
+## v127 — “Último dato publicado”
+
+- Bug: `applyReleases` usaba un formateador inexistente (`moneyMillionsToBillions`); cada vez que ARCA respondía, la función fallaba y el bloque quedaba fijo en el ICG. Se agregó el formateador.
+- El bloque ahora se ordena por **fecha de publicación** (ARCA: “Publicado dd/mm/aaaa” del comunicado; ICG; balanza de pagos INDEC; IPC y RIPTE con su calendario habitual cuando la fuente no informa la fecha) y usa los datos fusionados (API + respaldo), así funciona aunque la API falle.
+- Recaudación: muestra monto, variación nominal y real (marcada “est. REM” mientras no hay IPC).
+
 ## v126 — recaudación real estimada con el REM
 
 - Mientras INDEC no publica el IPC del mes, la tarjeta de recaudación calcula la variación **real** con la inflación mensual esperada por el **REM del BCRA** (mediana): índice IPC del último mes publicado × (1 + REM). Hasta dos meses encadenados.

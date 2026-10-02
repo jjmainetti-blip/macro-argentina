@@ -609,7 +609,7 @@ async function loadOfficialSeriesFallback(){
 
 // v117: la API se pide por grupos (cada uno con pocos pedidos externos) y cada grupo se procesa al llegar.
 const MACRO_GROUPS=['core','history','markets','activity','leading','external'];
-const MACRO_LS_KEY='macroArgentinaSnapshotV126';
+const MACRO_LS_KEY='macroArgentinaSnapshotV127';
 // Series históricas (dólar, riesgo país, Merval, tasa, RIPTE, PIB, industria, desempleo, comercio).
 // Recibe la fusión histórico local + API, así los gráficos funcionan aunque la API no responda.
 function applyHistorySources(S){
@@ -660,9 +660,24 @@ function applyHistorySources(S){
       }
     }
 }
+// v127: faltaba este formateador y applyReleases fallaba siempre que ARCA respondía (el bloque quedaba fijo en el ICG).
+function moneyMillionsToBillions(m){const v=Number(m);if(!Number.isFinite(v))return '';return v>=1e6?`$ ${new Intl.NumberFormat('es-AR',{minimumFractionDigits:1,maximumFractionDigits:1}).format(v/1e6)} billones`:`$ ${new Intl.NumberFormat('es-AR',{maximumFractionDigits:0}).format(v)} millones`;}
 function applyReleases(S){
     if(S.salary?.status==='ok'&&currentSeries==='salary'&&window.Chart)safeApply('salaryRender',()=>renderHistory('salary'));
-    const releases=[{releaseDate:'2026-09-28',date:'sep 2026',displayDate:'Publicado 28 sep 2026 · período sep 2026',title:'ICG UTDT',value:'1,94 puntos · −5,9% mensual'}];if(S.ipc?.status==='ok')releases.push({date:S.ipc.updated||'',title:'IPC Nacional',value:`${fmt.format(S.ipc.latest.value)}% mensual · ${fmt.format(S.ipc.latest.yoy)}% interanual`});if(S.salary?.status==='ok'&&S.salary.latest)releases.push({date:S.salary.latest.period,title:'RIPTE',value:money.format(S.salary.latest.value)});if(S.arca?.status==='ok')releases.push({date:S.arca.latest.period||'',title:'Recaudación ARCA',value:moneyMillionsToBillions(S.arca.latest.value)});if(S.icg?.status==='ok')releases.push({releaseDate:S.icg.publicationDate||'',date:S.icg.latest.period||'',title:'ICG UTDT',value:`${fmt.format(S.icg.latest.value)} puntos${Number.isFinite(Number(S.icg.latest.mom))?` · ${Number(S.icg.latest.mom)>0?'+':''}${fmt.format(S.icg.latest.mom)}% mensual`:''}`});renderLatestRelease(releases);
+    // v127: "Último dato publicado" se ordena por FECHA DE PUBLICACIÓN (no por período). Cuando la fuente no
+    // informa la fecha, se usa el calendario habitual del organismo sólo para ordenar.
+    const R=kpiSourceCache||{},pub=(ym,lagMonths,day)=>ym?`${ymShift(ym,lagMonths)}-${String(day).padStart(2,'0')}`:'';
+    const shown=(iso,ym)=>iso?`Publicado ${displayDay(iso)}${ym?` · período ${displayMonth(ym)}`:''}`:`Período ${displayMonth(ym)}`;
+    const releases=[{releaseDate:'2026-09-28',date:'sep 2026',displayDate:'Publicado 28 sep 2026 · período sep 2026',title:'ICG UTDT',value:'1,94 puntos · −5,9% mensual'}];
+    {const L=(Array.isArray(R.ipc?.monthly)?R.ipc.monthly:[]).filter(r=>Number.isFinite(Number(r.value))).at(-1);if(L){const ym=String(L.date).slice(0,7),rd=R.ipc?.publishedAt||pub(ym,1,12);const prev=R.ipc.monthly.find(r=>String(r.date).slice(0,7)===ymShift(ym,-12));const yoy=Number.isFinite(Number(R.ipc?.latest?.yoy))&&R.ipc.latest?.date?.slice?.(0,7)===ym?Number(R.ipc.latest.yoy):(prev?((Number(L.index)/Number(prev.index))-1)*100:null);releases.push({releaseDate:rd,title:'IPC Nacional · INDEC',value:`${fmt.format(Number(L.value))}% mensual${Number.isFinite(yoy)?` · ${fmt.format(yoy)}% interanual`:''}`,displayDate:shown(R.ipc?.publishedAt,ym)});}}
+    {const L=R.arca?.latest,H=arcaHistory(R),last=kpiLastEntries(H,1)[0];const ym=L?.ym||(L?.period?ymFromSpanishPeriod(L.period):null)||last?.[0];
+     if(ym){const yoy=Number.isFinite(Number(L?.yoy))&&(L?.ym||ymFromSpanishPeriod(L?.period||''))===ym?Number(L.yoy):Number(H[ym]);const rr=arcaRealYoy(R,ym,yoy);
+       const parts=[Number.isFinite(Number(L?.value))&&(L?.ym||ymFromSpanishPeriod(L?.period||''))===ym?moneyMillionsToBillions(L.value):null,Number.isFinite(yoy)?`${kpiPct(yoy)} interanual`:null,rr?`${kpiPct(rr.real)} real${rr.estimated?' (est. REM)':''}`:null].filter(Boolean);
+       releases.push({releaseDate:L?.published||pub(ym,1,1),title:'Recaudación · ARCA',value:parts.join(' · '),displayDate:shown(L?.published||pub(ym,1,1),ym)});}}
+    if(R.salary?.latest?.period&&Number.isFinite(Number(R.salary.latest.value))){const ym=ymFromSpanishPeriod(R.salary.latest.period)||String(R.salary.latest.period).slice(0,7);releases.push({releaseDate:pub(ym,1,28),title:'RIPTE',value:money.format(R.salary.latest.value),displayDate:`Período ${displayMonth(ym)}`});}
+    if(R.icg?.status==='ok'&&R.icg.latest)releases.push({releaseDate:R.icg.publicationDate||'',date:R.icg.latest.period||'',title:'ICG UTDT',value:`${fmt.format(R.icg.latest.value)} puntos${Number.isFinite(Number(R.icg.latest.mom))?` · ${Number(R.icg.latest.mom)>0?'+':''}${fmt.format(R.icg.latest.mom)}% mensual`:''}`});
+    if(R.bopHistorical?.prepared&&R.bopHistorical?.quarterly?.CA){const k=Object.keys(R.bopHistorical.quarterly.CA).sort().at(-1),v=Number(R.bopHistorical.quarterly.CA[k]);releases.push({releaseDate:R.bopHistorical.prepared,title:'Balanza de pagos · INDEC',value:`Cuenta corriente ${v>=0?'+':'−'}USD ${new Intl.NumberFormat('es-AR',{maximumFractionDigits:0}).format(Math.abs(v))} M (${bopQuarterLabel(k)})`,displayDate:`Publicado ${displayDay(R.bopHistorical.prepared)}`});}
+    renderLatestRelease(releases);
 }
 function paintAutoStatus(when){const status=document.getElementById('autoStatus');if(!status)return;const S=apiKpiSources||{};const ok=Object.values(S).filter(v=>v?.status==='ok'||v?.status==='snapshot'||v?.status==='partial').length,total=Object.keys(S).length,errors=Object.values(S).filter(v=>v?.status==='error').length;
   status.innerHTML=total?`<strong>Datos verificados</strong><small>Última comprobación: ${when||'—'} · ${ok}/${total} fuentes activas${errors?' · algunos datos usan respaldo':''}</small>`:'<strong>Datos verificados</strong><small>Mostrando el último dato incluido · se reintentará la conexión con las fuentes</small>';}
@@ -671,7 +686,7 @@ function applyMacroSources(when){
   safeApply('calculatorHydration',()=>hydrateCalculatorSources(S));
   safeApply('historySources',()=>applyHistorySources(S));
   safeApply('kpiCards',renderKpiCards);
-  safeApply('releases',()=>applyReleases(apiKpiSources||{}));
+  safeApply('releases',()=>applyReleases(kpiSourceCache||{}));
   paintAutoStatus(when);
   safeApply('coverage',updateCoverage);
   if(window.Chart)safeApply('history',()=>renderHistory(currentSeries));
