@@ -1,4 +1,4 @@
-# Macro Argentina — Cloudflare v121
+# Macrodatos (macrodatos.ar) — Cloudflare
 
 Migración de la v63 desde Netlify a Cloudflare Workers + Static Assets.
 
@@ -146,6 +146,18 @@ Chequeo: `npm run validate:snapshot`.
 - **Merval**: BYMA (API pública BYMADATA, cotización del día y cierre anterior) → Rava (~10 min de demora) → zion.ar (último cierre).
 - **Carga sobre las fuentes**: `/api/markets` comparte una respuesta de 20 s (Cache API + memoria del isolate); los históricos usados para el cierre anterior se reutilizan 1 hora.
 
+
+## v130 — nuevo nombre: Macrodatos (macrodatos.ar)
+
+- Marca, título, descripción y etiquetas para compartir (Open Graph, `canonical` → https://macrodatos.ar/). Los pedidos del Worker a las fuentes se identifican como `Macrodatos/1.0 (+https://macrodatos.ar)`.
+- **Límite de CPU (error 1102):** en macrodatos.ar varias llamadas a `/api/macro-data` devolvían “Worker exceeded resource limits”: el plan gratuito permite 10 ms de CPU por invocación y descargar/parsear las fuentes y fusionar los históricos lo supera. Ahora las visitas leen el snapshot de KV (< 2 ms) si tiene menos de 15 minutos; el trabajo pesado queda para la revisión programada. Para que esa revisión no se corte, se recomienda el plan Workers Paid (30 s de CPU por invocación).
+- El nombre interno del Worker (`macro-argentina-dashboard`) se mantiene a propósito: cambiarlo crearía un Worker nuevo en Cloudflare y perdería el dominio, el KV y las tareas programadas ya configuradas.
+
+## v130 — más precios históricos para “La economía cuando naciste”
+
+- `data/precios.xlsx`: +174 observaciones (columna nueva **Mes** y **Origen** = “v130 búsqueda complementaria”), con la misma metodología: precio nominal en la moneda de cada fecha, fuente y tipo de dato. Principales fuentes: informes de IPC de INDEC con precios promedio (2002–2008 y 2016+), IDECBA (precios de diciembre 2012–2020), Revista Corsa / Parabrisas / Test del Ayer (autos y nafta), CECHA y prensa (nafta), IDECBA (m² 2012–2014).
+- Excluidas: testimonios sin fuente documental (leche 1989), datos de otra provincia (pan 2010, La Pampa), precios “filtrados” del INDEC intervenido cuando hay alternativa de mercado (pan 2012) y referencias de m² de segmentos de lujo o redondeadas (1981, 1982, 1990, 1992, 1996).
+- Autos con precio publicado en dólares (1991–1998) se pasan a pesos con el tipo de cambio del mes; departamentos con precio en pesos (2000) se pasan a USD/m².
 
 ## v129 — “La economía cuando naciste”: salarios 1940–1993 y más precios
 

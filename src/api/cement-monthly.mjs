@@ -6,7 +6,7 @@ function yoyFromPage(text,y){const re=new RegExp(`${y}\\s*\\/\\s*${y-1}\\s+([+-]
 function nextMonth(period){let [y,m]=period.split('-').map(Number);m++;if(m===13){m=1;y++;}return [y,m];}
 function monthKey(y,m){return `${y}-${String(m).padStart(2,'0')}`;}
 export async function one(y,m){
-  const u=urlFor(y,m); const r=await fetch(u,{headers:{'user-agent':'MacroArgentinaDashboard/7.0'},cf:{cacheTtl:1800,cacheEverything:true}});
+  const u=urlFor(y,m); const r=await fetch(u,{headers:{'user-agent':'Macrodatos/1.0 (+https://macrodatos.ar)'},cf:{cacheTtl:1800,cacheEverything:true}});
   if(r.status===404)return null; if(!r.ok)throw new Error(`${r.status} ${u}`);
   const v=yoyFromPage(textify(await r.text()),y); return Number.isFinite(v)?{period:monthKey(y,m),yoy:v,source:'AFCP',sourceUrl:u}:null;
 }

@@ -138,7 +138,7 @@
         ${Number.isFinite(free)&&Math.abs(free/fx-1)>0.03?stat('Dólar libre (TCR)',fmtToday(freeReal),`promedio mensual · en su momento: ${fmtEra(free,cur)} · brecha ${pct((free/fx-1)*100,0)}`):''}
         ${freeAnnual?stat('Dólar libre (TCR)',fmtToday(freeReal),`referencia anual ${y} · en su momento: ${fmtEra(freeAnnual.v,currencyAt(`${y}-07`))} · brecha ${pct(freeAnnual.gap,0)}`):''}
       </div>
-      ${goods?`<div class="be-goods"><h4>¿Cuánto costaba?</h4><p>${sal?`Cuántos sueldos hacían falta entonces (${esc(salLabel.replace(/^./,c=>c.toLowerCase()))}) y cuántos hacen falta hoy (sueldo promedio, RIPTE).`:''} Cuando no hay un precio publicado para ese mes exacto, se estima a partir de las observaciones más cercanas (separadas por hasta 2 años), manteniendo su valor real.</p>
+      ${goods?`<div class="be-goods"><h4>¿Cuánto costaba?</h4><p>${sal?`Cuántos sueldos hacían falta entonces (${esc(salLabel.replace(/\s*\((.*)\)/,' $1').replace(/^./,c=>c.toLowerCase()))}) y cuántos hacen falta hoy (sueldo promedio, RIPTE).`:''} Cuando no hay un precio publicado para ese mes exacto, se estima a partir de las observaciones más cercanas (separadas por hasta 2 años), manteniendo su valor real.</p>
         <div class="be-table-wrap"><table class="be-table"><thead><tr><th>Bien</th><th>Precio en su época</th><th>Equivalía a</th><th>Hoy</th></tr></thead><tbody>${goods}</tbody></table></div></div>`:''}
       <p class="be-notes">Valores “a pesos de ${base}” ajustados por IPC (${esc(D.notes.cpi)}). TCR: dólar oficial ajustado por la inflación de Argentina y de EE.UU. (IPC-U). ${esc(D.notes.salary)} ${esc(D.notes.prices||'')} ${esc(D.notes.gdp)} Fotos: Wikipedia / Wikimedia Commons.</p>`;
     try{history.replaceState(null,'',`#nacimiento-${ym}`);}catch{}
@@ -156,7 +156,7 @@
 
   async function load(){
     if(loading)return loading;
-    loading=(async()=>{try{const r=await fetch('/birth-economy.json?v=129',{cache:'no-cache'});if(!r.ok)throw new Error(r.status);D=await r.json();fillSelectors();render();}
+    loading=(async()=>{try{const r=await fetch('/birth-economy.json?v=130',{cache:'no-cache'});if(!r.ok)throw new Error(r.status);D=await r.json();fillSelectors();render();}
       catch(e){const o=$('beResult');if(o)o.innerHTML='<p class="be-na">No se pudieron cargar los datos históricos. Probá recargar la página.</p>';loading=null;}})();
     return loading;
   }

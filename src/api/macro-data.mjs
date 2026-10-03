@@ -2,7 +2,7 @@ import * as XLSX from 'xlsx';
 import { BUNDLED_SOURCES } from './bundled-history.mjs';
 import { autosLive, ipcCabaLive, povertyLive, cementLive } from './live-sources.mjs';
 import { cardStatus } from './freshness.mjs';
-/* Macro Argentina v8 — stable server-side data contract.
+/* Macrodatos (antes Macro Argentina) v8 — stable server-side data contract.
    Each adapter fails independently. The browser keeps its bundled last-known value
    when a source is temporarily unavailable or changes format. */
 const SERIES_API='https://apis.datos.gob.ar/series/api/series/';
@@ -23,7 +23,7 @@ async function get(url,type='text'){
   const promise=(async()=>{
     const c=new AbortController(); const t=setTimeout(()=>c.abort(),25000);
     // v118: algunos sitios oficiales (BCRA) rechazan agentes no-navegador; se usa uno estándar.
-    const ua=/bcra\.gob\.ar|argentina\.gob\.ar|indec\.gob\.ar|arca\.gob\.ar|afip\.gob\.ar/.test(url)?'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36':'MacroArgentinaDashboard/3.0 (+public economic dashboard)';
+    const ua=/bcra\.gob\.ar|argentina\.gob\.ar|indec\.gob\.ar|arca\.gob\.ar|afip\.gob\.ar/.test(url)?'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36':'Macrodatos/1.0 (+https://macrodatos.ar)';
     try{const r=await fetch(url,{signal:c.signal,headers:{'user-agent':ua,'accept-language':'es-AR,es;q=.9'}});if(!r.ok)throw new Error(`${r.status} ${r.statusText}`);return type==='json'?r.json():r.text();}
     finally{clearTimeout(t)}
   })();
@@ -184,7 +184,7 @@ async function usCpiMonthly(){
   try{
     let rows=[];const monthly={};
     // v117: si BLS no responde se usa el respaldo (antes se perdía el TCR completo).
-    try{const r=await fetch('https://api.bls.gov/publicAPI/v2/timeseries/data/',{method:'POST',signal:c.signal,headers:{'content-type':'application/json','user-agent':'MacroArgentinaDashboard/4.0'},body:JSON.stringify({seriesid:['CUUR0000SA0'],startyear:String(start),endyear:String(end)})});
+    try{const r=await fetch('https://api.bls.gov/publicAPI/v2/timeseries/data/',{method:'POST',signal:c.signal,headers:{'content-type':'application/json','user-agent':'Macrodatos/1.0 (+https://macrodatos.ar)'},body:JSON.stringify({seriesid:['CUUR0000SA0'],startyear:String(start),endyear:String(end)})});
     if(!r.ok)throw new Error(`BLS ${r.status}`); const j=await r.json();rows=j?.Results?.series?.[0]?.data||[];}catch(e){console.warn('BLS',e);}
     for(const x of rows){if(!/^M(0[1-9]|1[0-2])$/.test(x.period))continue;const v=Number(x.value);if(Number.isFinite(v))monthly[`${x.year}-${x.period.slice(1)}`]=v;}
     // Snapshot de respaldo para que la base nunca retroceda si la API BLS limita el rango o falla parcialmente.
@@ -758,7 +758,7 @@ async function ilaHistorical(){
   if(!url){const d=new Date();const prev=new Date(Date.UTC(d.getUTCFullYear(),d.getUTCMonth()-1,1));url=`https://cicec.ar/sites/default/files/base-datos-${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}/Data_ARG_${prev.getUTCFullYear()}${String(prev.getUTCMonth()+1).padStart(2,'0')}.xlsx`;}
   const c=new AbortController(),tm=setTimeout(()=>c.abort(),25000);
   try{
-    const r=await fetch(url,{signal:c.signal,headers:{'user-agent':'Mozilla/5.0 (MacroArgentinaDashboard)'}});if(!r.ok)throw new Error(`CICEc ${r.status}`);
+    const r=await fetch(url,{signal:c.signal,headers:{'user-agent':'Mozilla/5.0 (compatible; Macrodatos/1.0; +https://macrodatos.ar)'}});if(!r.ok)throw new Error(`CICEc ${r.status}`);
     const wb=XLSX.read(await r.arrayBuffer(),{type:'array'});const name=wb.SheetNames.find(n=>/^cicec$/i.test(n.trim()));if(!name)throw new Error('CICEc: hoja CICEC no encontrada');
     const rows=XLSX.utils.sheet_to_json(wb.Sheets[name],{header:1,raw:true,defval:null});
     // Ubicar columnas por encabezado (fila con "ILA-ARG"); si no, usar G..J.
@@ -797,7 +797,7 @@ async function igaHistorical(){
   const url=`https://drive.google.com/uc?export=download&id=${id}`;
   const c=new AbortController(),tm=setTimeout(()=>c.abort(),25000);
   try{
-    const r=await fetch(url,{signal:c.signal,redirect:'follow',headers:{'user-agent':'Mozilla/5.0 (MacroArgentinaDashboard)'}});if(!r.ok)throw new Error(`IGA PDF ${r.status}`);
+    const r=await fetch(url,{signal:c.signal,redirect:'follow',headers:{'user-agent':'Mozilla/5.0 (compatible; Macrodatos/1.0; +https://macrodatos.ar)'}});if(!r.ok)throw new Error(`IGA PDF ${r.status}`);
     const buf=await r.arrayBuffer();if(new TextDecoder('latin1').decode(new Uint8Array(buf).slice(0,4))!=='%PDF')throw new Error('IGA: la descarga no es un PDF');
     const lines=await pdfTextLines(buf);const M={ene:1,feb:2,mar:3,abr:4,may:5,jun:6,jul:7,ago:8,sep:9,sept:9,set:9,oct:10,nov:11,dic:12};
     const n=v=>Number(String(v).replace(/\./g,'').replace(',','.'));const monthly={};
@@ -837,7 +837,7 @@ async function arrearsFromOfficialWorkbook(){
   const url='https://www.bcra.gob.ar/archivos/Pdfs/PublicacionesEstadisticas/informes/informe-bancos-anexo.xlsx';
   const c=new AbortController(),t=setTimeout(()=>c.abort(),20000);
   try{
-    const r=await fetch(url,{signal:c.signal,headers:{'user-agent':'Mozilla/5.0 (MacroArgentinaDashboard)'}}); if(!r.ok)throw new Error(`anexo BCRA ${r.status}`);
+    const r=await fetch(url,{signal:c.signal,headers:{'user-agent':'Mozilla/5.0 (compatible; Macrodatos/1.0; +https://macrodatos.ar)'}}); if(!r.ok)throw new Error(`anexo BCRA ${r.status}`);
     const wb=XLSX.read(await r.arrayBuffer(),{type:'array'});
     const name=wb.SheetNames.find(n=>/calidad de cartera.*l[ií]neas/i.test(n));if(!name)throw new Error('anexo BCRA: hoja por líneas no encontrada');
     const rows=XLSX.utils.sheet_to_json(wb.Sheets[name],{header:1,raw:true,defval:null});
@@ -906,7 +906,7 @@ async function activityPulse(){
 
 // sin KV se conserva al menos durante la vida del isolate y el frontend mantiene otra copia local.
 let MEMORY_SNAPSHOT=null;
-const SNAPSHOT_PREFIX='macro:snapshot:v128:';
+const SNAPSHOT_PREFIX='macro:snapshot:v130:';
 const MEMORY_SNAPSHOTS={};
 function isPlainObject(v){return !!v&&typeof v==='object'&&!Array.isArray(v);}
 function mergeSnapshot(oldValue,newValue){
@@ -943,7 +943,8 @@ async function writeSnapshot(env,ctx,snapshot,group,stored=null,force=false){
   const hash=snapshotHash(snapshot.sources);
   if(stored?.hash===hash)return 'unchanged';
   if(!force&&stored?.savedAt&&Date.now()-Date.parse(stored.savedAt)<20*60*1000)return 'throttled';
-  const job=env.MACRO_STORE.put(SNAPSHOT_PREFIX+group,JSON.stringify({...snapshot,hash,savedAt:new Date().toISOString()}));
+  const savedAt=new Date().toISOString();
+  const job=env.MACRO_STORE.put(SNAPSHOT_PREFIX+group,JSON.stringify({...snapshot,hash,savedAt}),{metadata:{savedAt,hash}});
   if(ctx?.waitUntil&&!force)ctx.waitUntil(job.catch(()=>{}));else{try{await job}catch{return 'error'}}
   return 'kv';
 }
@@ -1007,10 +1008,19 @@ export async function freshnessReport(env){
 export default async(env={},ctx=null,request=null,opts={})=>{
   let group='all';try{const g=new URL(request?.url||'http://x/').searchParams.get('group');if(g&&GROUPS[g])group=g;}catch{}
   const names=group==='all'?Object.keys(JOBS):GROUPS[group];
+  // v130 · Camino rápido: si el snapshot guardado en KV tiene menos de 15 minutos, se devuelve tal cual
+  // (sin descargar fuentes ni fusionar históricos). Cuida el límite de CPU por invocación: la actualización
+  // pesada la hace la revisión programada (cron), y las visitas sólo leen.
+  if(!opts.force&&group!=='all'&&env?.MACRO_STORE?.getWithMetadata){
+    try{const {value,metadata}=await env.MACRO_STORE.getWithMetadata(SNAPSHOT_PREFIX+group,'text');
+      if(value&&metadata?.savedAt&&Date.now()-Date.parse(metadata.savedAt)<15*60*1000)
+        return new Response(value,{status:200,headers:{'content-type':'application/json; charset=utf-8','cache-control':'public, max-age=60, s-maxage=60, stale-while-revalidate=300','access-control-allow-origin':'*','x-macrodatos-cache':'kv'}});
+    }catch{}
+  }
   const stored=await readSnapshot(env,group);
   const bundled={};for(const n of names)if(BUNDLED_SOURCES[n])bundled[n]=BUNDLED_SOURCES[n];
-  const previous=mergeSnapshot({version:128,sources:bundled},stored||{});
-  const out={version:128,group,generatedAt:new Date().toISOString(),snapshotMode:env?.MACRO_STORE?.get?'kv+bundled':'bundled+isolate',sources:{}};
+  const previous=mergeSnapshot({version:130,sources:bundled},stored||{});
+  const out={version:130,group,generatedAt:new Date().toISOString(),snapshotMode:env?.MACRO_STORE?.get?'kv+bundled':'bundled+isolate',sources:{}};
   const results=await Promise.allSettled(names.map(n=>Promise.resolve().then(JOBS[n])));
   results.forEach((j,i)=>{
     const name=names[i],old=previous?.sources?.[name];

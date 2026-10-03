@@ -3,21 +3,28 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="description" content="Dashboard v30 de indicadores macroeconómicos de Argentina: inflación, actividad, PIB, pobreza, industria, recaudación, expectativas y agenda de publicaciones.">
+  <meta name="description" content="Macrodatos: indicadores macroeconómicos de Argentina actualizados automáticamente — inflación, actividad, dólar, recaudación, balanza de pagos, expectativas y la economía del mes en que naciste.">
+  <link rel="canonical" href="https://macrodatos.ar/">
+  <meta property="og:site_name" content="Macrodatos">
+  <meta property="og:title" content="Macrodatos | Indicadores económicos de Argentina">
+  <meta property="og:description" content="Los datos de la economía argentina, actualizados ni bien se publican.">
+  <meta property="og:url" content="https://macrodatos.ar/">
+  <meta property="og:type" content="website">
+  <meta name="twitter:card" content="summary">
   <meta name="theme-color" content="#071b35">
-  <title>Macro Argentina | Indicadores económicos</title>
+  <title>Macrodatos | Indicadores económicos de Argentina</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 rx=%2222%22 fill=%22%230b5bd3%22/><path d=%22M22 69V50h12v19zm22 0V36h12v33zm22 0V22h12v47z%22 fill=%22white%22/></svg>">
-  <link rel="stylesheet" href="styles.css?v=128">
+  <link rel="stylesheet" href="styles.css?v=130">
   <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
-  <script defer src="app.js?v=128"></script>
-  <script defer src="birth.js?v=129"></script>
+  <script defer src="app.js?v=130"></script>
+  <script defer src="birth.js?v=130"></script>
 </head>
 <body>
 <a class="skip-link" href="#main">Saltar al contenido</a>
 <header class="topbar">
-  <a class="brand" href="#inicio" aria-label="Macro Argentina, inicio">
+  <a class="brand" href="#inicio" aria-label="Macrodatos, inicio">
     <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
-    <span><strong>MACRO</strong><small>ARGENTINA</small></span>
+    <span><strong>MACRODATOS</strong><small>ECONOMÍA ARGENTINA</small></span>
   </a>
   <button class="menu-btn" id="menuBtn" aria-expanded="false" aria-controls="nav">☰<span class="sr-only">Abrir menú</span></button>
   <nav id="nav" aria-label="Navegación principal">
@@ -141,7 +148,7 @@
   <div class="disclaimer"><strong>Nota metodológica.</strong> Este sitio es una plantilla editorial y analítica. Las series históricas empalmadas combinan fuentes y metodologías diferentes; no deben tratarse como una única serie oficial homogénea. Antes de publicar profesionalmente, conviene automatizar la ingestión desde APIs/archivos oficiales y validar cada observación.</div>
 </section>
 </main>
-<footer><div class="brand"><span class="brand-mark"><i></i><i></i><i></i></span><span><strong>MACRO</strong><small>ARGENTINA</small></span></div><p>Información económica para análisis. No constituye asesoramiento financiero.</p><a href="#inicio">Volver arriba ↑</a><span class="build-version">Frontend v112</span></footer>
+<footer><div class="brand"><span class="brand-mark"><i></i><i></i><i></i></span><span><strong>MACRODATOS</strong><small>ECONOMÍA ARGENTINA</small></span></div><p>Información económica para análisis. No constituye asesoramiento financiero.</p><a href="#inicio">Volver arriba ↑</a><span class="build-version">macrodatos.ar · v130</span></footer>
 
 <div id="kpiModal" class="kpi-modal" hidden aria-hidden="true">
   <div class="kpi-modal-backdrop" data-kpi-close></div>

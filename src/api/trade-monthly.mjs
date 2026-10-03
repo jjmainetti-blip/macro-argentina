@@ -7,7 +7,7 @@ export default async function tradeMonthly(){
   const url=`${API}?ids=${ID}&start_date=${iso(start)}&end_date=${iso(new Date(Date.UTC(end.getUTCFullYear()+1,11,31)))}&limit=1000&format=json`;
   const c=new AbortController(); const t=setTimeout(()=>c.abort(),8000);
   try{
-    const r=await fetch(url,{signal:c.signal,headers:{accept:'application/json','user-agent':'MacroArgentinaDashboard/3.0'}});
+    const r=await fetch(url,{signal:c.signal,headers:{accept:'application/json','user-agent':'Macrodatos/1.0 (+https://macrodatos.ar)'}});
     if(!r.ok)throw new Error(`Series API ${r.status}`);
     const j=await r.json(); const monthly={};
     for(const row of (j?.data||[])){

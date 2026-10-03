@@ -1,6 +1,6 @@
 const round=(n,d=2)=>Number(Number(n).toFixed(d));
-async function fetchJson(url,ms=4500){const c=new AbortController(),t=setTimeout(()=>c.abort(),ms);try{const r=await fetch(url,{signal:c.signal,headers:{accept:'application/json','user-agent':'MacroArgentinaDashboard/5.0'}});if(!r.ok)throw new Error(`${r.status}`);return await r.json();}finally{clearTimeout(t)}}
-async function fetchText(url,ms=4500){const c=new AbortController(),t=setTimeout(()=>c.abort(),ms);try{const r=await fetch(url,{signal:c.signal,headers:{accept:'text/html','user-agent':'Mozilla/5.0 MacroArgentinaDashboard/5.0'}});if(!r.ok)throw new Error(`${r.status}`);return await r.text();}finally{clearTimeout(t)}}
+async function fetchJson(url,ms=4500){const c=new AbortController(),t=setTimeout(()=>c.abort(),ms);try{const r=await fetch(url,{signal:c.signal,headers:{accept:'application/json','user-agent':'Macrodatos/1.0 (+https://macrodatos.ar)'}});if(!r.ok)throw new Error(`${r.status}`);return await r.json();}finally{clearTimeout(t)}}
+async function fetchText(url,ms=4500){const c=new AbortController(),t=setTimeout(()=>c.abort(),ms);try{const r=await fetch(url,{signal:c.signal,headers:{accept:'text/html','user-agent':'Mozilla/5.0 Macrodatos/1.0 (+https://macrodatos.ar)'}});if(!r.ok)throw new Error(`${r.status}`);return await r.text();}finally{clearTimeout(t)}}
 // v120: históricos pesados (sólo para el cierre anterior) se reutilizan 1 hora dentro del isolate.
 const HIST_CACHE=new Map();
 async function fetchJsonCached(url,ttl=3600000,ms=6000){const h=HIST_CACHE.get(url);if(h&&Date.now()-h.at<ttl)return h.data;const data=await fetchJson(url,ms);HIST_CACHE.set(url,{at:Date.now(),data});return data;}

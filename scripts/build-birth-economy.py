@@ -175,6 +175,7 @@ PRODUCTS = {  # (producto, unidad) -> (clave, etiqueta, tipo, unidad para "por s
 }
 def obs_month(r):
     year, tipo, model, notes = int(r[0]), str(r[7] or ''), str(r[5] or ''), str(r[10] or '')
+    if len(r) > 11 and r[11]: return f'{year}-{int(r[11]):02d}'   # columna "Mes" (agregada en v130)
     if 'diciembre' in tipo.lower(): return f'{year}-12'
     if 'julio' in tipo.lower(): return f'{year}-07'
     for txt in (model, notes):
@@ -192,7 +193,14 @@ for r in list(_pw['Base'].iter_rows(values_only=True))[1:]:
     if per: item['per'] = per
     pm = obs_month(r)
     o = {'p': pm, 'src': r[9] or r[8], 'model': (r[5] or None), 'area': r[6], 'type': r[7]}
-    if r[4] == 'USD': o['usd'] = float(r[3])
+    fxm = fx.get(pm) or fx.get(min(pm, max(fx)))
+    if key == 'apartment':                       # departamentos: siempre en USD/m²
+        if r[4] == 'USD': o['usd'] = float(r[3])
+        elif fxm: o['usd'] = float(r[3]) * CURNAME[r[4]] / fxm; o['nominalArs'] = float(r[3])
+        else: continue
+    elif r[4] == 'USD':                          # precio publicado en dólares (convertibilidad): a pesos con el tipo de cambio del mes
+        if not fxm: continue
+        o['ars'] = r6(float(r[3]) * fxm); o['cur'] = 'USD'; o['nominal'] = float(r[3])
     else: o['ars'] = r6(float(r[3]) * CURNAME[r[4]]); o['cur'] = r[4]; o['nominal'] = float(r[3])
     if 'regulado' in str(r[7]).lower(): o['flag'] = 'Precio máximo regulado'
     o = {k: v for k, v in o.items() if v not in (None, '')}
