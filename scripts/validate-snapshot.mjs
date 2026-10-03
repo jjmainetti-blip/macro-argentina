@@ -44,7 +44,8 @@ console.log(JSON.stringify({ok:true,counts:{ipc:h.ipcRows.length,ipi:monthKeys(h
 
 // v123 · La economía cuando naciste
 {const B=JSON.parse(fs.readFileSync(new URL('../public/birth-economy.json',import.meta.url)));const n=B.cpi.length;
- for(const k of ['cpi','usCpi','fx','fxFree','smvm','ripte'])if(B[k].length!==n)fail(`birth ${k}: largo ${B[k].length} ≠ ${n}`);
+ for(const k of ['cpi','usCpi','fx','fxFree','wage','ripte'])if(B[k].length!==n)fail(`birth ${k}: largo ${B[k].length} ≠ ${n}`);
  if(B.cpi.filter(Number.isFinite).length<990)fail('birth: IPC incompleto');
  for(const L of [B.presidents,B.ministers]){for(let i=1;i<L.length;i++)if(L[i].start<L[i-1].start)fail(`birth: orden ${L[i].name}`);if(L.at(-1).end!==null)fail('birth: falta el cargo vigente');}
- if(B.presidents[0].start>'1943-01-01')fail('birth: presidentes no cubren 1943');}
+ if(B.presidents[0].start>'1943-01-01')fail('birth: presidentes no cubren 1943');
+ for(let i=0;i<n;i++){const ym=`${1943+Math.floor(i/12)}-${String(i%12+1).padStart(2,'0')}`;if(ym<='2026-07'&&!Number.isFinite(B.wage[i]))fail(`birth: falta salario ${ym}`);}}

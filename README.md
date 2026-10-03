@@ -147,6 +147,14 @@ Chequeo: `npm run validate:snapshot`.
 - **Carga sobre las fuentes**: `/api/markets` comparte una respuesta de 20 s (Cache API + memoria del isolate); los históricos usados para el cierre anterior se reutilizan 1 hora.
 
 
+## v129 — “La economía cuando naciste”: salarios 1940–1993 y más precios
+
+- **Salarios:** hasta diciembre de 1993 se usa el salario medio industrial nominal mensual (`data/salarios.xlsx`, con su moneda por fila); desde julio de 1994, el RIPTE. Enero–junio de 1994 se interpola en términos reales con el IPC (los niveles empalman: dic-1993 $ 862,5; jul-1994 $ 874,9). Se dejó de usar el SMVM.
+- **Precios:** se incorporó `data/precios.xlsx` (1940–2026; pan, leche, asado, aceite, harina, pescado, papa, pollo, azúcar, manteca, vino, nafta, huevos, café, yerba, arroz, moto, autos 0 km y USD/m² de departamentos) a los precios que ya tenía la sección. Cada observación se fecha en su mes (diciembre/julio/mes indicado; promedios anuales a julio). Autos: el más barato del período.
+- **Regla de estimación:** precio exacto del mes si existe; si no, interpolación del precio **real** (IPC; IPC-U de EE.UU. para valores en dólares) entre la observación anterior y la siguiente cuando están separadas por **hasta 24 meses**; en los extremos, la observación más cercana (hasta 6 meses) actualizada por IPC. Si no se cumple, el bien **no se muestra**. Lo mismo para los indicadores sin dato (no hay más “sin dato”).
+- Control de calidad: se excluye una observación cuyo precio real salta más de 3 veces contra la vecina (pescado 1955: m$n 12,48 vs 2,05 en 1954).
+- Para regenerar: `python3 scripts/build-birth-economy.py <carpeta-de-insumos>` (lee `data/*.xlsx`).
+
 ## v128 — actualización automática general de todas las tarjetas
 
 **Diagnóstico.** Había tres tipos de problema:

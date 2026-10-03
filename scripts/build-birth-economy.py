@@ -64,14 +64,25 @@ hist = json.load(open(os.path.join(ROOT, 'public', 'macro-history.json')))
 fx_free_annual = hist['marketsHistory']['exchangeHistorical']['free']['nominal']   # $ actuales, anual
 
 # ---------- Salarios ----------
-CUR = [('1970-01', 1e-13), ('1983-06', 1e-11), ('1985-07', 1e-7), ('1992-01', 1e-4), ('9999-12', 1.0)]
-def factor(k):  # pesos actuales por unidad de la moneda vigente en el mes k (regla mensual de la serie SMVM)
-    for lim, f in CUR:
-        if k < lim: return f
-    return 1.0
+# v129: hasta dic-1993, salario medio industrial nominal (data/salarios.xlsx, serie mensual 1940-1993 con su
+# moneda por fila); desde jul-1994, RIPTE. Ene-jun 1994 se completa interpolando en términos reales (IPC).
+import openpyxl, re
+CURNAME = {'Peso moneda nacional (m$n)': 1e-13, 'Peso Ley 18.188 ($ ley)': 1e-11, 'Peso argentino ($a)': 1e-7, 'Austral (₳)': 1e-4, 'Peso ($)': 1.0}
 today = datetime.date.today().strftime('%Y-%m')
-smvm = {k: v * factor(k) for k, v in mp(S['smvm']).items() if k <= max(today, last_cpi)}
 ripte = mp(S['ripte'])
+wage, wage_src = {}, {}
+_wb = openpyxl.load_workbook(os.path.join(ROOT, 'data', 'salarios.xlsx'), data_only=True)
+for r in list(_wb['Serie mensual 1940-1993'].iter_rows(values_only=True))[1:]:
+    if not r[1] or r[3] is None: continue
+    k = f"{int(r[1])}-{int(r[2]):02d}"
+    wage[k] = float(r[3]) * CURNAME[r[4]]; wage_src[k] = 'ind'
+for k, v in ripte.items():
+    if k >= '1994-07': wage[k] = v; wage_src[k] = 'ripte'
+_a, _b = '1993-12', '1994-07'
+_ra, _rb = wage[_a] / idx[_a], wage[_b] / idx[_b]
+_gap = months(_a, _b)
+for i, k in enumerate(_gap[1:-1], start=1):
+    w = i / (len(_gap) - 1); wage[k] = (_ra ** (1 - w) * _rb ** w) * idx[k]; wage_src[k] = 'interp'
 
 # ---------- IPC EE.UU. ----------
 us = {}
@@ -125,7 +136,7 @@ def pts(g, usd=False):
     out = []
     for p in g.get('points', []):
         if p.get('doubtful'): continue
-        o = {'p': p['period'], 'src': p['source']}
+        o = {'p': p['period'] if len(p['period']) == 7 else p['period'] + '-07', 'src': p['source']}
         if p.get('model'): o['model'] = p['model']
         if usd: o['usd'] = p['price']
         else:
@@ -143,19 +154,77 @@ for key, label in [('bread', 'Pan francés (1 kg)'), ('beef', 'Asado (1 kg)'), (
         if k not in have: pp.append({'p': k, 'ars': r6(v), 'cur': '$', 'nominal': v, 'src': 'https://www.indec.gob.ar/ftp/cuadros/economia/sh_ipc_precios_promedio.xls'})
     pp.sort(key=lambda x: x['p'])
     basket[key] = {'label': label, 'area': 'GBA', 'points': pp}
-basket['car'] = {'label': 'Auto 0 km más barato', 'points': pts(goods['car'])}
-basket['apartment'] = {'label': 'Departamento de 50 m² usado en CABA', 'm2': 50, 'points': pts(goods['apartment'], usd=True),
-                       'note': '2001–2011: precio de oferta promedio (GCBA, Planeamiento); 2016+: departamentos usados de 2 ambientes (IDECBA). Series no empalmadas.'}
+basket['car'] = {'label': 'Auto 0 km (el más barato con precio publicado)', 'kind': 'durable', 'points': pts(goods['car'])}
+basket['apartment'] = {'label': 'Departamento de 50 m² en CABA', 'kind': 'durable', 'm2': 50, 'points': pts(goods['apartment'], usd=True),
+                       'note': 'Departamento: precio de oferta en USD/m² (GCBA 2001–2011; IDECBA desde 2016; otras referencias en data/precios.xlsx).'}
+for _k, _per in [('bread', 'kg'), ('beef', 'kg'), ('milk', 'litros')]: basket[_k]['kind'] = 'food'; basket[_k]['per'] = _per
+
+# v129: base de precios históricos aportada (data/precios.xlsx, 1940-2026, precios nominales con su moneda).
+MESES = {'enero': 1, 'febrero': 2, 'marzo': 3, 'abril': 4, 'mayo': 5, 'junio': 6, 'julio': 7, 'agosto': 8, 'septiembre': 9, 'setiembre': 9, 'octubre': 10, 'noviembre': 11, 'diciembre': 12}
+PRODUCTS = {  # (producto, unidad) -> (clave, etiqueta, tipo, unidad para "por sueldo")
+    ('Pan', '1 kg'): ('bread', None, 'food', 'kg'), ('Asado', '1 kg'): ('beef', None, 'food', 'kg'), ('Leche', '1 L'): ('milk', None, 'food', 'litros'),
+    ('Auto nuevo', '1 unidad'): ('car', None, 'durable', None), ('Departamento', '1 m²'): ('apartment', None, 'durable', None),
+    ('Aceite', '1 kg'): ('oil', 'Aceite (1 kg)', 'food', 'kg'), ('Aceite', '1.5 L'): ('oil15', 'Aceite (botella de 1,5 L)', 'food', 'botellas'),
+    ('Aceite', '1 L'): ('oil1', 'Aceite (1 litro)', 'food', 'litros'), ('Harina', '1 kg'): ('flour', 'Harina de trigo (1 kg)', 'food', 'kg'),
+    ('Pescado', '1 kg'): ('fish', 'Pescado (corvina, 1 kg)', 'food', 'kg'), ('Papa', '1 kg'): ('potato', 'Papa (1 kg)', 'food', 'kg'),
+    ('Pollo', '1 kg'): ('chicken', 'Pollo (1 kg)', 'food', 'kg'), ('Azúcar', '1 kg'): ('sugar', 'Azúcar (1 kg)', 'food', 'kg'),
+    ('Manteca', '1 kg'): ('butter', 'Manteca (1 kg)', 'food', 'kg'), ('Vino', '1 L'): ('wine', 'Vino común (1 litro)', 'food', 'litros'),
+    ('Nafta', '1 L'): ('fuel', 'Nafta (1 litro)', 'food', 'litros'), ('Huevos', '12 unidades'): ('eggs', 'Huevos (docena)', 'food', 'docenas'),
+    ('Café', '250 g'): ('coffee', 'Café molido (250 g)', 'food', 'paquetes'), ('Yerba mate', '1 kg'): ('yerba', 'Yerba mate (1 kg)', 'food', 'kg'),
+    ('Arroz', '1 kg'): ('rice', 'Arroz (1 kg)', 'food', 'kg'), ('Motocicleta nueva', '1 unidad'): ('moto', 'Moto nueva', 'durable', None),
+}
+def obs_month(r):
+    year, tipo, model, notes = int(r[0]), str(r[7] or ''), str(r[5] or ''), str(r[10] or '')
+    if 'diciembre' in tipo.lower(): return f'{year}-12'
+    if 'julio' in tipo.lower(): return f'{year}-07'
+    for txt in (model, notes):
+        for name, mm in MESES.items():
+            if re.search(rf'\b{name}\b', txt, re.I): return f'{year}-{mm:02d}'
+    return f'{year}-07'   # promedio anual u observación sin mes: mitad de año
+_pw = openpyxl.load_workbook(os.path.join(ROOT, 'data', 'precios.xlsx'), data_only=True)
+added, skipped = 0, []
+for r in list(_pw['Base'].iter_rows(values_only=True))[1:]:
+    if not r[0] or r[3] is None: continue
+    spec = PRODUCTS.get((r[1], r[2]))
+    if not spec: skipped.append(f'{r[0]} {r[1]} ({r[2]})'); continue
+    key, label, kind, per = spec
+    item = basket.setdefault(key, {'label': label, 'kind': kind, 'points': []})
+    if per: item['per'] = per
+    pm = obs_month(r)
+    o = {'p': pm, 'src': r[9] or r[8], 'model': (r[5] or None), 'area': r[6], 'type': r[7]}
+    if r[4] == 'USD': o['usd'] = float(r[3])
+    else: o['ars'] = r6(float(r[3]) * CURNAME[r[4]]); o['cur'] = r[4]; o['nominal'] = float(r[3])
+    if 'regulado' in str(r[7]).lower(): o['flag'] = 'Precio máximo regulado'
+    o = {k: v for k, v in o.items() if v not in (None, '')}
+    have = {p['p']: p for p in item['points']}
+    if pm in have:
+        if key == 'car' and o.get('ars') and have[pm].get('ars') and o['ars'] < have[pm]['ars']: item['points'].remove(have[pm])  # auto: el más barato del período
+        else: continue
+    item['points'].append(o); added += 1
+
+# Control de saltos: observaciones contiguas (<= 24 meses) cuyo precio REAL se multiplica o divide por más de 3.
+outliers = []
+for key, item in basket.items():
+    keep = []
+    for p in sorted(item['points'], key=lambda x: x['p']):
+        q = keep[-1] if keep else None
+        if key != 'car' and q and 'ars' in p and 'ars' in q and q['p'] in idx and min(p['p'], last_cpi) in idx and len(months(q['p'], p['p'])) <= 25:
+            ratio = (p['ars'] / idx[min(p['p'], last_cpi)]) / (q['ars'] / idx[min(q['p'], last_cpi)])
+            if ratio > 3 or ratio < 1 / 3: outliers.append(f"{key} {p['p']} ({p.get('nominal')} {p.get('cur')}; real x{ratio:.1f} vs {q['p']})"); continue
+        keep.append(p)
+    item['points'] = keep
+print('precios agregados', added, '| omitidos', skipped, '| saltos excluidos', outliers)
 
 out = {
     'schema': 1, 'generated': today, 'start': START, 'end': END, 'cpiBase': last_cpi,
     'notes': {
         'cpi': 'IPC INDEC (GBA) 1943–2006; IPC San Luis 2007–2016 (INDEC intervenido); IPC Nacional INDEC desde 2017.',
         'fx': 'Tipo de cambio oficial/de referencia BCRA (series históricas monetarias); desde mayo 2026, promedio mensual del oficial. Dólar libre: promedio mensual desde 1991 y referencia anual antes.',
-        'salary': 'Sueldo promedio: RIPTE (desde julio 1994). Antes no existe una serie oficial de sueldo promedio: se muestra el salario mínimo, vital y móvil (desde 1965).',
+        'salary': 'Salario: hasta 1993, salario medio industrial nominal mensual (reconstrucción con fuentes INDEC, CEPAL, BCRA y Ministerio de Economía); desde julio de 1994, RIPTE (sueldo promedio de trabajadores registrados estables). Enero-junio 1994: interpolado con IPC.',
+        'prices': 'Precios: INDEC (precios promedio), Anuario Estadístico, GCBA/IDECBA, listas y avisos contemporáneos (fuente enlazada en cada precio). Entre dos observaciones separadas por hasta 2 años, el precio del mes se interpola manteniendo la trayectoria real (ajustada por IPC); sin observaciones cercanas no se muestra.',
         'gdp': 'PIB a precios constantes: Cuentas Nacionales 1935–1962 (Secretaría de Asuntos Económicos) hasta 1960; Banco Mundial (INDEC) desde 1961.',
     },
-    'cpi': arr(cpi), 'usCpi': arr(us), 'fx': arr(fx), 'fxFree': arr(fx_free), 'smvm': arr(smvm), 'ripte': arr(ripte),
+    'cpi': arr(cpi), 'usCpi': arr(us), 'fx': arr(fx), 'fxFree': arr(fx_free), 'wage': arr(wage), 'wageSrc': [wage_src.get(k) for k in AM], 'ripte': arr(ripte),
     'fxFreeAnnual': {k: r6(v) for k, v in fx_free_annual.items()},
     'gdp': gdp,
     'currencies': [

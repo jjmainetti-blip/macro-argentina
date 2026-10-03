@@ -1,7 +1,8 @@
 // v123 · "La economía cuando naciste".
 // Lee public/birth-economy.json (series mensuales desde 1943 en pesos actuales equivalentes + presidentes,
-// ministros, monedas y precios de bienes con fuente) y arma la ficha del mes elegido. Nunca interpola:
-// si un dato no existe para la fecha, se informa como no disponible.
+// ministros, monedas y precios de bienes con fuente) y arma la ficha del mes elegido.
+// v129: sólo se muestran los datos disponibles. Precios: entre dos observaciones separadas por hasta 2 años se
+// interpola el precio REAL (ajustado por IPC) y se vuelve a nominal del mes; sin observaciones cercanas, no se muestra.
 (()=>{
   'use strict';
   const MONTHS=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
@@ -35,12 +36,10 @@
   function inflationAt(ym){const i=ymIdx(ym),c=D.cpi;if(!Number.isFinite(c[i])||!Number.isFinite(c[i-1]))return null;
     return {mom:(c[i]/c[i-1]-1)*100,yoy:Number.isFinite(c[i-12])?(c[i]/c[i-12]-1)*100:null};}
 
-  function salaryAt(ym){
-    if(ym>='1994-07'){const r=atOrBefore('ripte',ym,4);if(r)return {kind:'ripte',...r};}
-    const s=atOrBefore('smvm',ym,1);if(s)return {kind:'smvm',...s};
-    return null;
-  }
-  function salaryToday(kind){return lastOf(kind==='ripte'?'ripte':'smvm');}
+  // v129: salario medio industrial (hasta 1993), RIPTE (desde jul-1994), ene-jun 1994 interpolado.
+  function salaryAt(ym){const r=atOrBefore('wage',ym,4);if(!r)return null;const kind=D.wageSrc?.[ymIdx(r.ym)]||'ind';return {kind,...r};}
+  function salaryToday(){return lastOf('ripte');}
+  const SAL_LABEL={ind:'Salario medio industrial',interp:'Salario promedio (estimado)',ripte:'Sueldo promedio (RIPTE)'};
 
   function tcr(fxArs,ym){const c=atOrBefore('cpi',ym,3),u=atOrBefore('usCpi',ym,3),uB=at('usCpi',D.cpiBase);if(!c||!u||!uB||!Number.isFinite(fxArs))return null;return fxArs/c.v*(u.v/uB);}
 
@@ -65,33 +64,45 @@
 
   function stat(label,value,sub,extra=''){return `<div class="be-stat"><span>${label}</span><strong>${value}</strong>${sub?`<small>${sub}</small>`:''}${extra}</div>`;}
 
-  // Busca el precio más cercano (mismo mes, o hasta ±maxGap meses; los anuales cuentan como julio).
-  function pointNear(points,ym,maxGap=12){
-    const t=ymIdx(ym);let best=null;
-    for(const p of points||[]){const pym=/^\d{4}$/.test(p.p)?`${p.p}-07`:p.p;const d=Math.abs(ymIdx(pym)-t);if(d<=maxGap&&(!best||d<best.d))best={...p,pym,d};}
-    return best;
+  // v129: precio del mes t para un bien. Observación exacta; o interpolación del precio real (IPC; IPC-U de
+  // EE.UU. para valores en dólares) entre la observación anterior y la siguiente si están a <= 24 meses;
+  // o, en los extremos, la observación más cercana (<= 6 meses) actualizada por IPC. Si no, null.
+  const cpiAt=(ym,usd)=>{const k=usd?'usCpi':'cpi';const v=at(k,ym);if(Number.isFinite(v))return v;const l=lastOf(k);return ym>l.ym?l.v:null;};
+  function priceAt(g,ym){
+    const usd=!!g.m2,val=p=>usd?p.usd:p.ars,pts=(g.points||[]).filter(p=>/^\d{4}-\d{2}$/.test(p.p)&&Number.isFinite(val(p))).sort((a,b)=>a.p.localeCompare(b.p));
+    if(!pts.length)return null;const t=ymIdx(ym);
+    let a=null,b=null;for(const p of pts){const i=ymIdx(p.p);if(i<=t)a=p;if(i>=t&&!b)b=p;}
+    const ct=cpiAt(ym,usd);if(!Number.isFinite(ct))return null;
+    if(a&&a.p===ym)return {value:val(a),exact:true,a};
+    if(a&&b){const ia=ymIdx(a.p),ib=ymIdx(b.p),ca=cpiAt(a.p,usd),cb=cpiAt(b.p,usd);
+      if(ib-ia<=24&&ca&&cb){const w=(t-ia)/(ib-ia),r=Math.pow(val(a)/ca,1-w)*Math.pow(val(b)/cb,w);return {value:r*ct,exact:false,a,b};}}
+    const near=[a,b].filter(Boolean).map(p=>({p,d:Math.abs(ymIdx(p.p)-t)})).sort((x,y)=>x.d-y.d)[0];
+    if(near&&near.d<=6){const cp=cpiAt(near.p.p,usd);if(cp)return {value:val(near.p)*ct/cp,exact:false,a:near.p,carried:true};}
+    return null;
   }
-  function lastPoint(points){return (points||[]).slice().sort((a,b)=>a.p.localeCompare(b.p)).at(-1)||null;}
+  function lastPoint(points){return (points||[]).filter(p=>/^\d{4}-\d{2}$/.test(p.p)).slice().sort((a,b)=>a.p.localeCompare(b.p)).at(-1)||null;}
+  const fxFor=ym=>at('fxFree',ym)??at('fx',ym)??(ym>lastOf('fx').ym?(lastOf('fxFree')?.v??lastOf('fx').v):null);
 
-  function goodsRows(ym,salKind){
-    const B=D.basket||{},rows=[];
-    const salFor=pym=>{const s=salKind==='ripte'?atOrBefore('ripte',pym,4):atOrBefore('smvm',pym,1);return s?.v??null;};
-    const fxFor=pym=>{const f=at('fxFree',pym)??at('fx',pym);return f;};
-    const priceArs=(g,p)=>g.m2?(Number.isFinite(p.usd)&&fxFor(p.pym)?p.usd*g.m2*fxFor(p.pym):null):p.ars;
-    const sk=salKind==='ripte'?'sueldos':'salarios mínimos';
-    for(const [key,g] of Object.entries(B)){
-      const food=['bread','beef','milk'].includes(key);
-      const p=pointNear(g.points,ym,food?12:18);
-      const L=lastPoint(g.points);const Lp=L?{...L,pym:/^\d{4}$/.test(L.p)?`${L.p}-07`:L.p}:null;
-      const fmtRatio=(price,sal)=>{if(!Number.isFinite(price)||!Number.isFinite(sal)||sal<=0)return null;const r=food?sal/price:price/sal;return food?`${big(r)} ${key==='milk'?'litros':'kg'} por ${salKind==='ripte'?'sueldo':'salario mínimo'}`:`${big(r)} ${sk}`;};
-      let then='<span class="be-na">Sin dato para esa época</span>',thenRatio='',today='—';
-      if(p){const ars=priceArs(g,p),cur=currencyAt(p.pym),sal=salFor(p.pym);
-        const nom=g.m2?`US$ ${nf(0).format(p.usd*g.m2)} <small>(US$ ${nf(0).format(p.usd)}/m²)</small>`:fmtEra(ars,cur);
-        then=`${nom}<small>${p.model?esc(p.model)+' · ':''}precio de ${ymShort(p.p)}${p.flag?` · <abbr title="${esc(p.flag)}">INDEC 2007–2015</abbr>`:''} · <a href="${esc(p.src)}" target="_blank" rel="noopener">fuente</a></small>`;
-        const r=fmtRatio(ars,sal);thenRatio=r?`<b>${r}</b>`:'<span class="be-na">sin salario de referencia</span>';}
-      if(Lp){const ars=priceArs(g,Lp),sal=(salKind==='ripte'?atOrBefore('ripte',Lp.pym,6):atOrBefore('smvm',Lp.pym,1))?.v;const r=fmtRatio(ars,sal);
-        today=`${r?`<b>${r}</b>`:''}<small>${g.m2?`US$ ${nf(0).format(Lp.usd*g.m2)}`:fmtToday(ars)} · ${ymShort(Lp.p)}${Lp.model?` · ${esc(Lp.model)}`:''}</small>`;}
-      rows.push(`<tr><th scope="row">${esc(g.label)}${g.area?`<small>${esc(g.area)}</small>`:''}</th><td data-label="En su época">${then}</td><td data-label="Equivalía a">${thenRatio||'<span class="be-na">—</span>'}</td><td data-label="Hoy">${today}</td></tr>`);
+  function goodsRows(ym,sal){
+    const B=D.basket||{},rows=[],salToday=salaryToday();
+    const order=['bread','milk','beef','chicken','fish','potato','flour','oil','oil1','oil15','sugar','rice','butter','eggs','yerba','coffee','wine','fuel','moto','car','apartment'];
+    const keys=Object.keys(B).sort((x,y)=>(order.indexOf(x)+1||99)-(order.indexOf(y)+1||99));
+    for(const key of keys){const g=B[key];
+      const pr=priceAt(g,ym);if(!pr)continue;            // sin dato cercano: la fila no se muestra
+      const food=g.kind==='food',per=g.per||'unidades';
+      const ars=g.m2?(fxFor(ym)?pr.value*g.m2*fxFor(ym):null):pr.value,cur=currencyAt(ym);
+      const ratio=(price,s)=>Number.isFinite(price)&&Number.isFinite(s)&&s>0?(food?`${big(s/price)} ${per} por sueldo`:`${big(price/s)} sueldos`):null;
+      const ref=pr.exact?pr.a:null;
+      const how=pr.exact?`precio de ${ymShort(pr.a.p)}`:pr.carried?`estimado desde ${ymShort(pr.a.p)} (ajustado por IPC)`:`estimado entre ${ymShort(pr.a.p)} y ${ymShort(pr.b.p)} (ajustado por IPC)`;
+      const srcs=[pr.a,pr.b].filter(Boolean).filter((p,i,arr)=>p.src&&arr.findIndex(q=>q.src===p.src)===i).map((p,i)=>`<a href="${esc(p.src)}" target="_blank" rel="noopener">fuente${i?' 2':''}</a>`).join(' · ');
+      const model=(ref||pr.a)?.model,flag=[pr.a,pr.b].find(p=>p?.flag)?.flag;
+      const nom=g.m2?`US$ ${nf(0).format(pr.value*g.m2)} <small>(US$ ${nf(0).format(pr.value)}/m²)</small>`:fmtEra(ars,cur);
+      const then=`${nom}<small>${model&&g.kind==='durable'&&!g.m2?esc(model)+' · ':''}${how}${flag?` · ${esc(flag)}`:''}${srcs?` · ${srcs}`:''}</small>`;
+      const r=sal?ratio(ars,sal.v):null;
+      const L=lastPoint(g.points);let today='—';
+      if(L&&ymIdx(L.p)>=ymIdx(lastOf('cpi').ym)-24){const lv=g.m2?L.usd:L.ars,lars=g.m2?lv*g.m2*(fxFor(L.p)||0):lv,lr=ratio(lars,salToday?.v);
+        today=`${lr?`<b>${lr}</b>`:''}<small>${g.m2?`US$ ${nf(0).format(lv*g.m2)}`:fmtToday(lv)} · ${ymShort(L.p)}${L.model&&g.kind==='durable'&&!g.m2?` · ${esc(L.model)}`:''}</small>`;}
+      rows.push(`<tr><th scope="row">${esc(g.label)}${(ref||pr.a)?.area?`<small>${esc((ref||pr.a).area)}</small>`:''}</th><td data-label="En su época">${then}</td><td data-label="Equivalía a">${r?`<b>${r}</b>`:'—'}</td><td data-label="Hoy">${today}</td></tr>`);
     }
     return rows.join('');
   }
@@ -103,7 +114,7 @@
     const cur=currencyAt(ym),curs=currenciesInMonth(ym);
     const inf=inflationAt(ym);
     const yr=+y,gdp=D.gdp?.[yr],gdpPrev=D.gdp?.[yr-1];
-    const sal=salaryAt(ym),salT=sal?salaryToday(sal.kind):null;
+    const sal=salaryAt(ym),salT=salaryToday();
     const salReal=sal?toToday(sal.v,sal.ym):null,salTodayReal=salT?toToday(salT.v,salT.ym):null;
     const fxNow=lastOf('fx'),fx=at('fx',ym)??(ym>fxNow.ym?fxNow.v:null);
     const fxReal=tcr(fx,ym),fxTodayReal=tcr(fxNow.v,D.cpiBase);
@@ -114,22 +125,22 @@
     const curNote=curs.length>1?`Ese mes cambió la moneda: ${curs.map(c=>`${c.name} (${c.sym})`).join(' → ')}.`:'';
     const pres=peopleAt(D.presidents,ym),min=peopleAt(D.ministers,ym);
     const cmp=(a,b,less,more)=>Number.isFinite(a)&&Number.isFinite(b)&&b>0?(()=>{const r=(a/b-1)*100;return Math.abs(r)<3?'similar al actual':`${nf(0).format(Math.abs(r))}% ${r>0?more:less} que hoy`;})():'';
-    const salLabel=sal?.kind==='ripte'?'Sueldo promedio (RIPTE)':'Salario mínimo, vital y móvil';
+    const salLabel=sal?SAL_LABEL[sal.kind]||'Salario':'';const goods=goodsRows(ym,sal);
     out.innerHTML=`
       <div class="be-head"><div><span class="eyebrow">Naciste en</span><h3>${ymLabel(ym).replace(/^./,c=>c.toUpperCase())}</h3></div>
         <div class="be-currency"><span>Moneda vigente</span><strong>${esc(cur.name)} <em>${esc(cur.sym)}</em></strong><small>${cur.f<1?`1 peso de hoy = ${nf(0).format(1/cur.f)} ${esc(cur.sym)}`:'Moneda actual'}${curNote?` · ${esc(curNote)}`:''}</small></div></div>
       <div class="be-people">${personCard('Presidencia',pres)}${personCard('Ministerio de Economía',min)}</div>
       <div class="be-stats">
-        ${stat('Inflación mensual',inf?pct(inf.mom):'—',inf?`Interanual: <b>${pct(inf.yoy,inf.yoy!=null&&Math.abs(inf.yoy)>=100?0:1)}</b>`:'INDEC todavía no publicó el IPC de ese mes')}
-        ${stat(`PBI ${y}`,Number.isFinite(gdp)?pct(gdp):'—',Number.isFinite(gdp)?`Variación real anual${Number.isFinite(gdpPrev)?` · ${yr-1}: ${pct(gdpPrev)}`:''}`:'Todavía sin dato anual')}
-        ${stat(sal?salLabel:'Sueldo',sal?fmtToday(salReal):'—',sal?`a pesos de ${base} · en su momento: ${fmtEra(sal.v,currencyAt(sal.ym))}${sal.ym!==ym?` (${ymShort(sal.ym)})`:''}`:'Sin serie salarial para esa fecha (el SMVM comienza en 1965)',sal&&salTodayReal?`<em class="${salReal>=salTodayReal*0.97?'up':'down'}">Hoy: ${fmtToday(salTodayReal)} (${ymShort(salT.ym)}) · ${cmp(salReal,salTodayReal,'menor','mayor').replace('que hoy','que el actual')}</em>`:'')}
-        ${stat('Dólar oficial (TCR)',fxReal?fmtToday(fxReal):'—',Number.isFinite(fx)?`a pesos de ${base} · en su momento: ${fmtEra(fx,cur)}`:'Sin cotización',fxReal&&fxTodayReal?`<em class="neutral">Hoy: ${fmtToday(fxNow.v)} (${ymShort(fxNow.ym)}) · en términos reales, ${Math.abs(fxReal/fxTodayReal-1)<0.03?'similar al actual':`${nf(0).format(Math.abs((fxReal/fxTodayReal-1)*100))}% ${fxReal>fxTodayReal?'más caro':'más barato'} que hoy`}</em>`:'')}
+        ${inf?stat('Inflación mensual',pct(inf.mom),Number.isFinite(inf.yoy)?`Interanual: <b>${pct(inf.yoy,Math.abs(inf.yoy)>=100?0:1)}</b>`:''):''}
+        ${Number.isFinite(gdp)?stat(`PBI ${y}`,pct(gdp),`Variación real anual${Number.isFinite(gdpPrev)?` · ${yr-1}: ${pct(gdpPrev)}`:''}`):''}
+        ${sal?stat(salLabel,fmtToday(salReal),`a pesos de ${base} · en su momento: ${fmtEra(sal.v,currencyAt(sal.ym))}${sal.ym!==ym?` (${ymShort(sal.ym)})`:''}`,salTodayReal?`<em class="${salReal>=salTodayReal*0.97?'up':'down'}">Sueldo promedio hoy (RIPTE): ${fmtToday(salTodayReal)} (${ymShort(salT.ym)}) · ${cmp(salReal,salTodayReal,'menor','mayor').replace('que hoy','que el actual')}</em>`:''):''}
+        ${!fxReal?'':stat('Dólar oficial (TCR)',fmtToday(fxReal),`a pesos de ${base} · en su momento: ${fmtEra(fx,cur)}`,fxReal&&fxTodayReal?`<em class="neutral">Hoy: ${fmtToday(fxNow.v)} (${ymShort(fxNow.ym)}) · en términos reales, ${Math.abs(fxReal/fxTodayReal-1)<0.03?'similar al actual':`${nf(0).format(Math.abs((fxReal/fxTodayReal-1)*100))}% ${fxReal>fxTodayReal?'más caro':'más barato'} que hoy`}</em>`:'')}
         ${Number.isFinite(free)&&Math.abs(free/fx-1)>0.03?stat('Dólar libre (TCR)',fmtToday(freeReal),`promedio mensual · en su momento: ${fmtEra(free,cur)} · brecha ${pct((free/fx-1)*100,0)}`):''}
         ${freeAnnual?stat('Dólar libre (TCR)',fmtToday(freeReal),`referencia anual ${y} · en su momento: ${fmtEra(freeAnnual.v,currencyAt(`${y}-07`))} · brecha ${pct(freeAnnual.gap,0)}`):''}
       </div>
-      <div class="be-goods"><h4>¿Cuánto costaba?</h4><p>${sal?`Cuántos ${sal.kind==='ripte'?'sueldos promedio (RIPTE)':'salarios mínimos'} hacían falta entonces y cuántos hacen falta hoy.`:'No hay serie salarial para esa fecha; se muestran sólo los precios disponibles.'} Se usa el precio publicado más cercano a la fecha (hasta un año de distancia para alimentos, 18 meses para autos y departamentos).</p>
-        <div class="be-table-wrap"><table class="be-table"><thead><tr><th>Bien</th><th>Precio en su época</th><th>Equivalía a</th><th>Hoy</th></tr></thead><tbody>${goodsRows(ym,sal?.kind||'ripte')}</tbody></table></div></div>
-      <p class="be-notes">Valores “a pesos de ${base}” ajustados por IPC (${esc(D.notes.cpi)}). TCR: dólar oficial ajustado por la inflación de Argentina y de EE.UU. (IPC-U). ${esc(D.notes.salary)} ${esc(D.notes.gdp)} ${esc(D.basket?.apartment?.note||'')} Fotos: Wikipedia / Wikimedia Commons.</p>`;
+      ${goods?`<div class="be-goods"><h4>¿Cuánto costaba?</h4><p>${sal?`Cuántos sueldos hacían falta entonces (${esc(salLabel.replace(/^./,c=>c.toLowerCase()))}) y cuántos hacen falta hoy (sueldo promedio, RIPTE).`:''} Cuando no hay un precio publicado para ese mes exacto, se estima a partir de las observaciones más cercanas (separadas por hasta 2 años), manteniendo su valor real.</p>
+        <div class="be-table-wrap"><table class="be-table"><thead><tr><th>Bien</th><th>Precio en su época</th><th>Equivalía a</th><th>Hoy</th></tr></thead><tbody>${goods}</tbody></table></div></div>`:''}
+      <p class="be-notes">Valores “a pesos de ${base}” ajustados por IPC (${esc(D.notes.cpi)}). TCR: dólar oficial ajustado por la inflación de Argentina y de EE.UU. (IPC-U). ${esc(D.notes.salary)} ${esc(D.notes.prices||'')} ${esc(D.notes.gdp)} Fotos: Wikipedia / Wikimedia Commons.</p>`;
     try{history.replaceState(null,'',`#nacimiento-${ym}`);}catch{}
   }
 
@@ -145,7 +156,7 @@
 
   async function load(){
     if(loading)return loading;
-    loading=(async()=>{try{const r=await fetch('/birth-economy.json?v=123',{cache:'no-cache'});if(!r.ok)throw new Error(r.status);D=await r.json();fillSelectors();render();}
+    loading=(async()=>{try{const r=await fetch('/birth-economy.json?v=129',{cache:'no-cache'});if(!r.ok)throw new Error(r.status);D=await r.json();fillSelectors();render();}
       catch(e){const o=$('beResult');if(o)o.innerHTML='<p class="be-na">No se pudieron cargar los datos históricos. Probá recargar la página.</p>';loading=null;}})();
     return loading;
   }
