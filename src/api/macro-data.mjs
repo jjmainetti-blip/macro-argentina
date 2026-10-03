@@ -1,5 +1,7 @@
 import * as XLSX from 'xlsx';
 import { BUNDLED_SOURCES } from './bundled-history.mjs';
+import { autosLive, ipcCabaLive, povertyLive, cementLive } from './live-sources.mjs';
+import { cardStatus } from './freshness.mjs';
 /* Macro Argentina v8 — stable server-side data contract.
    Each adapter fails independently. The browser keeps its bundled last-known value
    when a source is temporarily unavailable or changes format. */
@@ -31,8 +33,10 @@ async function get(url,type='text'){
 const round=(n,d=1)=>n==null?null:Number(n.toFixed(d));
 const pct=(a,b)=>b?(a/b-1)*100:null;
 async function seriesRows(id,{start='1900-01-01',end=`${new Date().getUTCFullYear()+1}-12-31`}={}){
-  const url=`${SERIES_API}?ids=${encodeURIComponent(id)}&start_date=${start}&end_date=${end}&limit=1000&format=json`;
-  const j=await get(url,'json'); const rows=j?.data||[];
+  // v128: la API devuelve como máximo 1.000 filas. Con sort=desc se reciben SIEMPRE las más recientes
+  // (antes, una serie diaria o muy larga devolvía las primeras 1.000 y nunca llegaba al último dato).
+  const url=`${SERIES_API}?ids=${encodeURIComponent(id)}&start_date=${start}&end_date=${end}&limit=1000&sort=desc&format=json`;
+  const j=await get(url,'json'); const rows=(j?.data||[]).slice().sort((a,b)=>String(a[0]).localeCompare(String(b[0])));
   if(!Array.isArray(rows)||!rows.length)throw new Error(`sin datos para ${id}`);
   return {rows:rows.map(r=>({date:String(r[0]),value:Number(r[1])})).filter(r=>Number.isFinite(r.value)),url};
 }
@@ -563,7 +567,7 @@ async function rem(){
 }
 async function salaryRipte(){
   // Serie oficial Datos Argentina: mensual desde julio de 1994. Se completa con la publicación vigente de Seguridad Social.
-  const seriesUrl='https://apis.datos.gob.ar/series/api/series/?ids=158.1_REPTE_0_0_5&start_date=1994-07-01&end_date=2026-12-31&limit=5000&format=json&metadata=none';
+  const seriesUrl=`https://apis.datos.gob.ar/series/api/series/?ids=158.1_REPTE_0_0_5&start_date=1994-07-01&end_date=${new Date().getUTCFullYear()+1}-12-31&limit=1000&sort=desc&format=json&metadata=none`;
   const officialUrl='https://www.argentina.gob.ar/node/201033';
   const monthly={};
   // Recurso CSV oficial completo (1994+). Es la vía primaria porque la API de series puede devolver ventanas parciales.
@@ -902,7 +906,7 @@ async function activityPulse(){
 
 // sin KV se conserva al menos durante la vida del isolate y el frontend mantiene otra copia local.
 let MEMORY_SNAPSHOT=null;
-const SNAPSHOT_PREFIX='macro:snapshot:v127:';
+const SNAPSHOT_PREFIX='macro:snapshot:v128:';
 const MEMORY_SNAPSHOTS={};
 function isPlainObject(v){return !!v&&typeof v==='object'&&!Array.isArray(v);}
 function mergeSnapshot(oldValue,newValue){
@@ -932,7 +936,7 @@ async function readSnapshot(env,group){
 }
 // v125: con KV activo, el plan gratuito permite 1.000 escrituras por día. Sólo se escribe si los datos
 // cambiaron y como máximo una vez cada 20 minutos por grupo (la revisión programada siempre puede escribir).
-function snapshotHash(sources){const t=JSON.stringify(sources||{});let h=2166136261;for(let i=0;i<t.length;i++){h^=t.charCodeAt(i);h=Math.imul(h,16777619);}return (h>>>0).toString(36)+':'+t.length;}
+function snapshotHash(sources){const t=JSON.stringify(sources||{},(k,v)=>/^(snapshotFallback|refreshError|generatedAt|checkedAt|fetchedAt)$/.test(k)?undefined:v);let h=2166136261;for(let i=0;i<t.length;i++){h^=t.charCodeAt(i);h=Math.imul(h,16777619);}return (h>>>0).toString(36)+':'+t.length;}
 async function writeSnapshot(env,ctx,snapshot,group,stored=null,force=false){
   MEMORY_SNAPSHOTS[group]=snapshot;
   if(!env?.MACRO_STORE?.put)return 'memory';
@@ -983,23 +987,30 @@ async function bopHistorical(){
 // v117: el endpoint se divide en grupos. Cloudflare limita los pedidos externos por invocación
 // (50 en el plan gratuito); con todas las fuentes juntas se superaban (66+) y las últimas fallaban.
 // Cada grupo queda holgadamente por debajo del límite y tiene su propio snapshot.
-const JOBS={ipcHistorical:()=>ipcHistorical(),gdpHistorical:()=>gdpHistorical(),emaeHistorical:()=>emaeHistorical(),industryHistorical:()=>industryHistorical(),unemploymentHistorical:()=>unemploymentHistorical(),tradeHistorical:()=>tradeHistorical(),financialHistorical:()=>financialHistorical(),exchangeHistorical:()=>exchangeHistorical(),ipc:()=>ipc(),arca:()=>arca(),icg:()=>icg(),bcra:()=>bcra(),rem:()=>rem(),salary:()=>salaryRipte(),icl:()=>icl(),contractIndices:()=>contractIndices(),isacHistorical:()=>isacHistorical(),creditHistorical:()=>creditHistorical(),arrearsHistorical:()=>arrearsHistorical(),activityPulse:()=>activityPulse(),ilaHistorical:()=>ilaHistorical(),igaHistorical:()=>igaHistorical(),bopHistorical:()=>bopHistorical()};
+const JOBS={ipcHistorical:()=>ipcHistorical(),gdpHistorical:()=>gdpHistorical(),emaeHistorical:()=>emaeHistorical(),industryHistorical:()=>industryHistorical(),unemploymentHistorical:()=>unemploymentHistorical(),tradeHistorical:()=>tradeHistorical(),financialHistorical:()=>financialHistorical(),exchangeHistorical:()=>exchangeHistorical(),ipc:()=>ipc(),arca:()=>arca(),icg:()=>icg(),bcra:()=>bcra(),rem:()=>rem(),salary:()=>salaryRipte(),icl:()=>icl(),contractIndices:()=>contractIndices(),isacHistorical:()=>isacHistorical(),creditHistorical:()=>creditHistorical(),arrearsHistorical:()=>arrearsHistorical(),activityPulse:()=>activityPulse(),ilaHistorical:()=>ilaHistorical(),igaHistorical:()=>igaHistorical(),bopHistorical:()=>bopHistorical(),autos:()=>autosLive(),ipcCaba:()=>ipcCabaLive(),poverty:()=>povertyLive(),cement:()=>cementLive()};
 export const GROUPS={
-  core:['ipc','arca','icg','bcra','rem','salary','icl','contractIndices'],
+  core:['ipc','arca','icg','bcra','rem','salary','icl','contractIndices','autos','ipcCaba'],
   history:['ipcHistorical','gdpHistorical','industryHistorical','unemploymentHistorical','tradeHistorical'],
   markets:['financialHistorical','exchangeHistorical'],
-  activity:['emaeHistorical','isacHistorical','creditHistorical','arrearsHistorical','activityPulse'],
+  activity:['emaeHistorical','isacHistorical','creditHistorical','arrearsHistorical','activityPulse','cement'],
   leading:['ilaHistorical','igaHistorical'],
-  external:['bopHistorical'] // v122: grupo propio (XML de 3,3 MB) para no sumar CPU a la invocación del ILA
+  external:['bopHistorical','poverty'] // v122/v128: XML de INDEC y pobreza en un grupo propio
 };
+// v128: estado de frescura de todas las tarjetas (lee el último snapshot de cada grupo).
+// Sin fusiones profundas (cuidan la CPU de la revisión programada): se toma el último período de cada tarjeta
+// tanto en el snapshot guardado como en la línea de base, y se queda con el más nuevo.
+export async function freshnessReport(env){
+  const snaps={};
+  for(const g of Object.keys(GROUPS)){const snap=await readSnapshot(env,g);if(snap?.sources)Object.assign(snaps,snap.sources);}
+  return cardStatus([snaps,BUNDLED_SOURCES]);
+}
 export default async(env={},ctx=null,request=null,opts={})=>{
   let group='all';try{const g=new URL(request?.url||'http://x/').searchParams.get('group');if(g&&GROUPS[g])group=g;}catch{}
   const names=group==='all'?Object.keys(JOBS):GROUPS[group];
   const stored=await readSnapshot(env,group);
   const bundled={};for(const n of names)if(BUNDLED_SOURCES[n])bundled[n]=BUNDLED_SOURCES[n];
-  if(group==='core'&&BUNDLED_SOURCES.ipcCaba)bundled.ipcCaba=BUNDLED_SOURCES.ipcCaba;
-  const previous=mergeSnapshot({version:127,sources:bundled},stored||{});
-  const out={version:127,group,generatedAt:new Date().toISOString(),snapshotMode:env?.MACRO_STORE?.get?'kv+bundled':'bundled+isolate',sources:{}};
+  const previous=mergeSnapshot({version:128,sources:bundled},stored||{});
+  const out={version:128,group,generatedAt:new Date().toISOString(),snapshotMode:env?.MACRO_STORE?.get?'kv+bundled':'bundled+isolate',sources:{}};
   const results=await Promise.allSettled(names.map(n=>Promise.resolve().then(JOBS[n])));
   results.forEach((j,i)=>{
     const name=names[i],old=previous?.sources?.[name];

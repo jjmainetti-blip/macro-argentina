@@ -4,7 +4,7 @@ export default async function tradeMonthly(){
   const end=new Date();
   const start=new Date(Date.UTC(end.getUTCFullYear()-5,end.getUTCMonth()-1,1));
   const iso=d=>d.toISOString().slice(0,10);
-  const url=`${API}?ids=${ID}&start_date=${iso(start)}&end_date=2026-12-31&limit=1000&format=json`;
+  const url=`${API}?ids=${ID}&start_date=${iso(start)}&end_date=${iso(new Date(Date.UTC(end.getUTCFullYear()+1,11,31)))}&limit=1000&format=json`;
   const c=new AbortController(); const t=setTimeout(()=>c.abort(),8000);
   try{
     const r=await fetch(url,{signal:c.signal,headers:{accept:'application/json','user-agent':'MacroArgentinaDashboard/3.0'}});

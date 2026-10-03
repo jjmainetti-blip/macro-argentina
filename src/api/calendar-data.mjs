@@ -23,4 +23,5 @@ const events=[
 ['2026-12-18','INDEC','Mercado de trabajo','tercer trimestre 2026'],
 ['2026-12-21','INDEC','Estimador mensual de actividad económica (EMAE)','octubre 2026']
 ].map(([date,agency,title,period])=>({date,agency,title,period,status:'confirmada'}));
+export const EVENTS=events;
 export default async()=>{const today=todayAR(),next=events.filter(e=>e.date>=today).sort((a,b)=>a.date.localeCompare(b.date)||a.title.localeCompare(b.title)).slice(0,10);return new Response(JSON.stringify({version:64,generatedAt:new Date().toISOString(),monitored:['IPC','EMAE','IPI manufacturero','Mercado de trabajo','Balanza comercial','Recaudación ARCA','Resultado fiscal','REM','ICC UTDT','Indicador CAMARCO'],events:next,notes:['UTDT ICC y CAMARCO sólo se incorporan cuando existe fecha futura confirmada; no se proyectan por patrón.']}),{headers:{'content-type':'application/json; charset=utf-8','cache-control':'public, max-age=3600, s-maxage=21600, stale-while-revalidate=86400','access-control-allow-origin':'*'}})};

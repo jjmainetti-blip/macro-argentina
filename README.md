@@ -147,6 +147,25 @@ Chequeo: `npm run validate:snapshot`.
 - **Carga sobre las fuentes**: `/api/markets` comparte una respuesta de 20 s (Cache API + memoria del isolate); los históricos usados para el cierre anterior se reutilizan 1 hora.
 
 
+## v128 — actualización automática general de todas las tarjetas
+
+**Diagnóstico.** Había tres tipos de problema:
+1. Tarjetas sin fuente en vivo (sólo la línea de base incluida en el sitio): **patentamientos**, **inflación CABA** y **pobreza**. El cemento se consultaba sólo desde el navegador (sin revisión programada ni KV).
+2. Lecturas que nunca llegaban al último dato: la API de series de Datos Argentina devuelve como máximo 1.000 filas y se pedían las **más antiguas** (series diarias o largas quedaban truncadas). Ahora se piden las más recientes (`sort=desc`).
+3. Fechas fijas que iban a romperse en 2027 (`end_date=2026-12-31` en RIPTE y balanza comercial; cemento con `after=2026-08`). Ahora son dinámicas.
+
+**Fuentes nuevas** (`src/api/live-sources.mjs`):
+- Patentamientos: comunicado mensual de **ACARA** (API pública de su sitio, `api.acara.org.ar/api/v1/views/index`); toma el mes nuevo, el mes anterior revisado y el mismo mes del año previo.
+- Inflación CABA: IPCBA nivel general (IDECBA) vía Datos Argentina (`193.2_NIVEL_GENERAL_2021_0_13_2`).
+- Pobreza: INDEC EPH, personas, por semestre (`64.2_POBLACION_NUA_0_0_34_74`). La tarjeta compara contra el mismo semestre del año anterior y contra el semestre previo.
+- Cemento: AFCP desde el Worker (grupo `activity`), además de la consulta existente del navegador.
+
+**Motor de frescura** (`src/api/freshness.mjs`): cada tarjeta tiene su frecuencia, grupo y fecha esperada de publicación (calendario oficial cuando existe —INDEC, ARCA, BCRA, Economía— y si no, el rezago habitual del organismo). Estados: *al día*, *esperando* (ya debería estar publicado) y *demorado* (más de 20 días).
+
+**Revisión programada cada 5 minutos** (dos Cron Triggers desfasados): cada ejecución refresca un grupo; si hay tarjetas “esperando”, 2 de cada 3 ejecuciones se dedican a esos grupos. Resultado: el dato nuevo se captura entre 5 y 20 minutos después de publicado, sin visitas.
+
+**Transparencia:** `GET /api/status` devuelve el estado de cada tarjeta; cada tarjeta muestra abajo “Próximo dato (mes): ~fecha”, “Buscando … · previsto …” o “demorado en la fuente”.
+
 ## v127 — “Último dato publicado”
 
 - Bug: `applyReleases` usaba un formateador inexistente (`moneyMillionsToBillions`); cada vez que ARCA respondía, la función fallaba y el bloque quedaba fijo en el ICG. Se agregó el formateador.

@@ -69,3 +69,6 @@
 @media(max-width:760px){.be-people{grid-template-columns:1fr}.be-currency{text-align:left}.be-head{padding:20px}}
 @media(max-width:620px){.be-picker label{flex:1}.be-picker select{min-width:0;width:100%}.be-photo{flex-basis:76px;width:76px;height:92px}}
 @media(max-width:620px){.be-table{min-width:0}.be-table thead{display:none}.be-table,.be-table tbody,.be-table tr,.be-table th,.be-table td{display:block}.be-table tr{padding:12px 0;border-top:1px solid var(--line)}.be-table th,.be-table td{border:0;padding:4px 0}.be-table td::before{content:attr(data-label);display:block;font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:800}.be-goods{padding:18px}}
+/* v128 · estado de actualización por tarjeta */
+.data-health.waiting{color:#8a6a12}.data-health.waiting:before{background:#e0a91f;animation:healthPulse 1.4s ease-in-out infinite}.data-health.late{color:#a74444}.data-health.late:before{background:#d85151}
+@keyframes healthPulse{0%,100%{opacity:1}50%{opacity:.35}}

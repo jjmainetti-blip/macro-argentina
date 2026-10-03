@@ -12,9 +12,9 @@
   "kv_namespaces": [
     { "binding": "MACRO_STORE", "id": "e8a8039f8ebd44eaac002420f0174a38" }
   ],
-  // v125: revisión automática de las fuentes una vez por hora (ver scheduled() en src/worker.mjs)
+  // v125: revisión automática de las fuentes cada 10 minutos, priorizando las tarjetas cuyo dato ya debería estar publicado (ver scheduled() en src/worker.mjs)
   "triggers": {
-    "crons": ["17 * * * *"]
+    "crons": ["*/10 * * * *", "5-55/10 * * * *"]
   },
   "observability": {
     "enabled": true

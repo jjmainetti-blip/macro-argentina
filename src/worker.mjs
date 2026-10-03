@@ -1,4 +1,5 @@
-import macroData, { GROUPS } from './api/macro-data.mjs';
+import macroData, { GROUPS, freshnessReport } from './api/macro-data.mjs';
+import { pickCronGroup } from './api/freshness.mjs';
 import calendarData from './api/calendar-data.mjs';
 import marketsData from './api/markets.mjs';
 import tradeMonthly from './api/trade-monthly.mjs';
@@ -38,6 +39,11 @@ export default {
     if (request.method === 'GET' && url.pathname === '/api/macro-data') {
       return withHeaders(await macroData(env, ctx, request));
     }
+    // v128: estado de actualización de cada tarjeta (último período, próximo esperado y fecha prevista).
+    if (request.method === 'GET' && url.pathname === '/api/status') {
+      const cards = await freshnessReport(env);
+      return withHeaders(new Response(JSON.stringify({ generatedAt: new Date().toISOString(), kv: !!env?.MACRO_STORE, cards }, null, 1), { headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', 'access-control-allow-origin': '*' } }));
+    }
     if (request.method === 'GET' && url.pathname === '/api/calendar-data') {
       return withHeaders(await calendarData());
     }
@@ -50,16 +56,16 @@ export default {
     return withHeaders(await env.ASSETS.fetch(request));
   },
 
-  // v125 · Revisión programada (Cron Trigger, una vez por hora). Cada ejecución actualiza UN grupo para
-  // respetar el límite de 50 pedidos externos por invocación del plan gratuito. El grupo "core"
-  // (IPC, ARCA, ICG, BCRA, REM, salarios, índices) va en las horas pares; el resto rota en las impares.
-  // Los resultados quedan en KV (MACRO_STORE), así el sitio conserva cada dato nuevo aunque nadie lo visite.
+  // v128 · Revisión programada cada 5 minutos (dos Cron Triggers desfasados). Cada ejecución actualiza UN grupo de fuentes
+  // (límite de 50 pedidos externos por invocación del plan gratuito). Prioriza los grupos con tarjetas cuyo
+  // próximo dato ya debería estar publicado según el calendario: así se capturan ni bien salen.
   async scheduled(event, env, ctx) {
-    const hour = new Date(event.scheduledTime || Date.now()).getUTCHours();
-    const others = Object.keys(GROUPS).filter(g => g !== 'core');
-    const group = hour % 2 === 0 ? 'core' : others[((hour - 1) / 2) % others.length];
+    const groups = Object.keys(GROUPS), tick = Math.floor((event.scheduledTime || Date.now()) / 300000);
+    let statuses = [];
+    try { statuses = await freshnessReport(env); } catch { }
+    const { group, reason } = pickCronGroup(statuses, groups, tick);
     ctx.waitUntil(macroData(env, ctx, new Request(`https://cron.invalid/api/macro-data?group=${group}`), { force: true })
-      .then(r => r.json()).then(j => console.log(`cron ${group}: guardado=${j.stored} fuentes=${Object.keys(j.sources || {}).length}`))
+      .then(r => r.json()).then(j => console.log(`cron ${group} (${reason}): guardado=${j.stored} esperando=${statuses.filter(s => s.state === 'esperando').map(s => s.key).join(',') || '—'}`))
       .catch(e => console.log(`cron ${group}: error ${e?.message || e}`)));
   }
 };
