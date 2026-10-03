@@ -838,8 +838,12 @@ async function arrearsFromOfficialWorkbook(){
   const c=new AbortController(),t=setTimeout(()=>c.abort(),20000);
   try{
     const r=await fetch(url,{signal:c.signal,headers:{'user-agent':'Mozilla/5.0 (compatible; Macrodatos/1.0; +https://macrodatos.ar)'}}); if(!r.ok)throw new Error(`anexo BCRA ${r.status}`);
-    const wb=XLSX.read(await r.arrayBuffer(),{type:'array'});
-    const name=wb.SheetNames.find(n=>/calidad de cartera.*l[ií]neas/i.test(n));if(!name)throw new Error('anexo BCRA: hoja por líneas no encontrada');
+    // v131: el anexo es un libro grande. Se leen primero sólo los nombres de hoja y después únicamente la hoja
+    // necesaria (en modo "dense"), para no superar la memoria por invocación del Worker (error 1102).
+    const buf=await r.arrayBuffer();
+    const names=XLSX.read(buf,{type:'array',bookSheets:true}).SheetNames||[];
+    const name=names.find(n=>/calidad de cartera.*l[ií]neas/i.test(n));if(!name)throw new Error('anexo BCRA: hoja por líneas no encontrada');
+    const wb=XLSX.read(buf,{type:'array',sheets:[name],dense:true,cellStyles:false,cellHTML:false,cellFormula:false});
     const rows=XLSX.utils.sheet_to_json(wb.Sheets[name],{header:1,raw:true,defval:null});
     const label=i=>String(rows[i]?.[0]??'').trim();
     const ym=v=>{const n=Number(v);if(!Number.isFinite(n)||n<20000)return null;const d=new Date(Date.UTC(1899,11,30)+n*86400000);return `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}`;};
@@ -906,7 +910,7 @@ async function activityPulse(){
 
 // sin KV se conserva al menos durante la vida del isolate y el frontend mantiene otra copia local.
 let MEMORY_SNAPSHOT=null;
-const SNAPSHOT_PREFIX='macro:snapshot:v130:';
+const SNAPSHOT_PREFIX='macro:snapshot:v131:';
 const MEMORY_SNAPSHOTS={};
 function isPlainObject(v){return !!v&&typeof v==='object'&&!Array.isArray(v);}
 function mergeSnapshot(oldValue,newValue){
@@ -993,7 +997,8 @@ export const GROUPS={
   core:['ipc','arca','icg','bcra','rem','salary','icl','contractIndices','autos','ipcCaba'],
   history:['ipcHistorical','gdpHistorical','industryHistorical','unemploymentHistorical','tradeHistorical'],
   markets:['financialHistorical','exchangeHistorical'],
-  activity:['emaeHistorical','isacHistorical','creditHistorical','arrearsHistorical','activityPulse','cement'],
+  activity:['emaeHistorical','isacHistorical','creditHistorical','activityPulse','cement'],
+  banks:['arrearsHistorical'], // v131: grupo propio (anexo xlsx del BCRA, pesado en memoria)
   leading:['ilaHistorical','igaHistorical'],
   external:['bopHistorical','poverty'] // v122/v128: XML de INDEC y pobreza en un grupo propio
 };
@@ -1019,8 +1024,8 @@ export default async(env={},ctx=null,request=null,opts={})=>{
   }
   const stored=await readSnapshot(env,group);
   const bundled={};for(const n of names)if(BUNDLED_SOURCES[n])bundled[n]=BUNDLED_SOURCES[n];
-  const previous=mergeSnapshot({version:130,sources:bundled},stored||{});
-  const out={version:130,group,generatedAt:new Date().toISOString(),snapshotMode:env?.MACRO_STORE?.get?'kv+bundled':'bundled+isolate',sources:{}};
+  const previous=mergeSnapshot({version:131,sources:bundled},stored||{});
+  const out={version:131,group,generatedAt:new Date().toISOString(),snapshotMode:env?.MACRO_STORE?.get?'kv+bundled':'bundled+isolate',sources:{}};
   const results=await Promise.allSettled(names.map(n=>Promise.resolve().then(JOBS[n])));
   results.forEach((j,i)=>{
     const name=names[i],old=previous?.sources?.[name];

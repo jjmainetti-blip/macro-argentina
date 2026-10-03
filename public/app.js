@@ -608,8 +608,8 @@ async function loadOfficialSeriesFallback(){
 }
 
 // v117: la API se pide por grupos (cada uno con pocos pedidos externos) y cada grupo se procesa al llegar.
-const MACRO_GROUPS=['core','history','markets','activity','leading','external'];
-const MACRO_LS_KEY='macrodatosSnapshotV130';
+const MACRO_GROUPS=['core','history','markets','activity','leading','external','banks'];
+const MACRO_LS_KEY='macrodatosSnapshotV131';
 // Series históricas (dólar, riesgo país, Merval, tasa, RIPTE, PIB, industria, desempleo, comercio).
 // Recibe la fusión histórico local + API, así los gráficos funcionan aunque la API no responda.
 function applyHistorySources(S){

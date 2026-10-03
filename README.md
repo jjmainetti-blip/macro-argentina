@@ -147,6 +147,11 @@ Chequeo: `npm run validate:snapshot`.
 - **Carga sobre las fuentes**: `/api/markets` comparte una respuesta de 20 s (Cache API + memoria del isolate); los históricos usados para el cierre anterior se reutilizan 1 hora.
 
 
+## v131 — mora bancaria en un grupo propio
+
+- En macrodatos.ar (plan pago ya activo) todos los grupos respondían salvo `activity`, que seguía con error 1102 en ~0,6 s: el anexo xlsx del Informe sobre Bancos del BCRA es un libro grande y leerlo entero supera la memoria por invocación.
+- La mora (`arrearsHistorical`) pasa a un grupo propio (`/api/macro-data?group=banks`) y del anexo se lee sólo la hoja “Calidad de Cartera (por líneas)” en modo compacto. Si aun así fallara, sólo afecta a esa tarjeta (EMAE, ISAC, crédito, fiscal y cemento quedan independientes).
+
 ## v130 — nuevo nombre: Macrodatos (macrodatos.ar)
 
 - Marca, título, descripción y etiquetas para compartir (Open Graph, `canonical` → https://macrodatos.ar/). Los pedidos del Worker a las fuentes se identifican como `Macrodatos/1.0 (+https://macrodatos.ar)`.
