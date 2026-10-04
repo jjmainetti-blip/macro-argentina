@@ -156,7 +156,7 @@
 
   async function load(){
     if(loading)return loading;
-    loading=(async()=>{try{const r=await fetch('/birth-economy.json?v=130',{cache:'no-cache'});if(!r.ok)throw new Error(r.status);D=await r.json();fillSelectors();render();}
+    loading=(async()=>{try{const r=await fetch('/birth-economy.json?v=132',{cache:'no-cache'});if(!r.ok)throw new Error(r.status);D=await r.json();fillSelectors();render();}
       catch(e){const o=$('beResult');if(o)o.innerHTML='<p class="be-na">No se pudieron cargar los datos históricos. Probá recargar la página.</p>';loading=null;}})();
     return loading;
   }

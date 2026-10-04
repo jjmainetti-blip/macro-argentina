@@ -247,3 +247,9 @@ Chequeo: `npm run validate:snapshot`.
 - En el navegador se derivan, con un único método para todo el período: **mensual** (último dato del mes), **ARS constantes** (IPC INDEC mensual; antes de 2017, inflación anual dic/dic repartida por mes), **TCR** (ARS constantes × CPI-U EE.UU.) y **brecha** diaria y mensual (antes la brecha mensual no existía).
 - La frecuencia **anual** mantiene la serie larga del backend (desde 1928).
 - La API (`group=markets`) envía sólo los últimos 400 días diarios del dólar; el resto viene del archivo local.
+
+## v132 — salario histórico sin saltos artificiales
+- La serie mensual de `data/salarios.xlsx` (1943–1993) tenía escalones de un mes a otro que no son económicos: mensualizaciones hechas año por año (salto en cada enero: 1945–49, 1964–67, 1973–77, 1982, 1985, 1986, 1989, 1991, 1992), empalmes con crecimiento nominal constante todo el año (1982, 1985, 1989: +31,2 % todos los meses) y trimestres planos (1975–1981). Ej.: dic-1988 → ene-1989 subía +93,5 % nominal (+78 % real).
+- `scripts/build-birth-economy.py` reconstruye la trayectoria con benchmarking tipo Denton: minimiza los cambios mensuales del salario real (deflactado por IPC) con la restricción de que el **promedio nominal de cada año sea exactamente el de la serie original** (se verifica con assert). En años derivados de un índice mensual oficial (1983–84, 1986–88, 1990, 1992–93) se conserva su perfil mensual, suavizado con media móvil de 5 meses para quitar picos estacionales.
+- Resultado: entre 1943 y 1993 ningún mes varía más de ±7 % real. Los únicos cambios mensuales grandes que quedan son reales y en RIPTE: abril 2002 (−9 %), diciembre 2023 (−14 %) y la recuperación de abril 2024.
+- Limitación: en años con sólo un promedio anual (p. ej. 1989, 1975) la serie no puede mostrar la caída y recuperación dentro del año (hiperinflación, Rodrigazo); el nivel anual sí es el correcto.

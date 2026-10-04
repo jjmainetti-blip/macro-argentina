@@ -76,6 +76,43 @@ for r in list(_wb['Serie mensual 1940-1993'].iter_rows(values_only=True))[1:]:
     if not r[1] or r[3] is None: continue
     k = f"{int(r[1])}-{int(r[2]):02d}"
     wage[k] = float(r[3]) * CURNAME[r[4]]; wage_src[k] = 'ind'
+
+# v132: la serie mensual original tiene escalones artificiales (mensualizaciones año por año, empalmes con
+# crecimiento nominal constante, trimestres planos). Se reconstruye la trayectoria mensual con un método de
+# benchmarking tipo Denton: se minimizan los cambios mes a mes del salario REAL (deflactado por IPC) sujeto a
+# que el PROMEDIO NOMINAL de cada año sea exactamente el de la serie original. En los años derivados de un
+# índice mensual oficial se conserva el perfil mensual real original (sólo se suavizan los empalmes entre años).
+import numpy as np
+_types = {}
+for r in list(_wb['Serie mensual 1940-1993'].iter_rows(values_only=True))[1:]:
+    if r[1] and r[3] is not None: _types[f"{int(r[1])}-{int(r[2]):02d}"] = str(r[6] or '')
+_K = sorted(k for k in wage if k in idx)
+_n = len(_K)
+_P = np.array([idx[k] for k in _K])
+_q = np.array([wage[k] for k in _K]) / _P                 # salario real original
+_off = np.array(['índice mensual oficial' in _types.get(k, '') for k in _K])
+# Perfil mensual oficial suavizado con media móvil centrada de 5 meses (en log) para quitar picos estacionales
+# (aguinaldo/vacaciones de enero, caída de febrero) que no son cambios de nivel del salario.
+_lq = np.log(_q); _sm = _lq.copy()
+for i in range(_n):
+    w = [j for j in range(i - 2, i + 3) if 0 <= j < _n and _off[j] and _K[j][:4] == _K[i][:4]]
+    if _off[i]: _sm[i] = np.mean(_lq[w])
+_t = np.zeros(_n - 1)                                     # cambio real objetivo entre m-1 y m
+for i in range(1, _n):
+    if _off[i] and _off[i - 1] and _K[i][:4] == _K[i - 1][:4]: _t[i - 1] = (np.exp(_sm[i]) - np.exp(_sm[i - 1])) * np.exp(np.mean(_lq[[j for j in range(_n) if _K[j][:4] == _K[i][:4]]]) - np.mean(_sm[[j for j in range(_n) if _K[j][:4] == _K[i][:4]]]))
+_D = np.zeros((_n - 1, _n)); _D[np.arange(_n - 1), np.arange(_n - 1)] = -1; _D[np.arange(_n - 1), np.arange(1, _n)] = 1
+_years = sorted({k[:4] for k in _K})
+_C = np.zeros((len(_years), _n)); _b = np.zeros(len(_years))
+for j, y in enumerate(_years):
+    m = np.array([k[:4] == y for k in _K]); _C[j, m] = _P[m] / m.sum(); _b[j] = (np.array([wage[k] for k in _K])[m]).mean()
+_sc = 1 / np.median(_q)                                   # escala numérica
+_A = np.block([[2 * _D.T @ _D, _C.T], [_C, np.zeros((len(_years), len(_years)))]])
+_rhs = np.concatenate([2 * _D.T @ (_t * _sc), _b * _sc])
+_r = np.linalg.solve(_A, _rhs)[:_n] / _sc
+for k, rv, p in zip(_K, _r, _P): wage[k] = float(rv * p)
+for y in _years:
+    _orig = _b[_years.index(y)]; _new = np.mean([wage[k] for k in _K if k[:4] == y])
+    assert abs(_new / _orig - 1) < 1e-9, (y, _orig, _new)
 for k, v in ripte.items():
     if k >= '1994-07': wage[k] = v; wage_src[k] = 'ripte'
 _a, _b = '1993-12', '1994-07'
@@ -228,7 +265,7 @@ out = {
     'notes': {
         'cpi': 'IPC INDEC (GBA) 1943–2006; IPC San Luis 2007–2016 (INDEC intervenido); IPC Nacional INDEC desde 2017.',
         'fx': 'Tipo de cambio oficial/de referencia BCRA (series históricas monetarias); desde mayo 2026, promedio mensual del oficial. Dólar libre: promedio mensual desde 1991 y referencia anual antes.',
-        'salary': 'Salario: hasta 1993, salario medio industrial nominal mensual (reconstrucción con fuentes INDEC, CEPAL, BCRA y Ministerio de Economía); desde julio de 1994, RIPTE (sueldo promedio de trabajadores registrados estables). Enero-junio 1994: interpolado con IPC.',
+        'salary': 'Salario: hasta 1993, salario medio industrial nominal mensual (reconstrucción con fuentes INDEC, CEPAL, BCRA y Ministerio de Economía); desde julio de 1994, RIPTE (sueldo promedio de trabajadores registrados estables). Enero-junio 1994: interpolado con IPC. La trayectoria mensual hasta 1993 se suaviza en términos reales (método Denton) respetando el promedio nominal de cada año de la serie original.',
         'prices': 'Precios: INDEC (precios promedio), Anuario Estadístico, GCBA/IDECBA, listas y avisos contemporáneos (fuente enlazada en cada precio). Entre dos observaciones separadas por hasta 2 años, el precio del mes se interpola manteniendo la trayectoria real (ajustada por IPC); sin observaciones cercanas no se muestra.',
         'gdp': 'PIB a precios constantes: Cuentas Nacionales 1935–1962 (Secretaría de Asuntos Económicos) hasta 1960; Banco Mundial (INDEC) desde 1961.',
     },
