@@ -259,3 +259,8 @@ Chequeo: `npm run validate:snapshot`.
 - Ahora el Worker atiende también la portada (`run_worker_first` incluye `/` y `/index.html`) y escribe en el HTML, con `HTMLRewriter`, los últimos valores guardados en KV (`markets:latest`). El navegador recibe además ese dato en `window.__MARKETS__`.
 - `/api/markets` guarda cada respuesta en KV, responde desde KV si tiene menos de 60 s y nunca retrocede: si una fuente falla o devuelve un cierre más viejo que el guardado, conserva el más reciente. El cron renueva ese dato en cada ejecución (cada 5 min) aunque nadie visite el sitio.
 - En el navegador, cada indicador sólo se reemplaza por uno de igual o mayor fecha (HTML del servidor, copia local o API). `index.html` ya no trae valores fijos: si todo falla muestra “—”.
+
+## v134 — “Último dato publicado” también abre con el dato correcto
+- La lógica que elige la publicación más reciente pasó a `public/releases.js` y la usan **el navegador y el Worker** (misma función, mismo texto).
+- El Worker la calcula sobre los snapshots de KV (grupos core, external y activity), guarda el resultado chico en KV (`release:latest`, se recalcula cada 10 min en segundo plano y en cada ejecución del cron) y lo escribe en el HTML de la portada junto con “Mercados ahora”.
+- En el navegador ya no se pinta primero el ICG fijo ni datos parciales mientras llegan los grupos: se muestra el dato del servidor o la copia local, el más reciente, y sólo se reemplaza por una publicación de igual o mayor fecha.

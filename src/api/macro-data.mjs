@@ -1,3 +1,4 @@
+import { latestRelease } from '../../public/releases.js';
 import * as XLSX from 'xlsx';
 import { BUNDLED_SOURCES } from './bundled-history.mjs';
 import { autosLive, ipcCabaLive, povertyLive, cementLive } from './live-sources.mjs';
@@ -1005,6 +1006,25 @@ export const GROUPS={
 // v128: estado de frescura de todas las tarjetas (lee el último snapshot de cada grupo).
 // Sin fusiones profundas (cuidan la CPU de la revisión programada): se toma el último período de cada tarjeta
 // tanto en el snapshot guardado como en la línea de base, y se queda con el más nuevo.
+// v134 · "Último dato publicado" para la portada: se calcula con la misma función del navegador
+// (public/releases.js) sobre los snapshots guardados y se guarda chico en KV (release:latest).
+const RELEASE_KEY='release:latest';
+let RELEASE_MEMO=null;
+export async function latestReleaseFor(env,ctx=null,opts={}){
+  if(!opts.force&&RELEASE_MEMO&&Date.now()-RELEASE_MEMO.at<60000)return RELEASE_MEMO.value;
+  let cached=null;
+  if(!opts.force){try{const r=await env?.MACRO_STORE?.getWithMetadata?.(RELEASE_KEY,'json');if(r?.value){cached=r.value;if(Date.now()-(r.metadata?.savedAt||0)<10*60*1000){RELEASE_MEMO={at:Date.now(),value:cached};return cached;}}}catch{}}
+  const compute=async()=>{
+    const R={};for(const n of ['ipc','arca','salary','icg','autos','rem','bopHistorical','activityPulse'])if(BUNDLED_SOURCES[n])R[n]=BUNDLED_SOURCES[n];
+    for(const g of ['core','external','activity']){const snap=await readSnapshot(env,g);for(const n of ['ipc','arca','salary','icg','autos','rem','bopHistorical','activityPulse'])if(snap?.sources?.[n])R[n]=snap.sources[n];}
+    const value=latestRelease(R);
+    if(value){RELEASE_MEMO={at:Date.now(),value};if(env?.MACRO_STORE?.put&&(!cached||JSON.stringify(cached)!==JSON.stringify(value)||opts.force)){try{await env.MACRO_STORE.put(RELEASE_KEY,JSON.stringify(value),{metadata:{savedAt:Date.now()}});}catch{}}}
+    return value;
+  };
+  // Con un dato guardado (aunque tenga más de 10 min) se responde ya y se recalcula en segundo plano.
+  if(cached&&ctx?.waitUntil){ctx.waitUntil(compute().catch(()=>{}));RELEASE_MEMO={at:Date.now(),value:cached};return cached;}
+  return await compute();
+}
 export async function freshnessReport(env){
   const snaps={};
   for(const g of Object.keys(GROUPS)){const snap=await readSnapshot(env,g);if(snap?.sources)Object.assign(snaps,snap.sources);}

@@ -37,19 +37,22 @@ export function marketsView(L) {
   return v;
 }
 
-export async function homeWithMarkets(request, env, latestBody) {
+export async function homeWithMarkets(request, env, latestBody, release = null) {
   const res = await env.ASSETS.fetch(request);
   const type = res.headers.get('content-type') || '';
-  if (!res.ok || !type.includes('text/html') || !latestBody || typeof HTMLRewriter === 'undefined') return res;
-  let data; try { data = JSON.parse(latestBody); } catch { return res; }
-  const view = marketsView(data.latest);
+  if (!res.ok || !type.includes('text/html') || (!latestBody && !release) || typeof HTMLRewriter === 'undefined') return res;
+  let data = null; try { data = latestBody ? JSON.parse(latestBody) : null; } catch { }
+  const view = marketsView(data?.latest);
+  // v134: "Último dato publicado" también sale escrito en el HTML.
+  if (release?.title) { view.latestReleaseTitle = { text: release.title }; view.latestReleaseValue = { text: release.value }; view.latestReleaseDate = { text: release.date || '' }; }
   let rw = new HTMLRewriter();
   for (const [id, o] of Object.entries(view)) {
     rw = rw.on(`#${id}`, { element(el) { el.setInnerContent(o.text); if (o.cls) el.setAttribute('class', o.cls); } });
   }
   // El navegador recibe el mismo dato para no repintar con una copia local más vieja.
-  const safe = latestBody.replace(/</g, '\\u003c');
-  rw = rw.on('head', { element(el) { el.append(`<script>window.__MARKETS__=${safe};</script>`, { html: true }); } });
+  const esc = t => String(t).replace(/</g, '\\u003c');
+  const inject = (data ? `window.__MARKETS__=${esc(latestBody)};` : '') + (release?.title ? `window.__LATEST_RELEASE__=${esc(JSON.stringify(release))};` : '');
+  rw = rw.on('head', { element(el) { el.append(`<script>${inject}</script>`, { html: true }); } });
   const out = rw.transform(res);
   const h = new Headers(out.headers);
   h.set('cache-control', 'no-cache'); h.delete('etag'); h.delete('content-length');
