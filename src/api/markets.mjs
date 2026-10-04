@@ -118,15 +118,32 @@ async function merval(){
 }
 // v120: el sitio consulta cada 30 s. Se comparte una respuesta de 20 s por colo (Cache API) y por isolate,
 // para no multiplicar pedidos a las fuentes cuando hay muchos visitantes.
+// v133: el último dato se guarda también en KV (markets:latest). Sirve para (1) escribir los valores en el HTML de
+// la portada, (2) responder al instante si tiene menos de 60 s y (3) no retroceder nunca: si una fuente falla o
+// devuelve un cierre más viejo que el ya guardado, se conserva el más reciente.
 let MEMO={at:0,body:null};
-export default async(request=null,ctx=null)=>{
-  const cacheKey=new Request('https://macro-cache.internal/api/markets/v120');
-  if(MEMO.body&&Date.now()-MEMO.at<20000)return new Response(MEMO.body,{headers:{'content-type':'application/json; charset=utf-8','cache-control':'no-store','x-markets-cache':'memory'}});
-  try{const hit=await caches?.default?.match(cacheKey);if(hit){const body=await hit.text();MEMO={at:Date.now(),body};return new Response(body,{headers:{'content-type':'application/json; charset=utf-8','cache-control':'no-store','x-markets-cache':'edge'}});}}catch{}
+const KV_KEY='markets:latest';
+const newer=(n,p)=>{if(!n)return p||null;if(!p)return n;return String(n.date||'').slice(0,10)>=String(p.date||'').slice(0,10)?n:p;};
+export async function latestMarketsBody(env){
+  if(MEMO.body&&Date.now()-MEMO.at<120000)return MEMO.body;
+  try{const r=await env?.MACRO_STORE?.getWithMetadata?.(KV_KEY);if(r?.value){if(!MEMO.body||(r.metadata?.savedAt||0)>MEMO.at)MEMO={at:r.metadata?.savedAt||Date.now()-60000,body:r.value};return MEMO.body;}}catch{}
+  return MEMO.body;
+}
+const json=(body,tag)=>new Response(body,{headers:{'content-type':'application/json; charset=utf-8','cache-control':'no-store','x-markets-cache':tag}});
+export default async(request=null,ctx=null,env=null,opts={})=>{
+  const cacheKey=new Request('https://macro-cache.internal/api/markets/v133');
+  if(!opts.force){
+    if(MEMO.body&&Date.now()-MEMO.at<20000)return json(MEMO.body,'memory');
+    try{const hit=await caches?.default?.match(cacheKey);if(hit){const body=await hit.text();MEMO={at:Date.now(),body};return json(body,'edge');}}catch{}
+  }
+  let prev=null,prevAt=0;
+  try{const r=await env?.MACRO_STORE?.getWithMetadata?.(KV_KEY);if(r?.value){prev=JSON.parse(r.value);prevAt=r.metadata?.savedAt||0;if(!opts.force&&Date.now()-prevAt<60000){MEMO={at:prevAt,body:r.value};return json(r.value,'kv');}}}catch{}
   const [a,b,c,d]=await Promise.allSettled([merval(),mep(),risk(),bna()]);
-  const val=x=>x.status==='fulfilled'?x.value:null;
-  const body=JSON.stringify({version:120,generatedAt:new Date().toISOString(),mode:'live',refreshSeconds:30,latest:{merval:val(a),dollar:val(b),risk:val(c),bna:val(d)}});
+  const val=x=>x.status==='fulfilled'?x.value:null,P=prev?.latest||{};
+  const latest={merval:newer(val(a),P.merval),dollar:newer(val(b),P.dollar),risk:newer(val(c),P.risk),bna:newer(val(d),P.bna)};
+  const body=JSON.stringify({version:133,generatedAt:new Date().toISOString(),mode:'live',refreshSeconds:30,latest});
   MEMO={at:Date.now(),body};
   try{const put=caches?.default?.put(cacheKey,new Response(body,{headers:{'content-type':'application/json','cache-control':'public, max-age=20'}}));if(put&&ctx?.waitUntil)ctx.waitUntil(put);}catch{}
-  return new Response(body,{headers:{'content-type':'application/json; charset=utf-8','cache-control':'no-store','x-markets-cache':'miss'}});
+  try{if(env?.MACRO_STORE?.put&&Object.values(latest).some(Boolean)){const w=env.MACRO_STORE.put(KV_KEY,body,{metadata:{savedAt:Date.now()}});if(ctx?.waitUntil)ctx.waitUntil(w);else await w;}}catch{}
+  return json(body,'miss');
 };

@@ -253,3 +253,9 @@ Chequeo: `npm run validate:snapshot`.
 - `scripts/build-birth-economy.py` reconstruye la trayectoria con benchmarking tipo Denton: minimiza los cambios mensuales del salario real (deflactado por IPC) con la restricción de que el **promedio nominal de cada año sea exactamente el de la serie original** (se verifica con assert). En años derivados de un índice mensual oficial (1983–84, 1986–88, 1990, 1992–93) se conserva su perfil mensual, suavizado con media móvil de 5 meses para quitar picos estacionales.
 - Resultado: entre 1943 y 1993 ningún mes varía más de ±7 % real. Los únicos cambios mensuales grandes que quedan son reales y en RIPTE: abril 2002 (−9 %), diciembre 2023 (−14 %) y la recuperación de abril 2024.
 - Limitación: en años con sólo un promedio anual (p. ej. 1989, 1975) la serie no puede mostrar la caída y recuperación dentro del año (hiperinflación, Rodrigazo); el nivel anual sí es el correcto.
+
+## v133 — “Mercados ahora” muestra siempre el último dato al abrir
+- Antes, al entrar se veían unos segundos valores viejos (los escritos en `index.html` o una copia local de otro día) hasta que respondía `/api/markets`, que en frío tarda 1–5 s porque consulta BYMA, Rava, dolarapi, etc.
+- Ahora el Worker atiende también la portada (`run_worker_first` incluye `/` y `/index.html`) y escribe en el HTML, con `HTMLRewriter`, los últimos valores guardados en KV (`markets:latest`). El navegador recibe además ese dato en `window.__MARKETS__`.
+- `/api/markets` guarda cada respuesta en KV, responde desde KV si tiene menos de 60 s y nunca retrocede: si una fuente falla o devuelve un cierre más viejo que el guardado, conserva el más reciente. El cron renueva ese dato en cada ejecución (cada 5 min) aunque nadie visite el sitio.
+- En el navegador, cada indicador sólo se reemplaza por uno de igual o mayor fecha (HTML del servidor, copia local o API). `index.html` ya no trae valores fijos: si todo falla muestra “—”.

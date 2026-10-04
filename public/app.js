@@ -533,10 +533,15 @@ function paintMarkets(L){
 // v120: "Mercados ahora" se refresca cada 30 s mientras la pestaña está visible (y al volver a ella).
 const MARKETS_REFRESH_MS=30000;let marketsTimer=null,marketsInFlight=false;
 function paintMarketsPill(ok){const el=document.getElementById('marketsPill');if(!el)return;const hm=new Date().toLocaleTimeString('es-AR',{timeZone:'America/Argentina/Buenos_Aires',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});el.textContent=ok?`Actualizado ${hm} · cada 30 s`:`Reintentando · último intento ${hm}`;el.classList.toggle('stale',!ok);}
+// v133: nunca se retrocede. Se pinta primero lo que trae el HTML (último dato del servidor) o la copia local,
+// la que sea más reciente, y cada indicador sólo se reemplaza por uno de igual o mayor fecha.
+let marketsShown={};
+const mktNewer=(n,p)=>{if(!n)return p||null;if(!p)return n;const dn=String(n.date||'').slice(0,10),dp=String(p.date||'').slice(0,10);if(dn!==dp)return dn>dp?n:p;return String(n.updatedAt||'')>=String(p.updatedAt||'')?n:p;};
+function showMarkets(L){if(!L)return;const m={};for(const k of ['merval','dollar','risk','bna'])m[k]=mktNewer(L[k],marketsShown[k]);marketsShown=m;paintMarkets(m);}
 async function loadMarketsFast(){
   if(marketsInFlight)return;marketsInFlight=true;
-  if(!marketsFastLoaded){try{const cached=JSON.parse(localStorage.getItem('macroMarketsSnapshot')||'null');if(cached?.latest)paintMarkets(cached.latest);}catch{}}
-  try{const r=await fetch(`/api/markets?_=${Date.now()}`,{headers:{accept:'application/json'},cache:'no-store'});if(!r.ok)throw new Error(`markets ${r.status}`);const d=await r.json();paintMarkets(d.latest);marketsFastLoaded=true;paintMarketsPill(true);try{localStorage.setItem('macroMarketsSnapshot',JSON.stringify(d));}catch{}}
+  if(!marketsFastLoaded){try{showMarkets(window.__MARKETS__?.latest);const cached=JSON.parse(localStorage.getItem('macroMarketsSnapshot')||'null');if(cached?.latest)showMarkets(cached.latest);}catch{}}
+  try{const r=await fetch(`/api/markets?_=${Date.now()}`,{headers:{accept:'application/json'},cache:'no-store'});if(!r.ok)throw new Error(`markets ${r.status}`);const d=await r.json();showMarkets(d.latest);marketsFastLoaded=true;paintMarketsPill(true);try{localStorage.setItem('macroMarketsSnapshot',JSON.stringify({...d,latest:marketsShown}));}catch{}}
   catch(e){console.warn('markets fast',e);paintMarketsPill(false);}
   finally{marketsInFlight=false;}
   if(!marketsTimer){marketsTimer=setInterval(()=>{if(document.visibilityState==='visible')loadMarketsFast();},MARKETS_REFRESH_MS);document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')loadMarketsFast();});}

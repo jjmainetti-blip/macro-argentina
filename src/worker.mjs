@@ -1,7 +1,8 @@
 import macroData, { GROUPS, freshnessReport } from './api/macro-data.mjs';
 import { pickCronGroup } from './api/freshness.mjs';
 import calendarData from './api/calendar-data.mjs';
-import marketsData from './api/markets.mjs';
+import marketsData, { latestMarketsBody } from './api/markets.mjs';
+import { homeWithMarkets } from './api/markets-html.mjs';
 import tradeMonthly from './api/trade-monthly.mjs';
 import cementMonthly from './api/cement-monthly.mjs';
 
@@ -28,7 +29,7 @@ export default {
       return new Response(upstream.body, { status: 200, headers });
     }
     if (request.method === 'GET' && url.pathname === '/api/markets') {
-      return withHeaders(await marketsData(request, ctx));
+      return withHeaders(await marketsData(request, ctx, env));
     }
     if (request.method === 'GET' && url.pathname === '/api/trade-monthly') {
       return withHeaders(await tradeMonthly());
@@ -53,6 +54,11 @@ export default {
         headers: { 'content-type': 'application/json; charset=utf-8', ...jsonHeaders }
       });
     }
+    // v133: la portada lleva escritos los últimos valores de mercado (KV) para no mostrar datos viejos al abrir.
+    if (request.method === 'GET' && (url.pathname === '/' || url.pathname === '/index.html')) {
+      let body = null; try { body = await latestMarketsBody(env); } catch { }
+      try { return withHeaders(await homeWithMarkets(request, env, body)); } catch { }
+    }
     return withHeaders(await env.ASSETS.fetch(request));
   },
 
@@ -64,6 +70,8 @@ export default {
     let statuses = [];
     try { statuses = await freshnessReport(env); } catch { }
     const { group, reason } = pickCronGroup(statuses, groups, tick);
+    // v133: en cada ejecución se renueva también el último dato de mercados (KV), aunque nadie esté mirando el sitio.
+    ctx.waitUntil(marketsData(null, ctx, env, { force: true }).catch(e => console.log(`cron markets: error ${e?.message || e}`)));
     ctx.waitUntil(macroData(env, ctx, new Request(`https://cron.invalid/api/macro-data?group=${group}`), { force: true })
       .then(r => r.json()).then(j => console.log(`cron ${group} (${reason}): guardado=${j.stored} esperando=${statuses.filter(s => s.state === 'esperando').map(s => s.key).join(',') || '—'}`))
       .catch(e => console.log(`cron ${group}: error ${e?.message || e}`)));
