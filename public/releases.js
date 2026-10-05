@@ -68,5 +68,26 @@ export function pickLatest(releases) {
   const l = valid.at(-1); if (!l) return null;
   return { title: l.title, value: l.value, date: l.displayDate || l.date || l.releaseDate || '', sortKey: l.sortKey };
 }
+// v138 · Fecha de publicación del dato que muestra cada tarjeta (para ordenar el tablero: la más reciente primero).
+// Prioridad: (1) fecha exacta informada por la fuente; (2) fecha en que el sitio detectó el período nuevo
+// (window.__CARD_PUB__, registrada por el Worker); (3) calendario habitual del organismo (rezago en meses desde el
+// último mes del período + día habitual). ym = último mes del período (trimestre/semestre: su mes final).
+export const PUB_RULES = { ipc: [1, 13], ipcCaba: [1, 14], arca: [1, 2], icg: [0, 26], autos: [1, 2], came: [1, 5], emae: [2, 22], isac: [2, 9], fiscal: [1, 17],
+  cement: [1, 8], credit: [1, 20], arrears: [2, 20], ipi: [2, 9], trade: [1, 19], ila: [1, 28], iga: [1, 22], bop: [3, 23], poverty: [3, 26] };
+export function cardPublication(key, ymEnd, S = {}, seen = {}) {
+  if (!/^\d{4}-\d{2}$/.test(String(ymEnd || ''))) return null;
+  const ok = d => /^\d{4}-\d{2}-\d{2}/.test(String(d || '')) ? String(d).slice(0, 10) : null;
+  let exact = null;
+  if (key === 'ipc') { const L = (S.ipc?.monthly || []).filter(r => Number.isFinite(Number(r.value))).at(-1); if (L && String(L.date).slice(0, 7) === ymEnd) exact = ok(S.ipc?.publishedAt); }
+  if (key === 'arca' && S.arca?.latest && (S.arca.latest.ym || ymFromSpanishPeriod(S.arca.latest.period || '')) === ymEnd) exact = ok(S.arca.latest.published);
+  if (key === 'autos' && S.autos?.latest?.ym === ymEnd) exact = ok(S.autos.latest.published);
+  if (key === 'came' && S.came?.latest?.ym === ymEnd) exact = ok(S.came.latest.published);
+  if (key === 'icg' && S.icg?.latest && ymFromSpanishPeriod(S.icg.latest.period || '') === ymEnd) exact = ok(S.icg.publicationDate);
+  if (key === 'bop' && S.bopHistorical?.quarterly?.CA) { const q = Object.keys(S.bopHistorical.quarterly.CA).sort().at(-1); if (q && `${q.slice(0, 4)}-${String(+q.slice(-1) * 3).padStart(2, '0')}` === ymEnd) exact = ok(S.bopHistorical.prepared); }
+  if (exact) return { date: exact, basis: 'fuente' };
+  const sn = seen?.[key]; if (sn && sn.ym === ymEnd && ok(sn.date)) return { date: ok(sn.date), basis: 'detectado' };
+  const r = PUB_RULES[key]; if (!r) return null;
+  return { date: `${ymShift(ymEnd, r[0])}-${String(r[1]).padStart(2, '0')}`, basis: 'habitual' };
+}
 export function latestRelease(R) { return pickLatest(buildReleases(R)); }
-if (typeof window !== 'undefined') window.MacroReleases = { buildReleases, pickLatest, latestRelease };
+if (typeof window !== 'undefined') window.MacroReleases = { buildReleases, pickLatest, latestRelease, cardPublication, PUB_RULES };

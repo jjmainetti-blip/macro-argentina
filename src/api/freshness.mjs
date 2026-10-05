@@ -33,7 +33,7 @@ export const CARDS = [
 ];
 
 // Período → último mes que cubre. Próximo período según la frecuencia.
-function periodEndYm(p) {
+export function periodEndYm(p) {
   if (ymRe.test(p)) return p;
   let m = String(p).match(/^(\d{4})-Q([1-4])$/); if (m) return `${m[1]}-${String(+m[2] * 3).padStart(2, '0')}`;
   m = String(p).match(/^(\d{4})-S([12])$/); if (m) return `${m[1]}-${m[2] === '1' ? '06' : '12'}`;

@@ -1,4 +1,4 @@
-import macroData, { GROUPS, freshnessReport, latestReleaseFor } from './api/macro-data.mjs';
+import macroData, { GROUPS, freshnessReport, latestReleaseFor, cardsSeen } from './api/macro-data.mjs';
 import { pickCronGroup } from './api/freshness.mjs';
 import calendarData from './api/calendar-data.mjs';
 import marketsData, { latestMarketsBody } from './api/markets.mjs';
@@ -56,8 +56,8 @@ export default {
     }
     // v133: la portada lleva escritos los últimos valores de mercado (KV) para no mostrar datos viejos al abrir.
     if (request.method === 'GET' && (url.pathname === '/' || url.pathname === '/index.html')) {
-      const [m, rel] = await Promise.allSettled([latestMarketsBody(env), latestReleaseFor(env, ctx)]);
-      try { return withHeaders(await homeWithMarkets(request, env, m.value || null, rel.value || null)); } catch { }
+      const [m, rel, seen] = await Promise.allSettled([latestMarketsBody(env), latestReleaseFor(env, ctx), cardsSeen(env)]);
+      try { return withHeaders(await homeWithMarkets(request, env, m.value || null, rel.value || null, seen.value || null)); } catch { }
     }
     return withHeaders(await env.ASSETS.fetch(request));
   },

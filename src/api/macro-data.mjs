@@ -2,7 +2,7 @@ import { latestRelease } from '../../public/releases.js';
 import * as XLSX from 'xlsx';
 import { BUNDLED_SOURCES } from './bundled-history.mjs';
 import { autosLive, ipcCabaLive, povertyLive, cementLive, cameLive } from './live-sources.mjs';
-import { cardStatus } from './freshness.mjs';
+import { cardStatus, CARDS, periodEndYm, todayAR } from './freshness.mjs';
 /* Macrodatos (antes Macro Argentina) v8 — stable server-side data contract.
    Each adapter fails independently. The browser keeps its bundled last-known value
    when a source is temporarily unavailable or changes format. */
@@ -1027,6 +1027,19 @@ export async function latestReleaseFor(env,ctx=null,opts={}){
   if(cached&&ctx?.waitUntil){ctx.waitUntil(compute().catch(()=>{}));RELEASE_MEMO={at:Date.now(),value:cached};return cached;}
   return await compute();
 }
+// v138 · Cuando una revisión detecta que una tarjeta pasó a un período nuevo, se guarda ese día como fecha de
+// publicación observada (KV cards:seen). Sirve para ordenar el tablero por fecha de publicación.
+async function recordSeen(env,ctx,group,prevSources,outSources){
+  if(!env?.MACRO_STORE?.get||!env.MACRO_STORE.put)return;
+  const cards=CARDS.filter(c=>c.group===group);if(!cards.length)return;
+  let seen={};try{seen=(await env.MACRO_STORE.get('cards:seen','json'))||{};}catch{}
+  let changed=false;
+  for(const c of cards){let a=null,b=null;try{a=c.latest(prevSources||{});}catch{}try{b=c.latest(outSources||{});}catch{}
+    const ea=a?periodEndYm(a):null,eb=b?periodEndYm(b):null;
+    if(ea&&eb&&eb>ea&&seen[c.key]?.ym!==eb){seen[c.key]={ym:eb,date:todayAR()};changed=true;}}
+  if(changed){const job=env.MACRO_STORE.put('cards:seen',JSON.stringify(seen));if(ctx?.waitUntil)ctx.waitUntil(job.catch(()=>{}));else{try{await job;}catch{}}}
+}
+export async function cardsSeen(env){try{return (await env?.MACRO_STORE?.get?.('cards:seen','json'))||{};}catch{return {};}}
 export async function freshnessReport(env){
   const snaps={};
   for(const g of Object.keys(GROUPS)){const snap=await readSnapshot(env,g);if(snap?.sources)Object.assign(snaps,snap.sources);}
@@ -1066,6 +1079,7 @@ export default async(env={},ctx=null,request=null,opts={})=>{
     if(at&&(!AP.arrears||at[0]>(AP.arrears.ym||ymFromPeriodEs(AP.arrears.period)||''))){const f=A.monthlyFamilies?.[at[0]],c=A.monthlyCompanies?.[at[0]];AP.arrears={...(AP.arrears||{}),ym:at[0],period:periodEs(at[0]),total:at[1],families:Number.isFinite(Number(f))?Number(f):null,companies:Number.isFinite(Number(c))?Number(c):null};}
     if(AP.creditLatest&&AP.credit&&AP.creditLatest.ym>(AP.credit.ym||'')){AP.credit={source:AP.credit.source,ym:AP.creditLatest.ym,period:AP.creditLatest.period,arsRealMom:AP.creditLatest.arsRealMom};}
   }
+  try{await recordSeen(env,ctx,group,previous?.sources,out.sources);}catch{}
   const ok=Object.values(out.sources).some(x=>x.status==='ok'||x.status==='snapshot');
   if(ok)out.stored=await writeSnapshot(env,ctx,out,group,stored,!!opts.force);
   return new Response(JSON.stringify(out),{status:ok?200:503,headers:{'content-type':'application/json; charset=utf-8','cache-control':'public, max-age=60, s-maxage=60, stale-while-revalidate=300','access-control-allow-origin':'*'}});

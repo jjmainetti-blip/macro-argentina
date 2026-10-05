@@ -37,7 +37,7 @@ export function marketsView(L) {
   return v;
 }
 
-export async function homeWithMarkets(request, env, latestBody, release = null) {
+export async function homeWithMarkets(request, env, latestBody, release = null, seen = null) {
   const res = await env.ASSETS.fetch(request);
   const type = res.headers.get('content-type') || '';
   if (!res.ok || !type.includes('text/html') || (!latestBody && !release) || typeof HTMLRewriter === 'undefined') return res;
@@ -51,7 +51,7 @@ export async function homeWithMarkets(request, env, latestBody, release = null) 
   }
   // El navegador recibe el mismo dato para no repintar con una copia local más vieja.
   const esc = t => String(t).replace(/</g, '\\u003c');
-  const inject = (data ? `window.__MARKETS__=${esc(latestBody)};` : '') + (release?.title ? `window.__LATEST_RELEASE__=${esc(JSON.stringify(release))};` : '');
+  const inject = (data ? `window.__MARKETS__=${esc(latestBody)};` : '') + (release?.title ? `window.__LATEST_RELEASE__=${esc(JSON.stringify(release))};` : '') + (seen && Object.keys(seen).length ? `window.__CARD_PUB__=${esc(JSON.stringify(seen))};` : '');
   rw = rw.on('head', { element(el) { el.append(`<script>${inject}</script>`, { html: true }); } });
   const out = rw.transform(res);
   const h = new Headers(out.headers);
