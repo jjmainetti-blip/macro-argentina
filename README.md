@@ -264,3 +264,11 @@ Chequeo: `npm run validate:snapshot`.
 - La lógica que elige la publicación más reciente pasó a `public/releases.js` y la usan **el navegador y el Worker** (misma función, mismo texto).
 - El Worker la calcula sobre los snapshots de KV (grupos core, external y activity), guarda el resultado chico en KV (`release:latest`, se recalcula cada 10 min en segundo plano y en cada ejecución del cron) y lo escribe en el HTML de la portada junto con “Mercados ahora”.
 - En el navegador ya no se pinta primero el ICG fijo ni datos parciales mientras llegan los grupos: se muestra el dato del servidor o la copia local, el más reciente, y sólo se reemplaza por una publicación de igual o mayor fecha.
+
+## v135 — sección “Un día como hoy”
+- Nueva sección después de “Pulso económico” (y en el menú): un hecho económico por cada día del año (366, incluido el 29 de febrero), con año, “hace N años”, categoría, texto breve y fuente; botones para recorrer días anteriores/siguientes y “También un día como hoy” con hasta 3 hechos más de la misma fecha.
+- `scripts/build-efemerides.py` arma `public/efemerides.json` con prioridad por importancia (campo `w`):
+  1. `data/efemerides-curadas.json`: 340 hechos con fecha exacta y fuente (planes, cambios de moneda, devaluaciones, defaults y canjes, acuerdos con el FMI, leyes, renuncias, crisis bancarias, privatizaciones). Para agregar o corregir uno, editar ese archivo y volver a correr el script.
+  2. Asunciones de ministros de Economía/Hacienda (de `birth-economy.json`), con más peso para los más relevantes (Cavallo, Martínez de Hoz, Krieger Vasena, Sourrouille, Caputo, etc.).
+  3. Ruedas extremas calculadas con las series del sitio: caídas/subas del Merval ≥ 6% (desde 1996) y saltos del riesgo país (desde 1999), con filtros de datos aislados, control cruzado con el Merval en USD desde 2013 y contexto cuando la causa es conocida.
+- Resultado: 240 días con un hecho histórico como principal, 23 con una asunción de ministro y 103 con un dato extremo de mercado.

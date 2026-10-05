@@ -72,3 +72,15 @@
 /* v128 · estado de actualización por tarjeta */
 .data-health.waiting{color:#8a6a12}.data-health.waiting:before{background:#e0a91f;animation:healthPulse 1.4s ease-in-out infinite}.data-health.late{color:#a74444}.data-health.late:before{background:#d85151}
 @keyframes healthPulse{0%,100%{opacity:1}50%{opacity:.35}}
+
+/* v135 · Un día como hoy */
+.otd{display:grid;gap:14px}.otd-card{display:grid;grid-template-columns:190px 1fr;gap:28px;background:#fff;border:1px solid var(--line);border-radius:22px;padding:28px;box-shadow:0 10px 30px rgba(10,39,77,.04)}
+.otd-date{display:grid;align-content:start;gap:2px;border-right:1px solid var(--line);padding-right:24px}.otd-date span{font-size:12px;font-weight:800;color:var(--blue);text-transform:uppercase;letter-spacing:.12em}
+.otd-date b{font-size:64px;line-height:1;letter-spacing:-.05em;color:var(--navy)}.otd-date small{font-size:12px;color:var(--muted)}
+.otd-body h3{font-size:24px;letter-spacing:-.025em;margin:10px 0 8px;line-height:1.2}.otd-body p{margin:0;color:#40556e;font-size:15px;max-width:760px}
+.otd-cat{display:inline-block;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:var(--blue);background:var(--sky);padding:4px 8px;border-radius:6px}
+.otd-cat.mercado{color:#8a5a00;background:#fff4dc}.otd-source{display:inline-block;margin-top:14px;font-size:11px;color:var(--muted)}
+.otd-more{background:#fff;border:1px solid var(--line);border-radius:16px;padding:18px 22px}.otd-more h4{margin:0 0 8px;font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)}
+.otd-more ul{margin:0;padding:0;list-style:none;display:grid;gap:8px}.otd-more li{font-size:13px;color:#40556e}.otd-more li b{color:var(--navy);margin-right:6px}
+.otd-nav{display:flex;gap:8px;justify-content:flex-end}.otd-nav button{border:1px solid var(--line);background:#fff;border-radius:9px;padding:8px 12px;font:inherit;font-size:12px;font-weight:700;color:var(--blue);cursor:pointer}.otd-nav button:hover{border-color:#aac8eb}
+@media(max-width:620px){.otd-card{grid-template-columns:1fr;gap:16px;padding:20px}.otd-date{border-right:0;border-bottom:1px solid var(--line);padding:0 0 14px}.otd-date b{font-size:48px}.otd-body h3{font-size:20px}.otd-nav{justify-content:stretch}.otd-nav button{flex:1}}
