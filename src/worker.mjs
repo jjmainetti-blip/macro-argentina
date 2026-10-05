@@ -5,6 +5,7 @@ import marketsData, { latestMarketsBody } from './api/markets.mjs';
 import { homeWithMarkets } from './api/markets-html.mjs';
 import tradeMonthly from './api/trade-monthly.mjs';
 import cementMonthly from './api/cement-monthly.mjs';
+import uvaLoans from './api/uva-loans.mjs';
 
 const jsonHeaders = {
   'X-Content-Type-Options': 'nosniff',
@@ -30,6 +31,10 @@ export default {
     }
     if (request.method === 'GET' && url.pathname === '/api/markets') {
       return withHeaders(await marketsData(request, ctx, env));
+    }
+    // v139: tasas de créditos hipotecarios UVA por banco (BCRA, Régimen de Transparencia).
+    if (request.method === 'GET' && url.pathname === '/api/uva-loans') {
+      return withHeaders(await uvaLoans(env, ctx));
     }
     if (request.method === 'GET' && url.pathname === '/api/trade-monthly') {
       return withHeaders(await tradeMonthly());

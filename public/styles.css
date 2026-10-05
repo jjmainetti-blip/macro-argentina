@@ -84,3 +84,12 @@
 .otd-more ul{margin:0;padding:0;list-style:none;display:grid;gap:8px}.otd-more li{font-size:13px;color:#40556e}.otd-more li b{color:var(--navy);margin-right:6px}
 .otd-nav{display:flex;gap:8px;justify-content:flex-end}.otd-nav button{border:1px solid var(--line);background:#fff;border-radius:9px;padding:8px 12px;font:inherit;font-size:12px;font-weight:700;color:var(--blue);cursor:pointer}.otd-nav button:hover{border-color:#aac8eb}
 @media(max-width:620px){.otd-card{grid-template-columns:1fr;gap:16px;padding:20px}.otd-date{border-right:0;border-bottom:1px solid var(--line);padding:0 0 14px}.otd-date b{font-size:48px}.otd-body h3{font-size:20px}.otd-nav{justify-content:stretch}.otd-nav button{flex:1}}
+/* v139 · calculadoras al final: actualización + cuota UVA lado a lado */
+.calc-pair{grid-template-columns:repeat(2,minmax(0,1fr));align-items:start}
+.calc-pair .calc-card label>select,.calc-pair .calc-card .date-pair select{width:100%}
+.uva-amount{display:grid;grid-template-columns:minmax(0,1fr) 110px;gap:8px}
+.uva-amount select{padding:12px;border:1px solid #cfdbe8;border-radius:9px;background:#fff;font:inherit;color:var(--ink)}
+.uva-out{display:grid;gap:10px}.uva-out .big{font-size:26px;font-weight:800;color:var(--navy);letter-spacing:-.02em}.uva-out .big small{font-size:13px;font-weight:600;color:var(--muted);margin-left:6px}
+.uva-out dl{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;margin:0;font-size:13px}.uva-out dt{color:var(--muted)}.uva-out dd{margin:0;color:var(--ink);font-weight:600;text-align:right}
+.uva-warn{color:#8a5a00;background:#fff4dc;border-radius:8px;padding:8px 10px;font-size:12px}
+@media(max-width:900px){.calc-pair{grid-template-columns:1fr}}

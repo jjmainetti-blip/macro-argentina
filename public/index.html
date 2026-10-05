@@ -17,7 +17,8 @@
   <link rel="stylesheet" href="styles.css?v=135">
   <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
   <script type="module" src="releases.js?v=138"></script>
-  <script defer src="app.js?v=138"></script>
+  <script defer src="app.js?v=139"></script>
+  <script defer src="uva-calc.js?v=139b"></script>
   <script defer src="birth.js?v=132"></script>
   <script defer src="efemerides.js?v=135"></script>
 </head>
@@ -30,7 +31,7 @@
   </a>
   <button class="menu-btn" id="menuBtn" aria-expanded="false" aria-controls="nav">☰<span class="sr-only">Abrir menú</span></button>
   <nav id="nav" aria-label="Navegación principal">
-    <a href="#tablero">Tablero</a><a href="#un-dia-como-hoy">Un día como hoy</a><a href="#tipo-cambio">Tipo de cambio</a><a href="#historicos">Históricos</a><a href="#expectativas">Expectativas</a><a href="#calculadoras">Calculadoras</a><a href="#nacimiento">Cuando naciste</a><a href="#agenda">Agenda</a><a href="#fuentes">Fuentes</a>
+    <a href="#tablero">Tablero</a><a href="#un-dia-como-hoy">Un día como hoy</a><a href="#tipo-cambio">Tipo de cambio</a><a href="#historicos">Históricos</a><a href="#expectativas">Expectativas</a><a href="#nacimiento">Cuando naciste</a><a href="#agenda">Agenda</a><a href="#fuentes">Fuentes</a><a href="#calculadoras">Calculadoras</a>
   </nav>
 </header>
 
@@ -120,13 +121,6 @@
   <div class="callout"><strong>REM de agosto:</strong> 47 participantes: 35 consultoras y centros de investigación y 12 entidades financieras. Las proyecciones del REM no son pronósticos propios del BCRA.</div>
 </section>
 
-<section class="section alt" id="calculadoras">
-  <div class="section-title"><div><span class="eyebrow">Herramientas</span><h2>Calculadoras económicas</h2></div><p>Cálculos orientativos sobre las series incluidas.</p></div>
-  <div class="calc-grid single-calc">
-    <form class="calc-card calc-card-wide" id="updateCalc"><div class="calc-icon">↻</div><h3>Calculadora de actualización</h3><p>Actualizá un monto entre dos períodos usando el índice pactado.</p><label>Índice<select id="updateIndex"><option value="ipc">IPC · INDEC</option><option value="icl">ICL · BCRA</option><option value="cer">CER · BCRA</option><option value="uva">UVA · BCRA</option></select></label><div class="calc-latest" id="updateLatest">Último dato vigente: cargando…</div><label>Desde<div class="date-pair"><span id="updateStartDayWrap" hidden><select id="updateStartDay" aria-label="Día inicial"></select></span><select id="updateStartMonth"></select><select id="updateStartYear"></select></div></label><label>Hasta<div class="date-pair"><span id="updateEndDayWrap" hidden><select id="updateEndDay" aria-label="Día final"></select></span><select id="updateEndMonth"></select><select id="updateEndYear"></select></div></label><label>Monto inicial<input id="updateAmount" type="number" min="0" step="100" placeholder="$ 500.000"></label><button class="btn primary" type="submit">Calcular actualización</button><div class="result" id="updateResult" aria-live="polite">Elegí el índice y el período.</div><small id="updateMethod">IPC: se compone la variación mensual publicada por INDEC. CER, UVA e ICL permiten seleccionar fecha exacta y utilizan el valor diario oficial vigente del BCRA.</small></form>
-  </div>
-</section>
-
 <section class="section birth-section" id="nacimiento" aria-labelledby="beTitle">
   <div class="section-title"><div><span class="eyebrow">Viaje en el tiempo</span><h2 id="beTitle">La economía cuando naciste</h2></div><p>Elegí tu mes y año de nacimiento para ver quién gobernaba, cuánto subían los precios, cuánto rendía un sueldo y cuánto costaban algunas cosas. Sólo se muestra lo que tiene respaldo en datos publicados; cuando falta el precio exacto de un mes, se estima entre observaciones cercanas ajustando por inflación.</p></div>
   <div class="be-picker"><label>Mes<select id="beMonth" aria-label="Mes de nacimiento"></select></label><label>Año<select id="beYear" aria-label="Año de nacimiento"></select></label></div>
@@ -160,8 +154,26 @@
   </div>
   <div class="disclaimer"><strong>Nota metodológica.</strong> Este sitio es una plantilla editorial y analítica. Las series históricas empalmadas combinan fuentes y metodologías diferentes; no deben tratarse como una única serie oficial homogénea. Antes de publicar profesionalmente, conviene automatizar la ingestión desde APIs/archivos oficiales y validar cada observación.</div>
 </section>
+
+<section class="section" id="calculadoras">
+  <div class="section-title"><div><span class="eyebrow">Herramientas</span><h2>Calculadoras económicas</h2></div><p>Cálculos orientativos sobre las series incluidas.</p></div>
+  <div class="calc-grid calc-pair">
+    <form class="calc-card calc-card-wide" id="updateCalc"><div class="calc-icon">↻</div><h3>Calculadora de actualización</h3><p>Actualizá un monto entre dos períodos usando el índice pactado.</p><label>Índice<select id="updateIndex"><option value="ipc">IPC · INDEC</option><option value="icl">ICL · BCRA</option><option value="cer">CER · BCRA</option><option value="uva">UVA · BCRA</option></select></label><div class="calc-latest" id="updateLatest">Último dato vigente: cargando…</div><label>Desde<div class="date-pair"><span id="updateStartDayWrap" hidden><select id="updateStartDay" aria-label="Día inicial"></select></span><select id="updateStartMonth"></select><select id="updateStartYear"></select></div></label><label>Hasta<div class="date-pair"><span id="updateEndDayWrap" hidden><select id="updateEndDay" aria-label="Día final"></select></span><select id="updateEndMonth"></select><select id="updateEndYear"></select></div></label><label>Monto inicial<input id="updateAmount" type="text" inputmode="decimal" autocomplete="off" placeholder="$ 500.000,50"></label><button class="btn primary" type="submit">Calcular actualización</button><div class="result" id="updateResult" aria-live="polite">Elegí el índice y el período.</div><small id="updateMethod">IPC: se compone la variación mensual publicada por INDEC. CER, UVA e ICL permiten seleccionar fecha exacta y utilizan el valor diario oficial vigente del BCRA.</small></form>
+    <form class="calc-card calc-card-wide" id="uvaCalc" novalidate><div class="calc-icon">⌂</div><h3>Cuota de crédito hipotecario UVA</h3><p>Calculá la cuota inicial con la tasa vigente de cada banco (informada al BCRA) o con una tasa propia.</p>
+      <label>Banco<select id="uvaBank"><option value="">Cargando tasas de los bancos…</option></select></label>
+      <div class="calc-latest" id="uvaBankInfo">Tasas: BCRA — Régimen de Transparencia.</div>
+      <label>Tasa nominal anual (TNA, %)<input id="uvaRate" type="text" inputmode="decimal" autocomplete="off" placeholder="7,5"></label>
+      <label>Monto del crédito<div class="uva-amount"><input id="uvaAmount" type="text" inputmode="decimal" autocomplete="off" placeholder="100.000"><select id="uvaUnit" aria-label="Unidad del monto"><option value="usd">USD</option><option value="uva">UVAs</option><option value="ars">Pesos</option></select></div></label>
+      <label>Dólar para convertir<select id="uvaFx"><option value="bna">Oficial BNA (venta)</option><option value="mep">MEP</option></select></label>
+      <div class="calc-latest" id="uvaEquiv">Ingresá un monto para ver su equivalente.</div>
+      <label>Plazo<select id="uvaTerm"><option value="5">5 años (60 cuotas)</option><option value="10">10 años (120 cuotas)</option><option value="15">15 años (180 cuotas)</option><option value="20" selected>20 años (240 cuotas)</option><option value="25">25 años (300 cuotas)</option><option value="30">30 años (360 cuotas)</option></select></label>
+      <button class="btn primary" type="submit">Calcular cuota</button>
+      <div class="result" id="uvaResult" aria-live="polite">Elegí un banco (o ingresá una tasa), el monto y el plazo.</div>
+      <small>Sistema francés: la cuota en UVAs es fija; en pesos se ajusta cada mes por la UVA (inflación). No incluye seguros, gastos ni impuestos. Tasa por banco: menor tasa informada para clientes en la línea UVA de vivienda única y permanente.</small></form>
+  </div>
+</section>
 </main>
-<footer><div class="brand"><span class="brand-mark"><i></i><i></i><i></i></span><span><strong>MACRODATOS</strong><small>ECONOMÍA ARGENTINA</small></span></div><p>Información económica para análisis. No constituye asesoramiento financiero.</p><a href="#inicio">Volver arriba ↑</a><span class="build-version">macrodatos.ar · v138</span></footer>
+<footer><div class="brand"><span class="brand-mark"><i></i><i></i><i></i></span><span><strong>MACRODATOS</strong><small>ECONOMÍA ARGENTINA</small></span></div><p>Información económica para análisis. No constituye asesoramiento financiero.</p><a href="#inicio">Volver arriba ↑</a><span class="build-version">macrodatos.ar · v139</span></footer>
 
 <div id="kpiModal" class="kpi-modal" hidden aria-hidden="true">
   <div class="kpi-modal-backdrop" data-kpi-close></div>
