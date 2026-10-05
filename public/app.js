@@ -1065,3 +1065,13 @@ setTimeout(loadCardStatus,3500);setInterval(loadCardStatus,10*60*1000);
 // v105: preload bundled histories independently of remote APIs/KV.
 loadBundledMacroHistory();
 loadMarketsDaily().then(()=>loadFxDaily());
+
+// v136: menú móvil (☰). Abre/cierra la navegación; se cierra al elegir una sección, al tocar fuera o con Escape.
+(()=>{const btn=document.getElementById('menuBtn'),nav=document.getElementById('nav');if(!btn||!nav)return;
+  const set=open=>{nav.classList.toggle('open',open);btn.setAttribute('aria-expanded',String(open));btn.firstChild.textContent=open?'✕':'☰';const sr=btn.querySelector('.sr-only');if(sr)sr.textContent=open?'Cerrar menú':'Abrir menú';};
+  btn.addEventListener('click',e=>{e.stopPropagation();set(!nav.classList.contains('open'));});
+  nav.addEventListener('click',e=>{if(e.target.closest('a'))set(false);});
+  document.addEventListener('click',e=>{if(nav.classList.contains('open')&&!nav.contains(e.target)&&e.target!==btn)set(false);});
+  document.addEventListener('keydown',e=>{if(e.key==='Escape')set(false);});
+  window.addEventListener('resize',()=>{if(window.innerWidth>900)set(false);});
+})();

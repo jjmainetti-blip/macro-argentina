@@ -272,3 +272,6 @@ Chequeo: `npm run validate:snapshot`.
   2. Asunciones de ministros de Economía/Hacienda (de `birth-economy.json`), con más peso para los más relevantes (Cavallo, Martínez de Hoz, Krieger Vasena, Sourrouille, Caputo, etc.).
   3. Ruedas extremas calculadas con las series del sitio: caídas/subas del Merval ≥ 6% (desde 1996) y saltos del riesgo país (desde 1999), con filtros de datos aislados, control cruzado con el Merval en USD desde 2013 y contexto cuando la causa es conocida.
 - Resultado: 240 días con un hecho histórico como principal, 23 con una asunción de ministro y 103 con un dato extremo de mercado.
+
+## v136 — menú móvil
+- El botón ☰ de la versión móvil no tenía código asociado (el CSS esperaba la clase `open` en `#nav`, pero nadie la ponía). Ahora abre y cierra el menú (cambia a ✕), y se cierra al elegir una sección, al tocar fuera, con Escape o al agrandar la ventana.
