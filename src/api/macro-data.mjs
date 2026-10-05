@@ -1,7 +1,7 @@
 import { latestRelease } from '../../public/releases.js';
 import * as XLSX from 'xlsx';
 import { BUNDLED_SOURCES } from './bundled-history.mjs';
-import { autosLive, ipcCabaLive, povertyLive, cementLive } from './live-sources.mjs';
+import { autosLive, ipcCabaLive, povertyLive, cementLive, cameLive } from './live-sources.mjs';
 import { cardStatus } from './freshness.mjs';
 /* Macrodatos (antes Macro Argentina) v8 — stable server-side data contract.
    Each adapter fails independently. The browser keeps its bundled last-known value
@@ -48,7 +48,9 @@ function annualFromRows(rows,mode='last'){
 function growthFromAnnualLevels(levels){const out={},ys=Object.keys(levels).map(Number).sort((a,b)=>a-b);for(const y of ys)if(levels[y-1]!=null)out[y]=round(pct(levels[y],levels[y-1]),1);return out;}
 function yoyFromRows(rows){const levels={};for(const r of rows||[]){const k=String(r.date||'').slice(0,7);if(/^\d{4}-\d{2}$/.test(k)&&Number.isFinite(Number(r.value)))levels[k]=Number(r.value);}const out={};for(const [k,v] of Object.entries(levels)){const [y,m]=k.split('-');const prev=`${Number(y)-1}-${m}`;if(Number.isFinite(levels[prev]))out[k]=round(pct(v,levels[prev]),1);}return out;}
 // v113: algunas series de Datos Argentina (EMAE, ISAC) llegan como fracción (0,064 = 6,4%).
-function fractionMapToPct(map){const vals=Object.values(map||{}).map(Number).filter(Number.isFinite);if(vals.length>=12&&Math.max(...vals.map(Math.abs))<=1.5){const out={};for(const [k,v] of Object.entries(map))out[k]=round(Number(v)*100,1);return out;}return map;}
+// v137: antes exigía que TODOS los valores fueran ≤1,5 en módulo; con los rebotes de 2021 (ISAC +144% = 1,44… o más)
+// la serie quedaba sin convertir y la tarjeta mostraba 0,0%. Ahora decide por el percentil 80 de los valores absolutos.
+function fractionMapToPct(map){const vals=Object.values(map||{}).map(Number).filter(Number.isFinite);const abs=vals.map(Math.abs).sort((a,b)=>a-b),p80=abs[Math.floor(abs.length*0.8)]??0;if(vals.length>=12&&p80<=1.5){const out={};for(const [k,v] of Object.entries(map))out[k]=round(Number(v)*100,1);return out;}return map;}
 const MONTHS_ES=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
 const periodEs=ym=>`${MONTHS_ES[Number(ym.slice(5,7))-1]} ${ym.slice(0,4)}`;
 const strip=s=>s.replace(/<script[\s\S]*?<\/script>/gi,' ').replace(/<style[\s\S]*?<\/style>/gi,' ').replace(/<[^>]+>/g,' ').replace(/&nbsp;|&#160;/gi,' ').replace(/&#(\d+);/g,(_,n)=>String.fromCharCode(+n)).replace(/&#x([0-9a-f]+);/gi,(_,n)=>String.fromCharCode(parseInt(n,16))).replace(/&([aeiouAEIOU])(acute|uml);/g,'$1').replace(/&([nN])tilde;/g,(_,c)=>c==='n'?'ñ':'Ñ').replace(/&amp;/gi,'&').replace(/&[a-z]+;/gi,' ').replace(/\s+/g,' ').trim();
@@ -728,12 +730,12 @@ async function calendar(){
 
 async function isacHistorical(){
   const monthly={}; let sourceUrl='';
-  try{const x=await seriesRows('33.2_I_2004_M_4',{start:'2020-01-01'});sourceUrl=x.url;for(const r of x.rows){const k=String(r.date).slice(0,7);if(/^\d{4}-\d{2}$/.test(k)&&Number.isFinite(Number(r.value)))monthly[k]=Number(r.value);}}catch{}
+  let fromApi=false;try{const x=await seriesRows('33.2_I_2004_M_4',{start:'2020-01-01'});sourceUrl=x.url;for(const r of x.rows){const k=String(r.date).slice(0,7);if(/^\d{4}-\d{2}$/.test(k)&&Number.isFinite(Number(r.value)))monthly[k]=Number(r.value)*100;}fromApi=Object.keys(monthly).length>=24;}catch{}  // la API entrega fracción (0,045 = 4,5%)
   if(Object.keys(monthly).length<24){
     try{const x=await bestCsv('sspm-indicador-sintetico-actividad-construccion-isac-base-2004',r=>/valores mensuales|nivel general|isac/i.test(`${r.name||''} ${r.description||''}`)?10:0);sourceUrl=x.url;const rows=parseCsv(x.text),h=rows[0].map(norm),dc=h.findIndex(v=>/indice_tiempo|fecha|periodo/.test(v)),vc=h.findIndex(v=>/isac_variacion_interanual/.test(v));if(dc>=0&&vc>=0)for(const r of rows.slice(1)){const d=String(r[dc]||'').slice(0,7),v=numberAR(r[vc]);if(/^\d{4}-\d{2}$/.test(d)&&Number.isFinite(v))monthly[d]=v;}}catch{}
   }
   if(!Object.keys(monthly).length)throw new Error('serie ISAC interanual no disponible');
-  const pctMonthly=fractionMapToPct(monthly);for(const k of Object.keys(pctMonthly))monthly[k]=round(Number(pctMonthly[k]),1);
+  const pctMonthly=fromApi?monthly:fractionMapToPct(monthly);for(const k of Object.keys(pctMonthly))monthly[k]=round(Number(pctMonthly[k]),1)+0;
   let monthlySaMom;try{monthlySaMom=await saMomFromLevels('33.2_ISAC_SIN_EDAD_0_M_23_56');}catch{}
   return {status:'ok',source:'INDEC / Datos Argentina — ISAC',sourceUrl,monthlyYoy:monthly,...(monthlySaMom?{monthlySaMom}:{})};
 }
@@ -993,9 +995,9 @@ async function bopHistorical(){
 // v117: el endpoint se divide en grupos. Cloudflare limita los pedidos externos por invocación
 // (50 en el plan gratuito); con todas las fuentes juntas se superaban (66+) y las últimas fallaban.
 // Cada grupo queda holgadamente por debajo del límite y tiene su propio snapshot.
-const JOBS={ipcHistorical:()=>ipcHistorical(),gdpHistorical:()=>gdpHistorical(),emaeHistorical:()=>emaeHistorical(),industryHistorical:()=>industryHistorical(),unemploymentHistorical:()=>unemploymentHistorical(),tradeHistorical:()=>tradeHistorical(),financialHistorical:()=>financialHistorical(),exchangeHistorical:()=>exchangeHistorical(),ipc:()=>ipc(),arca:()=>arca(),icg:()=>icg(),bcra:()=>bcra(),rem:()=>rem(),salary:()=>salaryRipte(),icl:()=>icl(),contractIndices:()=>contractIndices(),isacHistorical:()=>isacHistorical(),creditHistorical:()=>creditHistorical(),arrearsHistorical:()=>arrearsHistorical(),activityPulse:()=>activityPulse(),ilaHistorical:()=>ilaHistorical(),igaHistorical:()=>igaHistorical(),bopHistorical:()=>bopHistorical(),autos:()=>autosLive(),ipcCaba:()=>ipcCabaLive(),poverty:()=>povertyLive(),cement:()=>cementLive()};
+const JOBS={ipcHistorical:()=>ipcHistorical(),gdpHistorical:()=>gdpHistorical(),emaeHistorical:()=>emaeHistorical(),industryHistorical:()=>industryHistorical(),unemploymentHistorical:()=>unemploymentHistorical(),tradeHistorical:()=>tradeHistorical(),financialHistorical:()=>financialHistorical(),exchangeHistorical:()=>exchangeHistorical(),ipc:()=>ipc(),arca:()=>arca(),icg:()=>icg(),bcra:()=>bcra(),rem:()=>rem(),salary:()=>salaryRipte(),icl:()=>icl(),contractIndices:()=>contractIndices(),isacHistorical:()=>isacHistorical(),creditHistorical:()=>creditHistorical(),arrearsHistorical:()=>arrearsHistorical(),activityPulse:()=>activityPulse(),ilaHistorical:()=>ilaHistorical(),igaHistorical:()=>igaHistorical(),bopHistorical:()=>bopHistorical(),autos:()=>autosLive(),ipcCaba:()=>ipcCabaLive(),poverty:()=>povertyLive(),cement:()=>cementLive(),came:()=>cameLive()};
 export const GROUPS={
-  core:['ipc','arca','icg','bcra','rem','salary','icl','contractIndices','autos','ipcCaba'],
+  core:['ipc','arca','icg','bcra','rem','salary','icl','contractIndices','autos','ipcCaba','came'],
   history:['ipcHistorical','gdpHistorical','industryHistorical','unemploymentHistorical','tradeHistorical'],
   markets:['financialHistorical','exchangeHistorical'],
   activity:['emaeHistorical','isacHistorical','creditHistorical','activityPulse','cement'],
@@ -1015,8 +1017,8 @@ export async function latestReleaseFor(env,ctx=null,opts={}){
   let cached=null;
   if(!opts.force){try{const r=await env?.MACRO_STORE?.getWithMetadata?.(RELEASE_KEY,'json');if(r?.value){cached=r.value;if(Date.now()-(r.metadata?.savedAt||0)<10*60*1000){RELEASE_MEMO={at:Date.now(),value:cached};return cached;}}}catch{}}
   const compute=async()=>{
-    const R={};for(const n of ['ipc','arca','salary','icg','autos','rem','bopHistorical','activityPulse'])if(BUNDLED_SOURCES[n])R[n]=BUNDLED_SOURCES[n];
-    for(const g of ['core','external','activity']){const snap=await readSnapshot(env,g);for(const n of ['ipc','arca','salary','icg','autos','rem','bopHistorical','activityPulse'])if(snap?.sources?.[n])R[n]=snap.sources[n];}
+    const R={};for(const n of ['ipc','arca','salary','icg','autos','rem','bopHistorical','activityPulse','came'])if(BUNDLED_SOURCES[n])R[n]=BUNDLED_SOURCES[n];
+    for(const g of ['core','external','activity']){const snap=await readSnapshot(env,g);for(const n of ['ipc','arca','salary','icg','autos','rem','bopHistorical','activityPulse','came'])if(snap?.sources?.[n])R[n]=snap.sources[n];}
     const value=latestRelease(R);
     if(value){RELEASE_MEMO={at:Date.now(),value};if(env?.MACRO_STORE?.put&&(!cached||JSON.stringify(cached)!==JSON.stringify(value)||opts.force)){try{await env.MACRO_STORE.put(RELEASE_KEY,JSON.stringify(value),{metadata:{savedAt:Date.now()}});}catch{}}}
     return value;

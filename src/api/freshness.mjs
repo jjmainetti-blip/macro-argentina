@@ -17,6 +17,7 @@ export const CARDS = [
   { key: 'arca', title: 'Recaudación', group: 'core', freq: 'M', lag: 1, day: 2, cal: /Recaudaci[oó]n tributaria/i, latest: S => maxKey(lastKey(S.arca?.history), S.arca?.latest?.ym) },
   { key: 'icg', title: 'Confianza en el gobierno', group: 'core', freq: 'M', lag: 0, day: 28, latest: S => lastKey(S.icg?.history) },
   { key: 'autos', title: 'Patentamientos 0 km', group: 'core', freq: 'M', lag: 1, day: 2, latest: S => maxKey(lastKey(S.autos?.history?.['Patentamientos (unidades)']), lastKey(S.activityPulse?.autos?.history?.['Patentamientos (unidades)'])) },
+  { key: 'came', title: 'Ventas minoristas pyme', group: 'core', freq: 'M', lag: 1, day: 5, latest: S => maxKey(lastKey(S.came?.monthlyYoy), S.came?.latest?.ym) },
   { key: 'emae', title: 'EMAE', group: 'activity', freq: 'M', lag: 2, day: 25, cal: /actividad econ[oó]mica \(EMAE\)/i, latest: S => maxKey(lastKey(S.emaeHistorical?.monthlySaMom), lastKey(S.emaeHistorical?.monthlyYoy)) },
   { key: 'isac', title: 'ISAC construcción', group: 'activity', freq: 'M', lag: 2, day: 10, latest: S => lastKey(S.isacHistorical?.monthlyYoy) },
   { key: 'fiscal', title: 'Resultado fiscal', group: 'activity', freq: 'M', lag: 1, day: 18, cal: /Resultado fiscal/i, latest: S => lastKey(S.activityPulse?.fiscal?.historyPctGDP?.primary) },

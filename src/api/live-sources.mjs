@@ -96,3 +96,60 @@ export async function cementLive() {
   if (!Object.keys(monthly).length) throw new Error('AFCP: sin meses nuevos');
   return { status: 'ok', source: 'AFCP — Despacho Nacional de Cemento', sourceUrl: 'https://afcp.info/ESTADISTICAS/DATOS-DEFINITIVOS/', monthlyYoy: monthly };
 }
+
+// ---------- v137 · Ventas minoristas pyme (CAME, Índice de Ventas Minoristas) ----------
+// El comunicado mensual dice, por ejemplo: "En septiembre, las ventas minoristas pyme registraron una suba real del
+// 0,3% interanual, mientras que cayeron un 1,2% respecto de agosto. En lo que va del año la retracción acumulada es
+// del 2,1%." La fecha de publicación ("04 de Octubre 2026") fija el año del mes informado.
+const CAME = 'https://www.redcame.org.ar';
+const UP = /(suba|subieron|sube|aument|alza|increment|crec|mejor|repunt|avanz|expansi)/i, DOWN = /(ca[ií]d|cayeron|cae|baj|descen|retrac|retroce|disminu|merm|contrac)/i;
+const signOf = (verb, v) => DOWN.test(verb) && !UP.test(verb) ? -v : v;
+const lastVerb = s => [...String(s).matchAll(/[a-záéíóúñ]+/gi)].map(x => x[0]).filter(w => UP.test(w) || DOWN.test(w)).at(-1) || '';
+const ACC = { a: 'á', e: 'é', i: 'í', o: 'ó', u: 'ú', A: 'Á', E: 'É', I: 'Í', O: 'Ó', U: 'Ú' };
+export function parseCameArticle(html) {
+  const t = String(html || '').replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ')
+    .replace(/&([aeiouAEIOU])acute;/g, (_, c) => ACC[c]).replace(/&ntilde;/g, 'ñ').replace(/&Ntilde;/g, 'Ñ').replace(/&uuml;/g, 'ü').replace(/&(nbsp|mdash|ndash|ldquo|rdquo|laquo|raquo);/g, ' ').replace(/&#\d+;/g, ' ').replace(/\s+/g, ' ');
+  const M = '(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)';
+  const head = t.match(new RegExp(`ventas minoristas pymes?\\s+(\\w+)\\s+(?:un\\s+)?([\\d.,]+)\\s*%\\s*(?:interanual|anual)\\s+en\\s+${M}`, 'i'));
+  if (!head) return null;
+  // Fecha de publicación: la primera "dd de Mes AAAA" después del título.
+  const pub = t.slice(head.index).match(new RegExp(`(\\d{1,2})\\s+de\\s+${M}\\s+(20\\d{2})`, 'i'));
+  if (!pub) return null;
+  const mon = MONTHS[head[3].toLowerCase()], pm = MONTHS[pub[2].toLowerCase()], py = +pub[3];
+  const year = mon > pm ? py - 1 : py;   // diciembre se publica en enero del año siguiente
+  const out = { ym: ym(year, mon), yoy: signOf(head[1], num(head[2])), published: `${py}-${String(pm).padStart(2, '0')}-${String(+pub[1]).padStart(2, '0')}` };
+  const prevName = Object.keys(MONTHS).filter(k => MONTHS[k] === (mon === 1 ? 12 : mon - 1)).join('|');
+  const momRe = new RegExp(`(mes anterior|intermensual|(?:respecto|frente|en relaci[oó]n|contra)\\s+(?:de\\s+|a\\s+|al\\s+)?(?:mes de\\s+)?(?:${prevName})\\b)`, 'i');
+  for (const sen of t.slice(head.index).split(/(?<=[.;])\s+/)) {
+    if (/online|puntos porcentuales|rubro|sector/i.test(sen)) continue;
+    const nums = [...sen.matchAll(/([\d.,]+)\s*%/g)].filter(x => !/^\s*%?\s*(?:interanual|anual)/i.test(sen.slice(x.index + x[0].length, x.index + x[0].length + 14)));
+    const acc = sen.search(/acumul/i);
+    const ph = sen.match(momRe);
+    if (out.mom === undefined && ph) {
+      const cand = nums.filter(x => acc < 0 || x.index < acc || ph.index > acc).sort((p, q) => Math.abs(p.index - ph.index) - Math.abs(q.index - ph.index))[0];
+      if (cand) out.mom = signOf(lastVerb(sen.slice(Math.max(0, cand.index - 70), cand.index)) || lastVerb(sen.slice(0, ph.index)), num(cand[1]));
+    }
+    if (out.ytd === undefined && acc >= 0) {
+      const cand = nums.find(x => x.index > acc) || nums.filter(x => x.index < acc).at(-1);
+      if (cand) out.ytd = signOf(lastVerb(sen.slice(Math.max(0, Math.min(acc, cand.index) - 30), Math.max(acc, cand.index))), num(cand[1]));
+    }
+  }
+  return Number.isFinite(out.yoy) ? out : null;
+}
+export async function cameLive() {
+  const links = new Set();
+  for (const p of ['/prensa', '/novedades']) {
+    try {
+      const html = await (await fetchWithTimeout(CAME + p, {}, 12000)).text();
+      for (const m of html.matchAll(/href="((?:https?:\/\/(?:www\.)?redcame\.org\.ar)?\/(?:prensa|novedades)\/\d+\/las-ventas-minoristas-pymes?-[^"]*interanual[^"]*)"/gi)) links.add(m[1].startsWith('http') ? m[1] : CAME + m[1]);
+    } catch { }
+  }
+  if (!links.size) throw new Error('CAME: no se encontró el comunicado de ventas minoristas');
+  let best = null;
+  for (const u of [...links].slice(0, 4)) {
+    try { const p = parseCameArticle(await (await fetchWithTimeout(u, {}, 12000)).text()); if (p && (!best || p.ym > best.ym)) best = { ...p, url: u }; } catch { }
+  }
+  if (!best) throw new Error('CAME: no se pudo leer el comunicado');
+  const monthlyYoy = { [best.ym]: best.yoy }, monthlySaMom = Number.isFinite(best.mom) ? { [best.ym]: best.mom } : {};
+  return { status: 'ok', source: 'CAME — Índice de Ventas Minoristas Pyme', sourceUrl: best.url, monthlyYoy, monthlySaMom, latest: best };
+}

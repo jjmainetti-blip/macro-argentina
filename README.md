@@ -275,3 +275,8 @@ Chequeo: `npm run validate:snapshot`.
 
 ## v136 — menú móvil
 - El botón ☰ de la versión móvil no tenía código asociado (el CSS esperaba la clase `open` en `#nav`, pero nadie la ponía). Ahora abre y cierra el menú (cambia a ✕), y se cierra al elegir una sección, al tocar fuera, con Escape o al agrandar la ventana.
+
+## v137 — pobreza semestral, ISAC interanual y ventas minoristas CAME
+- **Pobreza:** el gráfico histórico y el de la tarjeta muestran las dos mediciones semestrales de INDEC (1S y 2S) en 2003–2006 y desde 2016 (claves AAAA-06 / AAAA-12 en la serie histórica). Antes se veía un solo semestre por año (y mezclaba el 2.º semestre hasta 2024 con el 1.º desde 2025).
+- **ISAC:** la API de Datos Argentina entrega la variación interanual como fracción (−0,045 = −4,5%). La conversión a porcentaje se saltaba porque exigía que todos los valores fueran ≤1,5 en módulo y el rebote de abril 2021 (+240%) lo impedía: la tarjeta mostraba 0,0%. Ahora la serie de la API se convierte siempre, y `fractionMapToPct` decide por el percentil 80.
+- **Ventas minoristas pyme (CAME):** tarjeta nueva en Pulso económico (interanual real; abajo, variación mensual desestacionalizada y acumulada del año), gráfico con barras interanuales + línea mensual, entrada en “Último dato publicado” y en el motor de frescura. Histórico ene-2024–sep-2026 tomado de la Tabla 1 del informe de septiembre 2026 (en dic-2025 la variación mensual se toma del gráfico del informe, −5,2%, porque la tabla la muestra sin signo). Actualización automática: `cameLive()` lee los comunicados de redcame.org.ar/prensa.

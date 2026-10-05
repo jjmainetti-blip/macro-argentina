@@ -186,7 +186,7 @@ async function loadPublicHistorical(){
   if(window.Chart)renderHistory(currentSeries); updateCoverage(); syncUpdateIndexAvailability(); updateCalcMeta();
   const ok=results.filter(x=>x.status==='fulfilled').length; const el=document.getElementById('autoStatus'); if(el)el.textContent=`Series públicas cargadas directamente: ${ok}/${results.length}. Actualizando últimos datos…`;
 }
-function updateCoverage(){const coverage=document.getElementById('seriesCoverage');if(!coverage)return;coverage.innerHTML=Object.entries(seriesConfig).map(([k,c])=>{const ys=Object.keys(c.data).map(Number).filter(Number.isFinite).sort((a,b)=>a-b);return `<span><b>${c.title}</b> ${ys.length?`${ys[0]}–${ys.at(-1)} (${ys.length})`:'sin datos'}</span>`}).join('');}
+function updateCoverage(){const coverage=document.getElementById('seriesCoverage');if(!coverage)return;coverage.innerHTML=Object.entries(seriesConfig).map(([k,c])=>{const ks=Object.keys(c.data).filter(k=>/^\d{4}(-\d{2})?$/.test(k)),ys=[...new Set(ks.map(k=>+k.slice(0,4)))].sort((a,b)=>a-b);return `<span><b>${c.title}</b> ${ys.length?`${ys[0]}–${ys.at(-1)} (${ks.length})`:'sin datos'}</span>`}).join('');}
 
 
 // v119: índice de precios para el RIPTE real. Usa la cadena IPC completa si está cargada;
@@ -250,7 +250,7 @@ function applySalaryMode(){
 const seriesConfig = {
   inflation:{title:'Inflación',subtitle:'IPC · %',source:'INDEC / San Luis / INDEC',data:inflation,note:'<strong>Metodología:</strong> una cadena mensual construida con niveles del IPC: INDEC histórico hasta dic-2006, IPC San Luis ene-2007–dic-2016 e IPC Nacional desde ene-2017. La vista anual punta a punta compara diciembre contra diciembre; promedio anual compara el índice promedio de 12 meses contra el promedio del año previo.'},
   gdp:{title:'PIB real',subtitle:'Variación anual · %',source:'INDEC / Datos Argentina / Banco Mundial',data:gdpGrowth,note:'<strong>Metodología:</strong> 1936–1960 se deriva de Cuentas Nacionales históricas a precios constantes; desde 1961 se usa la serie continua de crecimiento real del PIB del Banco Mundial (basada en cuentas nacionales oficiales/OCDE). La variación acumulada exige todos los años consecutivos del intervalo y nunca salta observaciones faltantes.'},
-  poverty:{title:'Pobreza',subtitle:'Personas bajo la línea de pobreza · %',source:'UCA / INDEC',data:poverty,note:'<strong>Metodología:</strong> 1988–2002: INDEC EPH puntual, GBA, onda de octubre; 2003–2006: INDEC EPH continua, total de aglomerados, segundo semestre; 2007–2015: ODSA-UCA según el criterio solicitado; desde 2016: INDEC. <strong>Hay quiebres de cobertura y metodología:</strong> la línea sirve para contexto histórico, no como una serie homogénea sin ajustes.'},
+  poverty:{title:'Pobreza',subtitle:'Personas bajo la línea de pobreza · %',source:'UCA / INDEC',data:poverty,note:'<strong>Metodología:</strong> 1988–2002: INDEC EPH puntual, GBA, onda de octubre; 2003–2006: INDEC EPH continua, total de aglomerados; 2007–2015: ODSA-UCA según el criterio solicitado; desde 2016: INDEC. En 2003–2006 y desde 2016 se muestran las dos mediciones semestrales (1S y 2S). <strong>Hay quiebres de cobertura y metodología:</strong> la línea sirve para contexto histórico, no como una serie homogénea sin ajustes.'},
   industry:{title:'Industria manufacturera',subtitle:'Variación anual del nivel de producción · %',source:'INDEC / Datos Argentina',data:industry,note:'<strong>Metodología:</strong> EMI histórico hasta 2015 e IPI manufacturero desde 2016. En ambos tramos se promedian los niveles mensuales del índice dentro de cada año y luego se calcula la variación anual. El empalme implica un cambio metodológico y se señala expresamente.'},
   unemployment:{title:'Desempleo',subtitle:'Tasa de desocupación · %',source:'INDEC · INDEC · EPH continua anual / OIT-LFS respaldo',data:unemployment,note:'<strong>Metodología:</strong> desde 2003 se usa el promedio anual de la tasa trimestral de desocupación de la EPH continua (total de aglomerados), agregado por la API oficial. Si esa consulta falla, se usa como respaldo la estimación nacional OIT-LFS/Banco Mundial. No se mezcla automáticamente con la EPH puntual anterior a 2003.'},
   tradeBalance:{title:'Balanza comercial',subtitle:'Saldo anual · millones de USD constantes al último CPI-U',source:'INDEC + BLS',data:tradeBalance,note:'<strong>Metodología:</strong> saldo comercial anual deflactado por el CPI-U de Estados Unidos (promedio anual), expresado por defecto en dólares constantes al último CPI-U disponible. Puede alternarse a USD corrientes.'},
@@ -278,7 +278,7 @@ function makeCharts(){
 function cumulativeSummary(key, shown){
   const el=document.getElementById('periodSummary'); if(!el)return;
   if(!shown || shown.length<2){el.textContent='Seleccioná al menos dos observaciones para calcular la variación acumulada.';return;}
-  const a=shown[0][0], b=shown.at(-1)[0];
+  const a=key==='poverty'?povertyLabel(shown[0][0]):shown[0][0], b=key==='poverty'?povertyLabel(shown.at(-1)[0]):shown.at(-1)[0];
   // IMPORTANTE: first/last salen directamente de `shown`, el mismo array que
   // alimenta Chart.js. Así gráfico y resumen nunca pueden usar capas distintas.
   const first=Number(shown[0][1]), last=Number(shown.at(-1)[1]);
@@ -306,7 +306,7 @@ function inflationDisplayData(){return inflationFrequency==='monthly'?inflationM
 function syncPeriodSelectors(data){
   let keys=Object.keys(data).sort(); const monthly=(currentSeries==='inflation'&&inflationFrequency==='monthly')||currentSeries==='salary';
   if(DAILY_SERIES.has(currentSeries))keys=[...new Set(keys.map(k=>k.slice(0,4)))]; if(!keys.length){for(const id of ['periodFrom','periodTo']){const el=document.getElementById(id);if(el)el.innerHTML='<option value="">—</option>';}return;}
-  for(const id of ['periodFrom','periodTo']){const el=document.getElementById(id); if(!el)continue; const old=el.value; el.innerHTML=keys.map(k=>`<option value="${k}">${monthly?displayMonth(k):k}</option>`).join(''); el.value=keys.includes(old)?old:(id==='periodFrom'?keys[0]:keys.at(-1));}
+  for(const id of ['periodFrom','periodTo']){const el=document.getElementById(id); if(!el)continue; const old=el.value; el.innerHTML=keys.map(k=>`<option value="${k}">${monthly?displayMonth(k):currentSeries==='poverty'?povertyLabel(k):k}</option>`).join(''); el.value=keys.includes(old)?old:(id==='periodFrom'?keys[0]:keys.at(-1));}
 }
 function seriesValueLabel(key,v){
   if(key==='countryRisk') return `${fmt.format(v)} pb`;
@@ -342,7 +342,7 @@ function renderHistory(key){
   const from=document.getElementById('periodFrom')?.value, to=document.getElementById('periodTo')?.value;
   if(currentRange==='custom'&&from&&to)shown=all.filter(([x])=>x.slice(0,from.length)>=from&&x.slice(0,to.length)<=to); else if(['5','10','20'].includes(String(currentRange))&&all.length){const lastKey=all.at(-1)[0];const lastYear=Number(String(lastKey).slice(0,4));const cutoffYear=lastYear-Number(currentRange);shown=all.filter(([x])=>Number(String(x).slice(0,4))>=cutoffYear);}
   if(zoomFactor>1&&shown.length>4)shown=shown.slice(-Math.max(4,Math.ceil(shown.length/zoomFactor)));
-  const labels=shown.map(x=>isDaily?displayDay(x[0]):isMonthly?displayMonth(x[0]):x[0]), values=shown.map(x=>x[1]);
+  const labels=shown.map(x=>isDaily?displayDay(x[0]):isMonthly?displayMonth(x[0]):key==='poverty'?povertyLabel(x[0]):x[0]), values=shown.map(x=>x[1]);
   const empty=document.getElementById('chartEmpty');if(empty){empty.hidden=shown.length>0;empty.textContent=shown.length?'':`No se recibieron observaciones para ${cfg.title}.`;}
   const annualLabel=inflationAnnualMode==='eop'?'punta a punta (dic./dic.)':'promedio anual';
   document.getElementById('chartTitle').textContent=key==='inflation'?(isInflationMonthly?'Inflación mensual':`Inflación anual · ${annualLabel}`):cfg.title;
@@ -624,6 +624,7 @@ const MACRO_LS_KEY='macrodatosSnapshotV131';
 // Series históricas (dólar, riesgo país, Merval, tasa, RIPTE, PIB, industria, desempleo, comercio).
 // Recibe la fusión histórico local + API, así los gráficos funcionan aunque la API no responda.
 function applyHistorySources(S){
+  safeApply('povertySemesters',()=>{if(S.poverty?.semesters)rebuildPovertySeries(S.poverty.semesters);});
   if(!S)return;
   const srcOk=x=>!!x&&['ok','snapshot','partial'].includes(x.status);
     // RIPTE se hidrata primero y de forma independiente. Ningún error posterior de
@@ -802,19 +803,31 @@ function hydrateKpiHistoryCache(S){
   }
 }
 const KPI_META={
- ipc:{title:'Inflación nacional',agency:'INDEC'},ipcCaba:{title:'Inflación CABA',agency:'IDECBA'},emae:{title:'EMAE',agency:'INDEC'},ipi:{title:'IPI manufacturero',agency:'INDEC'},arca:{title:'Recaudación',agency:'ARCA'},poverty:{title:'Pobreza',agency:'INDEC / UCA'},icg:{title:'Confianza de gobierno',agency:'UTDT'},trade:{title:'Balanza comercial',agency:'INDEC'},fiscal:{title:'Resultado fiscal',agency:'Ministerio de Economía'},cement:{title:'Despachos de cemento',agency:'AFCP'},isac:{title:'ISAC construcción',agency:'INDEC'},autos:{title:'Patentamientos 0 km',agency:'ACARA'},credit:{title:'Crédito privado',agency:'BCRA'},arrears:{title:'Mora bancaria',agency:'BCRA'},ila:{title:'Índice Líder de Actividad (ILA)',agency:'CICEc'},iga:{title:'Índice General de Actividad (IGA)',agency:'OJF'},bop:{title:'Balanza de pagos · cuenta corriente',agency:'INDEC'}
+ ipc:{title:'Inflación nacional',agency:'INDEC'},ipcCaba:{title:'Inflación CABA',agency:'IDECBA'},emae:{title:'EMAE',agency:'INDEC'},ipi:{title:'IPI manufacturero',agency:'INDEC'},arca:{title:'Recaudación',agency:'ARCA'},poverty:{title:'Pobreza',agency:'INDEC / UCA'},icg:{title:'Confianza de gobierno',agency:'UTDT'},trade:{title:'Balanza comercial',agency:'INDEC'},fiscal:{title:'Resultado fiscal',agency:'Ministerio de Economía'},cement:{title:'Despachos de cemento',agency:'AFCP'},isac:{title:'ISAC construcción',agency:'INDEC'},came:{title:'Ventas minoristas pyme',agency:'CAME'},autos:{title:'Patentamientos 0 km',agency:'ACARA'},credit:{title:'Crédito privado',agency:'BCRA'},arrears:{title:'Mora bancaria',agency:'BCRA'},ila:{title:'Índice Líder de Actividad (ILA)',agency:'CICEc'},iga:{title:'Índice General de Actividad (IGA)',agency:'OJF'},bop:{title:'Balanza de pagos · cuenta corriente',agency:'INDEC'}
 };
 // v114: rango mensual continuo (los meses sin dato quedan como hueco, no se interpolan).
 function monthRangeEntries(obj,n){const keys=Object.keys(obj||{}).filter(k=>/^\d{4}-\d{2}$/.test(k)&&Number.isFinite(Number(obj[k]))).sort();if(!keys.length)return [];const out=[];let [y,m]=keys.at(-1).split('-').map(Number);for(let i=0;i<n;i++){const k=`${y}-${String(m).padStart(2,'0')}`;out.unshift([k,Number.isFinite(Number(obj[k]))?Number(obj[k]):null]);if(k<=keys[0])break;m--;if(!m){m=12;y--;}}return out;}
 function recentEntries(obj,n=12){return Object.entries(obj||{}).filter(([d,v])=>/^\d{4}-\d{2}$/.test(String(d))&&Number.isFinite(Number(v))).sort(([a],[b])=>String(a).localeCompare(String(b))).slice(-n);}
 function recentAnnualEntries(obj,n=12){return Object.entries(obj||{}).filter(([d,v])=>/^\d{4}$/.test(String(d))&&Number.isFinite(Number(v))).sort(([a],[b])=>Number(a)-Number(b)).slice(-n);}
 function normalizedMonthlyRows(rows,valueField='value',n=60){const byMonth=new Map();for(const r of (Array.isArray(rows)?rows:[])){const d=String(r?.date||'').slice(0,7),v=Number(r?.[valueField]);if(/^\d{4}-\d{2}$/.test(d)&&Number.isFinite(v))byMonth.set(d,v);}return [...byMonth.entries()].sort(([a],[b])=>a.localeCompare(b)).slice(-n);}
+// v137: la serie histórica de pobreza muestra las DOS mediciones semestrales donde existen (INDEC EPH continua
+// 2003–2006 y desde 2016): claves AAAA-06 = 1.er semestre, AAAA-12 = 2.º semestre. El resto sigue anual.
+const povertyAnnualBase={};
+function rebuildPovertySeries(sem){
+  if(!Object.keys(povertyAnnualBase).length)Object.assign(povertyAnnualBase,poverty);
+  const S=Object.entries(sem||{}).filter(([k,v])=>/^\d{4}-S[12]$/.test(k)&&Number.isFinite(Number(v)));if(!S.length)return;
+  const semYears=new Set(S.map(([k])=>k.slice(0,4)));
+  for(const k of Object.keys(poverty))delete poverty[k];
+  for(const [y,v] of Object.entries(povertyAnnualBase))if(!semYears.has(String(y)))poverty[y]=v;
+  for(const [k,v] of S)poverty[`${k.slice(0,4)}-${k.endsWith('1')?'06':'12'}`]=Number(v);
+}
+const povertyLabel=k=>{const m=String(k).match(/^(\d{4})-(06|12)$/);return m?`${m[2]==='06'?'1':'2'}S ${m[1]}`:String(k);};
 let bundledMacroHistoryPromise=null;
 function loadBundledMacroHistory(){return bundledMacroHistoryPromise??=(async()=>{
   try{
-    const r=await fetch('/macro-history.json?v=128',{cache:'no-store'}); if(!r.ok)return;
+    const r=await fetch('/macro-history.json?v=137',{cache:'no-store'}); if(!r.ok)return;
     const h=await r.json(), B={};
-    if(h.povertyAnnual)Object.assign(poverty,h.povertyAnnual);
+    if(h.povertyAnnual){Object.assign(poverty,h.povertyAnnual);Object.assign(povertyAnnualBase,poverty);}if(h.povertySemesters)rebuildPovertySeries(h.povertySemesters);
     if(h.tradeMonthly)Object.assign(tradeBalanceMonthly,h.tradeMonthly);
     if(Array.isArray(h.ipcRows))B.ipc={status:'ok',source:'INDEC — IPC Nacional',monthly:h.ipcRows};
     if(h.ipcCabaMonthly)B.ipcCaba={status:'ok',source:'IDECBA — IPCBA Nivel General',history:h.ipcCabaMonthly};
@@ -833,6 +846,7 @@ function loadBundledMacroHistory(){return bundledMacroHistoryPromise??=(async()=
     if(h.ilaMonthly)B.ilaHistorical={status:'ok',source:'CICEc — Bolsas de Comercio de Santa Fe y Rosario',monthly:h.ilaMonthly};
     if(h.bopQuarterly)B.bopHistorical={status:'ok',source:'INDEC — Balanza de pagos (SDMX)',prepared:h.bopPrepared||null,quarterly:h.bopQuarterly};
     if(h.povertySemesters)B.poverty={status:'ok',source:'INDEC — EPH',semesters:h.povertySemesters};
+    if(h.cameRetail)B.came=h.cameRetail;
     if(h.remCpiExpected)B.rem={status:'ok',source:'REM BCRA',cpiExpected:h.remCpiExpected};
     if(h.igaMonthly)B.igaHistorical={status:'ok',source:'OJF & Asociados — IGA-OJF',monthly:h.igaMonthly};
     if(h.marketsHistory){for(const k of ['financialHistorical','exchangeHistorical','salary'])if(h.marketsHistory[k])B[k]=h.marketsHistory[k];}
@@ -864,6 +878,10 @@ function kpiSeries(key){const S=kpiSourceCache||{},A=S.activityPulse||{};
   if(key==='bop'&&S.bopHistorical?.quarterly?.CA){const Q=S.bopHistorical.quarterly,per=Object.keys(Q.CA).filter(k=>/^\d{4}-Q[1-4]$/.test(k)).sort().slice(-40);if(per.length){const val=(src,d)=>Number.isFinite(Number(src?.[d]))?Number(src[d]):null;const bar=(label,k,color)=>({type:'bar',label,data:per.map(d=>val(Q[k],d)),backgroundColor:color,borderColor:color,preserveColor:true,stack:'comp',order:2});
     const ds=[bar('Bienes','G','#16a34a'),bar('Servicios','S','#f59e0b'),bar('Ingreso primario (intereses y utilidades)','IN1','#dc2626'),bar('Ingreso secundario','IN2','#8b5cf6'),{type:'line',label:'Cuenta corriente (saldo)',data:per.map(d=>val(Q.CA,d)),borderColor:'#0b5bd3',backgroundColor:'#0b5bd3',preserveColor:true,borderWidth:2.5,pointRadius:2,stack:'ca',order:0}].filter(d=>d.data.some(v=>v!==null));
     return {chartType:'bar',stacked:true,labels:per.map(bopQuarterLabel),rawPeriods:per,maxTicks:14,datasets:ds,source:'INDEC — Balanza de pagos, posición de inversión internacional y deuda externa',legend:`Millones de USD por trimestre, ${bopQuarterLabel(per[0])}–${bopQuarterLabel(per.at(-1))}. Barras: saldo de bienes, servicios, ingreso primario y secundario; línea: saldo de la cuenta corriente.`};}}
+  // v137 · CAME: barras = variación interanual real; línea = variación mensual desestacionalizada.
+  if(key==='came'&&S.came?.monthlyYoy){const x=monthRangeEntries(S.came.monthlyYoy,60).filter(([,v])=>v!==null);if(x.length){const per=x.map(([d])=>d),mom=per.map(d=>numOrNull(S.came.monthlySaMom?.[d]));return {chartType:'bar',labels:per.map(displayMonth),rawPeriods:per,datasets:[{label:'Interanual real (%)',data:x.map(([,v])=>v)},{type:'line',label:'Mensual desestacionalizada (%)',data:mom,borderColor:'#f59e0b',backgroundColor:'#f59e0b',preserveColor:true,borderWidth:2,pointRadius:2}],source:'CAME — Índice de Ventas Minoristas Pyme',legend:`Ventas minoristas pyme a precios constantes, ${displayMonth(per[0])}–${displayMonth(per.at(-1))}. Barras: variación interanual; línea: variación mensual desestacionalizada.`};}}
+  // v137: pobreza — las dos mediciones semestrales de INDEC (personas), con la indigencia si está disponible.
+  if(key==='poverty'&&S.poverty?.semesters){const SEM=S.poverty.semesters,per=Object.keys(SEM).filter(k=>/^\d{4}-S[12]$/.test(k)&&k>='2016-S1'&&Number.isFinite(Number(SEM[k]))).sort();if(per.length){const lab=k=>`${k.slice(-1)}S ${k.slice(0,4)}`;return {chartType:'bar',labels:per.map(lab),rawPeriods:per.map(k=>`${k.slice(0,4)}-${k.endsWith('1')?'06':'12'}`),datasets:[{label:'Pobreza · personas (%)',data:per.map(k=>Number(SEM[k]))}],source:S.poverty.source||'INDEC — EPH',legend:`Mediciones semestrales de INDEC (1.er y 2.º semestre), ${lab(per[0])}–${lab(per.at(-1))}: porcentaje de personas bajo la línea de pobreza.`};}}
   if(key==='ila'&&S.ilaHistorical?.monthly){const mm=Object.fromEntries(Object.entries(S.ilaHistorical.monthly).map(([k,v])=>[k,v?.mom])),x=monthRangeEntries(mm,60);if(x.length)return {chartType:'bar',labels:x.map(([d])=>displayMonth(d)),rawPeriods:x.map(([d])=>d),datasets:[{label:'ILA-ARG · variación mensual (%)',data:x.map(([,v])=>v)}],source:'CICEc — Bolsas de Comercio de Santa Fe y Rosario',legend:`Últimos ${x.length} meses: variación mensual del Índice Líder (anticipa los puntos de giro del ciclo económico).`};}
   if(key==='iga'&&S.igaHistorical?.monthly){const mm=Object.fromEntries(Object.entries(S.igaHistorical.monthly).map(([k,v])=>[k,v?.momSa])),x=monthRangeEntries(mm,60);if(x.length)return {chartType:'bar',labels:x.map(([d])=>displayMonth(d)),rawPeriods:x.map(([d])=>d),datasets:[{label:'IGA-OJF · variación mensual desestacionalizada (%)',data:x.map(([,v])=>v)}],source:'Orlando J. Ferreres & Asociados',legend:`Últimos ${x.length} meses publicados: variación mensual del IGA-OJF desestacionalizado. Los últimos 4 datos están sujetos a revisión.`};}
   if(key==='emae'&&S.emaeHistorical?.monthlySaMom){const x=monthRangeEntries(S.emaeHistorical.monthlySaMom,60);if(x.length)return {chartType:'bar',labels:x.map(([d])=>displayMonth(d)),rawPeriods:x.map(([d])=>d),datasets:[{label:'EMAE · variación mensual desestacionalizada (%)',data:x.map(([,v])=>v)}],source:'INDEC / Datos Argentina',legend:`Últimos ${x.length} meses: variación mensual del EMAE desestacionalizado.`};}
@@ -995,6 +1013,10 @@ function computeKpiCards(){
   {const h=autosHistory(S),L=kpiLastEntries(h,1)[0];
    if(L){const p=numOrNull(h[ymShift(L[0],-12)]),yoy=p?(L[1]/p-1)*100:null;
      C.autos={ym:L[0],value:yoy!==null?kpiPct(yoy):new Intl.NumberFormat('es-AR').format(L[1]),period:`${displayMonth(L[0])} · interanual`,detail:`${new Intl.NumberFormat('es-AR').format(L[1])} unidades`,signal:signalFrom(yoy,0.5,true),why:yoy===null?'Sin mes comparable.':`Patentamientos ${yoy>0?'por encima':'por debajo'} del mismo mes del año anterior.`};}}
+  // v137 · Ventas minoristas pyme (CAME): grande interanual real; chico variación mensual desestacionalizada y acumulada del año.
+  {const Y=S.came?.monthlyYoy,L=kpiLastEntries(Y,1)[0];
+   if(L){const mom=numOrNull(S.came?.monthlySaMom?.[L[0]]),ytd=S.came?.latest?.ym===L[0]?numOrNull(S.came.latest.ytd):null;
+     C.came={ym:L[0],value:kpiPct(L[1]),period:`${displayMonth(L[0])} · interanual real`,detail:[mom!==null?`${kpiPct(mom)} mensual s.e.`:null,ytd!==null?`${kpiPct(ytd)} acumulado del año`:null].filter(Boolean).join(' · ')||'Comercios minoristas pyme',signal:signalFrom(L[1],0.5,true),why:`Ventas minoristas pyme ${L[1]>0.5?'por encima':L[1]<-0.5?'por debajo':'en línea con'} del mismo mes del año anterior, a precios constantes.`};}}
   // Crédito: grande variación mensual real s.e. (BCRA); chico interanual nominal del mismo mes.
   {const L=kpiLastEntries(S.creditHistorical?.monthlySaRealMom,1)[0];
    if(L){const nom=numOrNull(S.creditHistorical?.monthlyYoy?.[L[0]]);
