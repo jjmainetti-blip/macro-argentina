@@ -145,6 +145,8 @@ async function bcraX(env){
   // Si se cargó un token nuevo, se reintenta enseguida (sin esperar el freno por error anterior).
   let fp=0;for(const c of token)fp=(fp*31+c.charCodeAt(0))>>>0;
   if(st.tokenFp!==fp){st.tokenFp=fp;st.backoffUntil=null;st.lastCheck=null;}
+  // v148 · Si cambia el lector de publicaciones, se vuelven a leer los últimos 8 días.
+  const PARSER=2;if(st.parser!==PARSER){st.parser=PARSER;st.sinceId=null;st.lastCheck=null;}
   const now=Date.now(),ar=new Date(now-3*3600e3),today=ar.toISOString().slice(0,10),h=ar.getUTCHours(),wd=ar.getUTCDay();
   const days=st.days||{};
   const due=wd>=1&&wd<=5&&h>=16&&h<21&&!days[today]&&(!st.lastCheck||now-st.lastCheck>10*60*1000)&&(!st.backoffUntil||now>st.backoffUntil);
@@ -158,6 +160,10 @@ async function bcraX(env){
     if(r.status===429||r.status===402||r.status===401||r.status===403){st.backoffUntil=now+60*60*1000;st.lastError=await xErr(r,'X tweets');}
     else if(!r.ok)throw new Error(`X tweets ${r.status}`);
     else{const j=await r.json();if(j?.meta?.newest_id)st.sinceId=j.meta.newest_id;
+      // Muestra de las últimas publicaciones leídas (texto recortado) para revisar el formato en /api/status.
+      const seen=(j?.data||[]).map(tw=>({id:tw.id,at:tw.created_at,text:String(tw.text||'').replace(/\s+/g,' ').slice(0,220),parsed:parseBcraPost(tw.text)}));
+      if(seen.length)st.recent=[...seen,...(st.recent||[])].slice(0,12);
+      st.lastRead=seen.length;
       for(const tw of j?.data||[]){const p=parseBcraPost(tw.text);if(!p)continue;const day=new Date(Date.parse(tw.created_at)-3*3600e3).toISOString().slice(0,10);days[day]={value:p.value,reserves:p.reserves,id:tw.id};}
       st.lastError=null;}
   }catch(e){st.lastError=String(e?.message||e);}

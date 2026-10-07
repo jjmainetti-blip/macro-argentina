@@ -329,3 +329,7 @@ Chequeo: `npm run validate:snapshot`.
 - El token `X_BEARER_TOKEN` se limpia antes de usarse (espacios, comillas o un "Bearer " pegado de más).
 - `/api/status` → `xBcra.tokenShape` informa el largo y el tipo de credencial detectado (nunca el valor), y `lastError` incluye el detalle que devuelve X.
 - Al cargar un token nuevo se reintenta enseguida, sin esperar el freno por un error anterior.
+
+## v148 — muestra de publicaciones del BCRA en X
+- `/api/status` → `xBcra.recent` muestra las últimas publicaciones leídas (texto recortado) y si se pudo extraer el dato; `lastRead` indica cuántas trajo la última consulta.
+- Al cambiar el lector de publicaciones se vuelven a leer los últimos 8 días.
