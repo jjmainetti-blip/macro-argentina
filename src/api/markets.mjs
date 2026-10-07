@@ -131,9 +131,20 @@ export function parseBcraPost(text){
   const r=t.match(/reservas[^.]{0,80}?(?:USD|US\$|U\$S|u\$s)\s?([\d.,]+)\s*millones/i);const res=r?Number(r[1].replace(/\./g,'').replace(',','.')):null;
   return {value:v,reserves:Number.isFinite(res)&&res>1000?res:null};
 }
+// v147 · El token se limpia (espacios, comillas, "Bearer " pegado de más) y se informa su forma —nunca el valor— en /api/status.
+export function cleanXToken(raw){return String(raw||'').trim().replace(/^["'`]+|["'`]+$/g,'').replace(/^Bearer\s+/i,'').replace(/\s+/g,'');}
+export function xTokenShape(raw){
+  const r=String(raw||''),t=cleanXToken(r);
+  const kind=/^A{10,}/.test(t)?'bearer (correcto)':/^\d+-[A-Za-z0-9]+$/.test(t)?'parece Access Token (no sirve: hace falta el Bearer Token)':t.length===25&&/^[A-Za-z0-9]+$/.test(t)?'parece API Key (no sirve: hace falta el Bearer Token)':t.length===50&&/^[A-Za-z0-9]+$/.test(t)?'parece API Key Secret o Access Token Secret (no sirve)':/^[A-Za-z0-9_-]{30,40}$/.test(t)?'parece Client ID/Secret de OAuth 2.0 (no sirve)':'desconocido';
+  return {length:t.length,kind,cleaned:t!==r,hadSpacesOrQuotes:/^\s|\s$|["'`]/.test(r),hadBearerPrefix:/^\s*["'`]?Bearer\s/i.test(r)};
+}
+async function xErr(r,label){let d='';try{const j=await r.json();d=j?.detail||j?.title||j?.errors?.[0]?.message||'';}catch{}return `${label} ${r.status}${d?`: ${String(d).slice(0,160)}`:''}`;}
 async function bcraX(env){
-  const token=env?.X_BEARER_TOKEN,KV=env?.MACRO_STORE;if(!token||!KV?.get)return {};
+  const token=cleanXToken(env?.X_BEARER_TOKEN),KV=env?.MACRO_STORE;if(!token||!KV?.get)return {};
   let st={};try{st=(await KV.get('x:bcra','json'))||{};}catch{}
+  // Si se cargó un token nuevo, se reintenta enseguida (sin esperar el freno por error anterior).
+  let fp=0;for(const c of token)fp=(fp*31+c.charCodeAt(0))>>>0;
+  if(st.tokenFp!==fp){st.tokenFp=fp;st.backoffUntil=null;st.lastCheck=null;}
   const now=Date.now(),ar=new Date(now-3*3600e3),today=ar.toISOString().slice(0,10),h=ar.getUTCHours(),wd=ar.getUTCDay();
   const days=st.days||{};
   const due=wd>=1&&wd<=5&&h>=16&&h<21&&!days[today]&&(!st.lastCheck||now-st.lastCheck>10*60*1000)&&(!st.backoffUntil||now>st.backoffUntil);
@@ -141,10 +152,10 @@ async function bcraX(env){
   st.lastCheck=now;
   try{
     const H={authorization:`Bearer ${token}`,'user-agent':'macrodatos.ar'};
-    if(!st.userId){const r=await fetch(`https://api.x.com/2/users/by/username/${X_USER}`,{headers:H});if(!r.ok)throw new Error(`X user ${r.status}`);st.userId=(await r.json())?.data?.id;if(!st.userId)throw new Error('X: usuario no encontrado');}
+    if(!st.userId){const r=await fetch(`https://api.x.com/2/users/by/username/${X_USER}`,{headers:H});if(!r.ok){if([401,402,403,429].includes(r.status))st.backoffUntil=now+30*60*1000;throw new Error(await xErr(r,'X user'));}st.userId=(await r.json())?.data?.id;if(!st.userId)throw new Error('X: usuario no encontrado');}
     const q=new URLSearchParams({max_results:'10','tweet.fields':'created_at',exclude:'retweets,replies'});if(st.sinceId)q.set('since_id',st.sinceId);else{q.set('start_time',new Date(now-8*24*3600e3).toISOString());q.set('max_results','25');}
     const r=await fetch(`https://api.x.com/2/users/${st.userId}/tweets?${q}`,{headers:H});
-    if(r.status===429||r.status===402||r.status===401||r.status===403){st.backoffUntil=now+60*60*1000;st.lastError=`X ${r.status}`;}
+    if(r.status===429||r.status===402||r.status===401||r.status===403){st.backoffUntil=now+60*60*1000;st.lastError=await xErr(r,'X tweets');}
     else if(!r.ok)throw new Error(`X tweets ${r.status}`);
     else{const j=await r.json();if(j?.meta?.newest_id)st.sinceId=j.meta.newest_id;
       for(const tw of j?.data||[]){const p=parseBcraPost(tw.text);if(!p)continue;const day=new Date(Date.parse(tw.created_at)-3*3600e3).toISOString().slice(0,10);days[day]={value:p.value,reserves:p.reserves,id:tw.id};}

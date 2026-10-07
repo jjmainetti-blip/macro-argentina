@@ -1,7 +1,7 @@
 import macroData, { GROUPS, freshnessReport, latestReleaseFor, cardsSeen } from './api/macro-data.mjs';
 import { pickCronGroup } from './api/freshness.mjs';
 import calendarData from './api/calendar-data.mjs';
-import marketsData, { latestMarketsBody } from './api/markets.mjs';
+import marketsData, { latestMarketsBody, xTokenShape } from './api/markets.mjs';
 import { homeWithMarkets } from './api/markets-html.mjs';
 import tradeMonthly from './api/trade-monthly.mjs';
 import cementMonthly from './api/cement-monthly.mjs';
@@ -50,7 +50,7 @@ export default {
       const cards = await freshnessReport(env);
       let xbcra = null; try { const x = await env?.MACRO_STORE?.get?.('x:bcra', 'json'); if (x) xbcra = { tokenConfigured: !!env?.X_BEARER_TOKEN, lastCheck: x.lastCheck ? new Date(x.lastCheck).toISOString() : null, lastError: x.lastError || null, backoffUntil: x.backoffUntil ? new Date(x.backoffUntil).toISOString() : null, days: x.days || {} }; else xbcra = { tokenConfigured: !!env?.X_BEARER_TOKEN, lastCheck: null }; } catch { }
       // Diagnóstico: nombres (nunca valores) de variables que parecen el token, por si quedó con otro nombre.
-      try { xbcra = { ...(xbcra || {}), similarVarNames: Object.keys(env || {}).filter(k => /x_|bearer|token|twitter/i.test(k) && typeof env[k] === 'string').map(k => JSON.stringify(k)) }; } catch { }
+      try { xbcra = { ...(xbcra || {}), tokenShape: env?.X_BEARER_TOKEN ? xTokenShape(env.X_BEARER_TOKEN) : null, similarVarNames: Object.keys(env || {}).filter(k => /x_|bearer|token|twitter/i.test(k) && typeof env[k] === 'string').map(k => JSON.stringify(k)) }; } catch { }
       return withHeaders(new Response(JSON.stringify({ generatedAt: new Date().toISOString(), kv: !!env?.MACRO_STORE, xBcra: xbcra, cards }, null, 1), { headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', 'access-control-allow-origin': '*' } }));
     }
     if (request.method === 'GET' && url.pathname === '/api/calendar-data') {

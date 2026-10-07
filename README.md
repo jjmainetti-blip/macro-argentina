@@ -324,3 +324,8 @@ Chequeo: `npm run validate:snapshot`.
 - Fuente principal del dato del día: la publicación de @BancoCentral_AR en X (API v2, `X_BEARER_TOKEN` cargado como secreto del Worker). `parseBcraPost()` toma el monto comprado/vendido y, si figura, el nivel de reservas.
 - Para minimizar el costo (pago por publicación leída): sólo días hábiles de 16 a 21 h, como mucho una consulta cada 10 minutos (control en KV `x:bcra`), sólo publicaciones nuevas (`since_id`) y ninguna consulta cuando el dato del día ya se obtuvo. Ante 401/402/403/429 se suspende una hora.
 - Prioridad: dato oficial del BCRA (API de Estadísticas) > publicación en X > titulares de prensa. `/api/status` muestra el estado de la lectura de X (`xBcra`: última consulta, último error, días leídos).
+
+## v147 — diagnóstico del token de X
+- El token `X_BEARER_TOKEN` se limpia antes de usarse (espacios, comillas o un "Bearer " pegado de más).
+- `/api/status` → `xBcra.tokenShape` informa el largo y el tipo de credencial detectado (nunca el valor), y `lastError` incluye el detalle que devuelve X.
+- Al cargar un token nuevo se reintenta enseguida, sin esperar el freno por un error anterior.
