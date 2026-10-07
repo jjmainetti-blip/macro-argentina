@@ -85,6 +85,23 @@ async function liveDollar(casa){
   return {...withChange({date,value,buy:Number.isFinite(buy)?buy:null,sell:value,updatedAt:live?.fechaActualizacion||null},previous),live:true,source:'DolarApi'};
 }
 async function mep(){try{return await liveDollar('bolsa')}catch{}try{const h=await fetchJson('https://api.argentinadatos.com/v1/cotizaciones/dolares/bolsa');const a=rows(h,['venta']);const z=a.at(-1),p=a.at(-2);return z?{...withChange(z,p?.value),live:false}:null}catch{}return null}
+// v143 · Compras/ventas de divisas del BCRA (variable 78 de la API de Estadísticas: "Variación de reservas
+// internacionales por compra de divisas", millones de USD, dato diario con 1–3 días hábiles de rezago) y reservas (var. 1).
+let BCRA_FX={at:0,value:null};
+async function bcraFx(){
+  if(BCRA_FX.value&&Date.now()-BCRA_FX.at<30*60*1000)return BCRA_FX.value;
+  const d=new Date(),to=d.toISOString().slice(0,10);d.setUTCDate(d.getUTCDate()-70);const from=d.toISOString().slice(0,10);
+  const get=async id=>{const j=await fetchJson(`https://api.bcra.gob.ar/estadisticas/v4.0/monetarias/${id}?desde=${from}&hasta=${to}`,8000);return (j?.results?.[0]?.detalle||[]).filter(x=>x&&x.fecha&&Number.isFinite(Number(x.valor))).map(x=>({date:String(x.fecha).slice(0,10),value:Number(x.valor)})).sort((a,b)=>a.date.localeCompare(b.date));};
+  const [fx,res]=await Promise.allSettled([get(78),get(1)]);
+  const rows=fx.status==='fulfilled'?fx.value:[];if(!rows.length)return null;
+  const last=rows.at(-1),month=last.date.slice(0,7),mtd=rows.filter(r=>r.date.slice(0,7)===month).reduce((a,r)=>a+r.value,0);
+  const prevMonth=(()=>{let [y,m]=month.split('-').map(Number);m--;if(!m){m=12;y--;}return `${y}-${String(m).padStart(2,'0')}`;})();
+  const prevTotal=rows.filter(r=>r.date.slice(0,7)===prevMonth).reduce((a,r)=>a+r.value,0);
+  const ytdRows=rows;// sólo para la serie corta del gráfico
+  const R=res.status==='fulfilled'?res.value.at(-1):null;
+  const value={date:last.date,value:Math.round(last.value*10)/10,monthToDate:Math.round(mtd*10)/10,month,prevMonth,prevMonthTotal:Math.round(prevTotal*10)/10,reserves:R?.value??null,reservesDate:R?.date??null,history:ytdRows.slice(-45),source:'BCRA',updatedAt:new Date().toISOString()};
+  BCRA_FX={at:Date.now(),value};return value;
+}
 async function bna(){
   // Ámbito/DolarApi exposes Banco Nación explicitly and includes the intraday variation vs previous close.
   try{
@@ -138,9 +155,9 @@ export default async(request=null,ctx=null,env=null,opts={})=>{
   }
   let prev=null,prevAt=0;
   try{const r=await env?.MACRO_STORE?.getWithMetadata?.(KV_KEY);if(r?.value){prev=JSON.parse(r.value);prevAt=r.metadata?.savedAt||0;if(!opts.force&&Date.now()-prevAt<60000){MEMO={at:prevAt,body:r.value};return json(r.value,'kv');}}}catch{}
-  const [a,b,c,d]=await Promise.allSettled([merval(),mep(),risk(),bna()]);
+  const [a,b,c,d,e]=await Promise.allSettled([merval(),mep(),risk(),bna(),bcraFx()]);
   const val=x=>x.status==='fulfilled'?x.value:null,P=prev?.latest||{};
-  const latest={merval:newer(val(a),P.merval),dollar:newer(val(b),P.dollar),risk:newer(val(c),P.risk),bna:newer(val(d),P.bna)};
+  const latest={merval:newer(val(a),P.merval),dollar:newer(val(b),P.dollar),risk:newer(val(c),P.risk),bna:newer(val(d),P.bna),bcra:newer(val(e),P.bcra)};
   const body=JSON.stringify({version:133,generatedAt:new Date().toISOString(),mode:'live',refreshSeconds:30,latest});
   MEMO={at:Date.now(),body};
   try{const put=caches?.default?.put(cacheKey,new Response(body,{headers:{'content-type':'application/json','cache-control':'public, max-age=20'}}));if(put&&ctx?.waitUntil)ctx.waitUntil(put);}catch{}

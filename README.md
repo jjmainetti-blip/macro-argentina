@@ -310,3 +310,8 @@ Chequeo: `npm run validate:snapshot`.
 - Agosto 2026 incorporado (y revisiones de 2025–2026 de los cuadros 1 de ambos informes): IPI −3,2% i.a. / +1,9% mensual s.e.; ISAC −4,4% i.a. / +0,4% mensual s.e.
 - **Agenda:** se agregó el ISAC (7 oct, 6 nov y 9 dic) y se corrigió la fecha del IPI de septiembre (6 nov, no 9 nov), según el calendario oficial de INDEC. También se agregó la balanza de pagos del 3T (22 dic).
 - **Último dato publicado:** incluye IPI e ISAC (con la fecha oficial del calendario de INDEC). Si el mismo día se publican varios datos, se muestran juntos.
+
+## v143 — nuevo logo, portada centrada y compras del BCRA
+- **Logo:** `public/logo.svg` (cuatro barras ascendentes en azules, vectorial a partir de la imagen enviada) en el encabezado y el pie, sobre un recuadro blanco para que se lea sobre el fondo oscuro; `public/favicon.svg` como ícono del sitio.
+- **Portada:** el título “La economía argentina, en perspectiva.” es más chico y está centrado, con el texto y los botones; “Mercados ahora” pasa debajo, a todo el ancho, con las tarjetas alineadas en una fila (5 en escritorio, 3 en tablet, 2 o 1 en celular).
+- **Compras BCRA:** nueva tarjeta en “Mercados ahora” con la última compra/venta neta de divisas del BCRA (API de Estadísticas del BCRA, variable 78 “Variación de reservas internacionales por compra de divisas”, millones de USD), el acumulado del mes y el nivel de reservas (variable 1). El BCRA publica este dato con 1–3 días hábiles de rezago; la tarjeta muestra la fecha de la operación.

@@ -93,3 +93,19 @@
 .uva-out dl{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;margin:0;font-size:13px}.uva-out dt{color:var(--muted)}.uva-out dd{margin:0;color:var(--ink);font-weight:600;text-align:right}
 .uva-warn{color:#8a5a00;background:#fff4dc;border-radius:8px;padding:8px 10px;font-size:12px}
 @media(max-width:900px){.calc-pair{grid-template-columns:1fr}}
+/* v143 · nuevo logo y portada centrada: título más chico arriba y "Mercados ahora" alineado debajo, a todo el ancho */
+.brand-mark{width:auto;height:auto;display:inline-flex;align-items:center;justify-content:center;padding:4px 6px;border-radius:10px;background:#fff;gap:0}
+.brand-mark img{display:block;width:34px;height:auto}
+.hero{grid-template-columns:1fr;justify-items:center;text-align:center;min-height:0;padding-top:64px;padding-bottom:64px;gap:34px}
+.hero-copy{max-width:820px;display:flex;flex-direction:column;align-items:center}
+.hero h1{font-size:clamp(34px,4.4vw,54px);line-height:1.05;margin:14px 0 16px}
+.hero-copy>p{margin:0 auto;max-width:640px;font-size:17px}
+.hero-actions{justify-content:center;margin:24px 0 8px}
+.update-status{justify-content:center;text-align:left}
+.hero-panel{width:100%;max-width:1180px;text-align:left;padding:22px 24px}
+.market-grid{grid-template-columns:repeat(5,minmax(0,1fr))}
+.market-grid .market-card{min-height:112px}
+.latest-release{margin-top:4px}
+@media(max-width:1100px){.market-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.hero-panel{max-width:100%}}
+@media(max-width:720px){.market-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.hero h1{font-size:34px}}
+@media(max-width:440px){.market-grid{grid-template-columns:1fr}}

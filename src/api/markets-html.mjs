@@ -22,6 +22,17 @@ function change(x, inverse) {
   return { text: `${n > 0 ? '↑' : n < 0 ? '↓' : '→'} ${n > 0 ? '+' : ''}${fmt.format(n)}%`, cls: 'market-change ' + (n === 0 ? 'neutral' : good ? 'positive' : 'negative') };
 }
 
+// v143 · Compras netas de divisas del BCRA (millones de USD).
+const MES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+export function bcraView(b) {
+  const usd = n => `${n > 0 ? '+' : n < 0 ? '−' : ''}US$ ${fmt0.format(Math.abs(n))} M`;
+  const [y, m, d] = String(b.date || '').split('-'), mm = +String(b.month || '').slice(5);
+  const value = Number(b.value) === 0 ? 'US$ 0 M' : usd(Number(b.value));
+  const mt = Number(b.monthToDate), change = Number.isFinite(mt) && mm ? `${MES[mm - 1]}: ${mt > 0 ? '+' : mt < 0 ? '−' : ''}${fmt0.format(Math.abs(mt))} M` : '—';
+  const cls = 'market-change ' + (Number(b.monthToDate) > 0 ? 'positive' : Number(b.monthToDate) < 0 ? 'negative' : 'neutral');
+  const date = `${Number(b.value) < 0 ? 'Vendió' : 'Compró'} el ${d}/${m}/${y}${Number.isFinite(Number(b.reserves)) ? ` · reservas US$ ${fmt0.format(b.reserves)} M` : ''}`;
+  return { value, change, cls, date };
+}
 // id del elemento → { text, cls? }
 export function marketsView(L) {
   const v = {};
@@ -34,6 +45,7 @@ export function marketsView(L) {
   if (L.dollar?.value) put('heroDollar', L.dollar, `$ ${fmt.format(L.dollar.value)}`, true);
   if (L.risk?.value) put('heroRisk', L.risk, `${fmt.format(L.risk.value)} pb`, true);
   if (L.bna?.sell) put('heroBna', L.bna, `$ ${fmt.format(L.bna.sell)} venta`, true, `${stamp(L.bna)} · compra $ ${fmt.format(L.bna.buy)}`);
+  if (L.bcra && Number.isFinite(Number(L.bcra.value))) { const b = bcraView(L.bcra); v.heroBcra = { text: b.value }; v.heroBcraChange = { text: b.change, cls: b.cls }; v.heroBcraDate = { text: b.date }; }
   return v;
 }
 

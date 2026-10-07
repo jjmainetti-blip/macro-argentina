@@ -544,6 +544,11 @@ function paintMarkets(L){
   if(L.merval){document.getElementById('heroMerval').textContent=`${new Intl.NumberFormat('es-AR',{maximumFractionDigits:0}).format(L.merval.value)} pts`;marketChange('heroMervalChange',L.merval,false);document.getElementById('heroMervalDate').textContent=stamp(L.merval);}
   if(L.dollar){document.getElementById('heroDollar').textContent=`$ ${fmt.format(L.dollar.value)}`;marketChange('heroDollarChange',L.dollar,true);document.getElementById('heroDollarDate').textContent=stamp(L.dollar);}
   if(L.risk){document.getElementById('heroRisk').textContent=`${fmt.format(L.risk.value)} pb`;marketChange('heroRiskChange',L.risk,true);document.getElementById('heroRiskDate').textContent=stamp(L.risk);}
+  // v143: compras netas de divisas del BCRA (millones de USD), acumulado del mes y reservas.
+  if(L.bcra&&Number.isFinite(Number(L.bcra.value))){const b=L.bcra,usd=n=>`${n>0?'+':n<0?'−':''}US$ ${new Intl.NumberFormat('es-AR',{maximumFractionDigits:0}).format(Math.abs(n))} M`,MES=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'],[yy,mm,dd]=String(b.date).split('-');
+    document.getElementById('heroBcra').textContent=Number(b.value)===0?'US$ 0 M':usd(Number(b.value));
+    const ch=document.getElementById('heroBcraChange');if(ch){const mt=Number(b.monthToDate);ch.textContent=Number.isFinite(mt)&&b.month?`${MES[+b.month.slice(5)-1]}: ${mt>0?'+':mt<0?'−':''}${new Intl.NumberFormat('es-AR',{maximumFractionDigits:0}).format(Math.abs(mt))} M`:'—';ch.title='Compras netas acumuladas en el mes, millones de USD';ch.className='market-change '+(mt>0?'positive':mt<0?'negative':'neutral');}
+    const dt=document.getElementById('heroBcraDate');if(dt)dt.textContent=`${Number(b.value)<0?'Vendió':'Compró'} el ${dd}/${mm}/${yy}${Number.isFinite(Number(b.reserves))?` · reservas US$ ${new Intl.NumberFormat('es-AR').format(b.reserves)} M`:''}`;}
   if(L.bna){document.getElementById('heroBna').textContent=`$ ${fmt.format(L.bna.sell)} venta`;marketChange('heroBnaChange',L.bna,true);document.getElementById('heroBnaDate').textContent=`${stamp(L.bna)} · compra $ ${fmt.format(L.bna.buy)}`;}
 }
 // v120: "Mercados ahora" se refresca cada 30 s mientras la pestaña está visible (y al volver a ella).
@@ -553,7 +558,7 @@ function paintMarketsPill(ok){const el=document.getElementById('marketsPill');if
 // la que sea más reciente, y cada indicador sólo se reemplaza por uno de igual o mayor fecha.
 let marketsShown={};
 const mktNewer=(n,p)=>{if(!n)return p||null;if(!p)return n;const dn=String(n.date||'').slice(0,10),dp=String(p.date||'').slice(0,10);if(dn!==dp)return dn>dp?n:p;return String(n.updatedAt||'')>=String(p.updatedAt||'')?n:p;};
-function showMarkets(L){if(!L)return;const m={};for(const k of ['merval','dollar','risk','bna'])m[k]=mktNewer(L[k],marketsShown[k]);marketsShown=m;paintMarkets(m);}
+function showMarkets(L){if(!L)return;const m={};for(const k of ['merval','dollar','risk','bna','bcra'])m[k]=mktNewer(L[k],marketsShown[k]);marketsShown=m;paintMarkets(m);}
 async function loadMarketsFast(){
   if(marketsInFlight)return;marketsInFlight=true;
   if(!marketsFastLoaded){try{showMarkets(window.__MARKETS__?.latest);const cached=JSON.parse(localStorage.getItem('macroMarketsSnapshot')||'null');if(cached?.latest)showMarkets(cached.latest);}catch{}}

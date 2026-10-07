@@ -13,11 +13,11 @@
   <meta name="twitter:card" content="summary">
   <meta name="theme-color" content="#071b35">
   <title>Macrodatos | Indicadores económicos de Argentina</title>
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 rx=%2222%22 fill=%22%230b5bd3%22/><path d=%22M22 69V50h12v19zm22 0V36h12v33zm22 0V22h12v47z%22 fill=%22white%22/></svg>">
-  <link rel="stylesheet" href="styles.css?v=135">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg?v=143">
+  <link rel="stylesheet" href="styles.css?v=143">
   <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
   <script type="module" src="releases.js?v=142"></script>
-  <script defer src="app.js?v=142"></script>
+  <script defer src="app.js?v=143"></script>
   <script defer src="uva-calc.js?v=139b"></script>
   <script defer src="birth.js?v=132"></script>
   <script defer src="efemerides.js?v=135"></script>
@@ -26,7 +26,7 @@
 <a class="skip-link" href="#main">Saltar al contenido</a>
 <header class="topbar">
   <a class="brand" href="#inicio" aria-label="Macrodatos, inicio">
-    <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+    <span class="brand-mark" aria-hidden="true"><img src="logo.svg?v=143" alt="" width="40" height="34"></span>
     <span><strong>MACRODATOS</strong><small>ECONOMÍA ARGENTINA</small></span>
   </a>
   <button class="menu-btn" id="menuBtn" aria-expanded="false" aria-controls="nav">☰<span class="sr-only">Abrir menú</span></button>
@@ -51,6 +51,7 @@
       <div class="market-card"><span>Dólar MEP</span><strong id="heroDollar">—</strong><em id="heroDollarChange" class="market-change neutral"></em><small id="heroDollarDate">Consultando…</small></div>
       <div class="market-card"><span>Riesgo país</span><strong id="heroRisk">—</strong><em id="heroRiskChange" class="market-change neutral"></em><small id="heroRiskDate">Consultando…</small></div>
       <div class="market-card"><span>Dólar oficial BNA</span><strong id="heroBna">—</strong><em id="heroBnaChange" class="market-change neutral"></em><small id="heroBnaDate">Consultando…</small></div>
+      <div class="market-card"><span>Compras BCRA</span><strong id="heroBcra">—</strong><em id="heroBcraChange" class="market-change neutral"></em><small id="heroBcraDate">Consultando…</small></div>
     </div>
     <div class="latest-release"><span>Último dato publicado</span><strong id="latestReleaseTitle">Consultando fuentes…</strong><p id="latestReleaseValue">—</p><small id="latestReleaseDate"></small></div>
   </div>
@@ -173,7 +174,7 @@
   </div>
 </section>
 </main>
-<footer><div class="brand"><span class="brand-mark"><i></i><i></i><i></i></span><span><strong>MACRODATOS</strong><small>ECONOMÍA ARGENTINA</small></span></div><p>Información económica para análisis. No constituye asesoramiento financiero.</p><a href="#inicio">Volver arriba ↑</a><span class="build-version">macrodatos.ar · v142</span></footer>
+<footer><div class="brand"><span class="brand-mark" aria-hidden="true"><img src="logo.svg?v=143" alt="" width="40" height="34"></span><span><strong>MACRODATOS</strong><small>ECONOMÍA ARGENTINA</small></span></div><p>Información económica para análisis. No constituye asesoramiento financiero.</p><a href="#inicio">Volver arriba ↑</a><span class="build-version">macrodatos.ar · v143</span></footer>
 
 <div id="kpiModal" class="kpi-modal" hidden aria-hidden="true">
   <div class="kpi-modal-backdrop" data-kpi-close></div>

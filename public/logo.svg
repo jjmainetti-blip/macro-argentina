@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 100" role="img" aria-label="Macrodatos">
+  <defs>
+    <linearGradient id="b1" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7cc4fc"/><stop offset="1" stop-color="#62b4fa"/></linearGradient>
+    <linearGradient id="b2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#5ab5fc"/><stop offset="1" stop-color="#36a0fa"/></linearGradient>
+    <linearGradient id="b3" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2a98f4"/><stop offset="1" stop-color="#0d6fdc"/></linearGradient>
+    <linearGradient id="b4" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0d4f9c"/><stop offset="1" stop-color="#052c63"/></linearGradient>
+  </defs>
+  <rect x="4"  y="73.4" width="21" height="20.6" rx="2.6" fill="url(#b1)"/>
+  <rect x="30" y="59.2" width="21" height="34.8" rx="2.6" fill="url(#b2)"/>
+  <rect x="56" y="42.8" width="22" height="51.2" rx="2.6" fill="url(#b3)"/>
+  <rect x="83" y="22"   width="22" height="72"   rx="2.6" fill="url(#b4)"/>
+</svg>
