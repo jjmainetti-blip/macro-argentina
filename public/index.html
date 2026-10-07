@@ -17,7 +17,7 @@
   <link rel="stylesheet" href="styles.css?v=135">
   <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
   <script type="module" src="releases.js?v=140"></script>
-  <script defer src="app.js?v=140"></script>
+  <script defer src="app.js?v=141"></script>
   <script defer src="uva-calc.js?v=139b"></script>
   <script defer src="birth.js?v=132"></script>
   <script defer src="efemerides.js?v=135"></script>
@@ -113,10 +113,10 @@
 <section class="section" id="expectativas">
   <div class="section-title"><div><span class="eyebrow">Expectativas</span><h2>Qué espera el mercado</h2></div><p>Proyecciones ≠ datos observados.</p></div>
   <div class="expect-grid">
-    <article class="forecast featured"><span>EcoGo · estimación preliminar</span><strong>2,0%</strong><h3>Inflación septiembre 2026</h3><p>Relevamiento de la 3.ª semana, publicado el 21/09.</p></article>
-    <article class="forecast" id="remGdpCard"><span>REM BCRA · mediana</span><strong id="remGdp">1,5%</strong><h3 id="remGdpTitle">PIB real 2026</h3><p id="remGdpNote">Crecimiento anual esperado en el REM de septiembre.</p></article>
-    <article class="forecast" id="remFxCard"><span>REM BCRA · mediana</span><strong id="remFx">$1.614</strong><h3 id="remFxTitle">USD oficial · dic 2026</h3><p>Tipo de cambio nominal promedio esperado.</p></article>
-    <article class="forecast" id="remInfCard"><span>REM BCRA · mediana</span><strong id="remInf">21,1%</strong><h3>Inflación próximos 12 meses</h3><p id="remInfNote">Expectativa del REM de septiembre 2026 (hasta septiembre 2027).</p></article>
+    <article class="forecast featured" id="remMonthCard" data-kpi="remMonth"><span>REM BCRA · mediana</span><strong id="remMonth" data-value>1,9%</strong><h3 id="remMonthTitle" data-period>Inflación septiembre 2026</h3><p id="remMonthNote">Inflación mensual esperada en el REM de septiembre. INDEC publica el dato el 13 de octubre.</p></article>
+    <article class="forecast" id="remGdpCard" data-kpi="remGdp"><span>REM BCRA · mediana</span><strong id="remGdp" data-value>1,5%</strong><h3 id="remGdpTitle" data-period>PIB real 2026</h3><p id="remGdpNote">Crecimiento anual esperado en el REM de septiembre.</p></article>
+    <article class="forecast" id="remFxCard" data-kpi="remFx"><span>REM BCRA · mediana</span><strong id="remFx" data-value>$1.614</strong><h3 id="remFxTitle" data-period>USD oficial · dic 2026</h3><p>Tipo de cambio nominal promedio esperado.</p></article>
+    <article class="forecast" id="remInfCard" data-kpi="rem12"><span>REM BCRA · mediana</span><strong id="remInf" data-value>21,1%</strong><h3 data-period>Inflación próximos 12 meses</h3><p id="remInfNote">Expectativa del REM de septiembre 2026 (hasta septiembre 2027).</p></article>
   </div>
   <div class="callout" id="remCallout"><strong>REM de septiembre 2026</strong> (publicado el 6 oct 2026): 44 participantes: 33 consultoras y centros de investigación y 11 entidades financieras. Las proyecciones del REM no son pronósticos propios del BCRA.</div>
 </section>
@@ -173,7 +173,7 @@
   </div>
 </section>
 </main>
-<footer><div class="brand"><span class="brand-mark"><i></i><i></i><i></i></span><span><strong>MACRODATOS</strong><small>ECONOMÍA ARGENTINA</small></span></div><p>Información económica para análisis. No constituye asesoramiento financiero.</p><a href="#inicio">Volver arriba ↑</a><span class="build-version">macrodatos.ar · v140</span></footer>
+<footer><div class="brand"><span class="brand-mark"><i></i><i></i><i></i></span><span><strong>MACRODATOS</strong><small>ECONOMÍA ARGENTINA</small></span></div><p>Información económica para análisis. No constituye asesoramiento financiero.</p><a href="#inicio">Volver arriba ↑</a><span class="build-version">macrodatos.ar · v141</span></footer>
 
 <div id="kpiModal" class="kpi-modal" hidden aria-hidden="true">
   <div class="kpi-modal-backdrop" data-kpi-close></div>

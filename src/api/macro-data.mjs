@@ -536,6 +536,27 @@ async function bcra(){
 // esperada (mediana) de cada mes. La tarjeta de recaudación la usa para estimar la variación real
 // mientras INDEC no publica el IPC del mes.
 const REM_CPI_FALLBACK={survey:'2026-09',published:'2026-10-06',monthly:{'2026-09':1.9,'2026-10':1.7,'2026-11':1.62,'2026-12':1.8,'2027-01':1.6,'2027-02':1.6,'2027-03':1.7},next12:21.05,fxDec:{year:2026,value:1614}};
+// v141 · Un relevamiento del REM resumido (medianas) para graficar la evolución de las expectativas:
+// ipcM {AAAA-MM: % mensual}, ipc12 (% i.a. próximos 12 meses), fxM {AAAA-MM: $/USD}, gdpQ {AAAA-Qn: % trim. s.e.}, gdpY {AAAA: %}.
+export function remSurveyFromRows(rows){
+  const out={ipcM:{},ipc12:null,fxM:{},gdpQ:{},gdpY:{}};let block='';
+  const ymOf=v=>{if(v instanceof Date)return `${v.getUTCFullYear()}-${String(v.getUTCMonth()+1).padStart(2,'0')}`;if(typeof v==='number'&&v>20000&&v<80000){const d=new Date(Math.round((v-25569)*864e5));return `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}`;}const m=String(v??'').match(/^(20\d{2})-(\d{2})/);return m?`${m[1]}-${m[2]}`:null;};
+  const ROMAN={I:1,II:2,III:3,IV:4};
+  for(const r of rows||[]){
+    if(!r)continue;const cells=r.filter(v=>v!==null&&v!==undefined&&v!=='');if(!cells.length)continue;
+    if(cells.length===1&&typeof cells[0]==='string'){block=cells[0];continue;}
+    const iRef=r.findIndex(v=>typeof v==='string'&&/(var\.|\$\/USD|TNA|millones|% de la PEA)/i.test(v));if(iRef<1)continue;
+    const ref=String(r[iRef]),per=r[iRef-1],med=Number(r[iRef+1]);if(!Number.isFinite(med))continue;
+    const isIpc=/IPC nivel general/i.test(block),isFx=/Tipo de cambio/i.test(block),isGdp=/PIB/i.test(block);
+    const ym=ymOf(per),q=String(per??'').match(/Trim\.?\s*(I{1,3}|IV)-(\d{2})/i),yr=String(per??'').match(/^(20\d{2})$/);
+    if(isIpc&&/mensual/i.test(ref)&&ym)out.ipcM[ym]=round(med,2);
+    else if(isIpc&&/pr[oó]x\.?\s*12/i.test(String(per)))out.ipc12=round(med,2);
+    else if(isFx&&/^\$\/USD$/i.test(ref.trim())&&ym)out.fxM[ym]=Math.round(med*100)/100;
+    else if(isGdp&&q)out.gdpQ[`20${q[2]}-Q${ROMAN[q[1].toUpperCase()]}`]=round(med,2);
+    else if(isGdp&&yr&&/anual/i.test(ref))out.gdpY[yr[1]]=round(med,2);
+  }
+  return out;
+}
 async function remCpiMonthly(html){
   const links=[...String(html||'').matchAll(/href="([^"]*relevamiento-expectativas-mercado-tablas-(\d{4})-(\d{2})\.xlsx)"/gi)].map(m=>({url:new URL(m[1],URLS.rem).href,ym:`${m[2]}-${m[3]}`})).sort((a,b)=>b.ym.localeCompare(a.ym));
   const cand=links[0]||(()=>{const d=new Date();const p=new Date(Date.UTC(d.getUTCFullYear(),d.getUTCMonth()-1,1));const ym=`${p.getUTCFullYear()}-${String(p.getUTCMonth()+1).padStart(2,'0')}`;return {ym,url:`https://www.bcra.gob.ar/archivos/Pdfs/PublicacionesEstadisticas/informes/relevamiento-expectativas-mercado-tablas-${ym}.xlsx`};})();
@@ -560,7 +581,8 @@ async function remCpiMonthly(html){
     let next12=null;for(const r of rows.slice(start+1,start+20)){if(r&&/pr[oó]x\.?\s*12\s*meses/i.test(String(r.find(v=>v!=null)??''))){const i=r.findIndex(v=>/var\.?\s*%\s*i\.?a/i.test(String(v??'')));const v=Number(r[i+1]);if(Number.isFinite(v))next12=round(v,2);break;}}
     let fxDec=null;const fxStart=rows.findIndex(r=>r&&r.some(v=>/Tipo de cambio nominal/i.test(String(v??''))));
     if(fxStart>=0)for(const r of rows.slice(fxStart+1,fxStart+20)){const ref=r?.find(v=>/\$\/USD;\s*dic-(\d{2})/i.test(String(v??'')));if(ref){const yy=2000+Number(String(ref).match(/dic-(\d{2})/i)[1]),v=Number(r[r.indexOf(ref)+1]);if(Number.isFinite(v)&&(!fxDec||yy<fxDec.year))fxDec={year:yy,value:Math.round(v)};}}
-    return {survey:cand.ym,url:cand.url,monthly,next12,fxDec};
+    let entry=null;try{entry=remSurveyFromRows(rows);}catch{}
+    return {survey:cand.ym,url:cand.url,monthly,next12,fxDec,entry};
   }finally{clearTimeout(tm);}
 }
 async function rem(){
@@ -579,7 +601,8 @@ async function rem(){
   const survey=surveyM?`${surveyM[2]}-${String(MES[surveyM[1].toLowerCase()]).padStart(2,'0')}`:(cpi?.survey||null);
   // v140: si el texto y el xlsx corresponden a relevamientos distintos, no se mezclan.
   const sameSurvey=!cpi?.survey||!survey||cpi.survey===survey;
-  return {status:'ok',source:'REM BCRA',sourceUrl:URLS.rem,latest:{survey,published:pub?`${pub[3]}-${String(MES[pub[2].toLowerCase()]).padStart(2,'0')}-${String(+pub[1]).padStart(2,'0')}`:null,participants:participants?+participants[1]:null,consultants:participants?+participants[2]:null,banks:participants?+participants[3]:null,gdpYear,gdp:gdp?Number(gdp[1].replace(',','.')):null,gdp2026:gdp&&gdpYear===2026?Number(gdp[1].replace(',','.')):null,fxDecYear:fxYear||(sameSurvey?cpi?.fxDec?.year:null)||null,fxDec:fx?Number(fx[1].replace(/\./g,'')):(sameSurvey&&cpi?.fxDec?cpi.fxDec.value:null),fxDec2026:fx&&fxYear===2026?Number(fx[1].replace(/\./g,'')):(sameSurvey&&cpi?.fxDec?.year===2026?cpi.fxDec.value:null),inflationNext12:sameSurvey&&Number.isFinite(cpi?.next12)?cpi.next12:null},cpiExpected:cpi};
+  const surveys=(sameSurvey&&cpi?.entry&&cpi?.survey&&!cpi.fallback)?{[cpi.survey]:{...cpi.entry,published:pub?`${pub[3]}-${String(MES[pub[2].toLowerCase()]).padStart(2,'0')}-${String(+pub[1]).padStart(2,'0')}`:null}}:undefined;
+  return {status:'ok',source:'REM BCRA',sourceUrl:URLS.rem,...(surveys?{surveys}:{}),latest:{survey,published:pub?`${pub[3]}-${String(MES[pub[2].toLowerCase()]).padStart(2,'0')}-${String(+pub[1]).padStart(2,'0')}`:null,participants:participants?+participants[1]:null,consultants:participants?+participants[2]:null,banks:participants?+participants[3]:null,gdpYear,gdp:gdp?Number(gdp[1].replace(',','.')):null,gdp2026:gdp&&gdpYear===2026?Number(gdp[1].replace(',','.')):null,fxDecYear:fxYear||(sameSurvey?cpi?.fxDec?.year:null)||null,fxDec:fx?Number(fx[1].replace(/\./g,'')):(sameSurvey&&cpi?.fxDec?cpi.fxDec.value:null),fxDec2026:fx&&fxYear===2026?Number(fx[1].replace(/\./g,'')):(sameSurvey&&cpi?.fxDec?.year===2026?cpi.fxDec.value:null),inflationNext12:sameSurvey&&Number.isFinite(cpi?.next12)?cpi.next12:null},cpiExpected:cpi};
 }
 async function salaryRipte(){
   // Serie oficial Datos Argentina: mensual desde julio de 1994. Se completa con la publicación vigente de Seguridad Social.

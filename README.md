@@ -295,3 +295,12 @@ Chequeo: `npm run validate:snapshot`.
 ## v140 — cemento con cifras provisorias y Expectativas con el último REM
 - **Cemento:** AFCP publica primero las cifras **provisorias** (`afcp.info/ESTADISTICAS/DESPACHO-MENSUAL/PAAAAMM/PAAAAMM.html`, enlazadas desde afcp.org.ar/despacho-mensual, en los primeros días del mes) y semanas después las definitivas. El sitio sólo leía las definitivas, por eso septiembre no aparecía. `cement-monthly.mjs` prueba la definitiva y, si no existe, la provisoria (`parseProvisional`: variación interanual del despacho total y toneladas del mes). La revisión automática empieza a buscar el dato nuevo desde el día 4 de cada mes. Septiembre 2026 incorporado: +4,5% interanual, 964 mil toneladas (provisorio).
 - **Expectativas:** la sección era texto fijo (REM de agosto). Ahora se arma con el último REM que lee el Worker (`rem()`): PIB del año, dólar de diciembre, inflación de los próximos 12 meses (nuevo: se lee de la tabla xlsx), participantes y fecha de publicación; sin años fijos en las expresiones. REM de septiembre 2026 incorporado como respaldo (también actualiza la inflación esperada que usa la tarjeta de recaudación).
+
+## v141 — Expectativas: REM en lugar de EcoGo y gráficos de evolución
+- La tarjeta destacada de EcoGo (texto fijo) se reemplazó por la **inflación del mes esperada en el último REM** (primer mes del relevamiento sin dato oficial de INDEC).
+- Las cuatro tarjetas de Expectativas se pueden tocar, como las del tablero, y muestran los **últimos 5 REM** (líneas, de claro a oscuro) contra el **dato oficial** (barras) cuando ya existe:
+  - Inflación mensual: trayectoria mensual esperada en cada REM vs. IPC de INDEC.
+  - Inflación a 12 meses: para cada REM, la inflación interanual implícita desde el mes del relevamiento (IPC ya publicado + inflación mensual esperada) y el valor esperado para los próximos 12 meses; barras: inflación interanual observada.
+  - Dólar: tipo de cambio promedio mensual esperado vs. el oficial mayorista observado.
+  - PIB: variación trimestral desestacionalizada esperada vs. la del EMAE desestacionalizado (aproximación del PIB; sólo trimestres completos).
+- Datos: `macro-history.json → remSurveys` trae los relevamientos feb–sep 2026 (archivo histórico del REM del BCRA). Cada REM nuevo se agrega solo: `rem()` resume la tabla del mes con `remSurveyFromRows()` y lo guarda en `rem.surveys` (KV).
