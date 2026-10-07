@@ -521,7 +521,9 @@ function releaseSortKey(raw){
 let releaseShown=null;
 function showLatestRelease(x){
   if(!x||!x.sortKey)return;
-  if(releaseShown&&(x.sortKey<releaseShown.sortKey||(x.sortKey===releaseShown.sortKey&&x.title!==releaseShown.title)))return;
+  // A igual fecha sólo se reemplaza por la misma publicación o por un conjunto que la incluya (p. ej. IPI → IPI y ISAC).
+  const covers=(a,b)=>a.title===b.title||(a.items||[a.title]).every(t=>(b.items||[b.title]).some(u=>u.startsWith(t.split(' · ')[0])));
+  if(releaseShown&&(x.sortKey<releaseShown.sortKey||(x.sortKey===releaseShown.sortKey&&!covers(releaseShown,x))))return;
   releaseShown=x;
   const t=document.getElementById('latestReleaseTitle'),v=document.getElementById('latestReleaseValue'),d=document.getElementById('latestReleaseDate');
   if(t)t.textContent=x.title;if(v)v.textContent=x.value;if(d)d.textContent=x.date;
@@ -891,8 +893,8 @@ function loadBundledMacroHistory(){return bundledMacroHistoryPromise??=(async()=
     if(h.ipcCabaMonthly)B.ipcCaba={status:'ok',source:'IDECBA — IPCBA Nivel General',history:h.ipcCabaMonthly};
     if(h.icgMonthly)B.icg={status:'ok',source:'UTDT',history:h.icgMonthly,...(h.icgLatest?{latest:h.icgLatest}:{})};
     if(h.arcaYoy)B.arca={status:'ok',source:'ARCA',history:h.arcaYoy};
-    if(h.ipiMonthlyYoy)B.industryHistorical={status:'ok',monthlyYoy:h.ipiMonthlyYoy,monthlySaMom:h.ipiMonthlySaMom||{}};
-    if(h.isacMonthlyYoy)B.isacHistorical={status:'ok',monthlyYoy:h.isacMonthlyYoy,monthlySaMom:h.isacMonthlySaMom||{}};
+    if(h.ipiMonthlyYoy)B.industryHistorical={status:'ok',monthlyYoy:h.ipiMonthlyYoy,monthlySaMom:h.ipiMonthlySaMom||{},...(h.ipiLatest?{latest:h.ipiLatest}:{})};
+    if(h.isacMonthlyYoy)B.isacHistorical={status:'ok',monthlyYoy:h.isacMonthlyYoy,monthlySaMom:h.isacMonthlySaMom||{},...(h.isacLatest?{latest:h.isacLatest}:{})};
     if(h.emaeMonthlyYoy||h.emaeMonthlySaMom)B.emaeHistorical={status:'ok',source:'INDEC / Datos Argentina — EMAE',monthlyYoy:h.emaeMonthlyYoy||{},monthlySaMom:h.emaeMonthlySaMom||{}};
     if(h.creditMonthlyYoy||h.creditMonthlySaRealMom)B.creditHistorical={status:'ok',source:'BCRA — préstamos al sector privado',monthlyYoy:h.creditMonthlyYoy||{},monthlySaRealMom:h.creditMonthlySaRealMom||{}};
     if(h.arrearsMonthlyTotal)B.arrearsHistorical={status:'ok',source:'BCRA — Informe sobre Bancos',monthlyTotal:h.arrearsMonthlyTotal,monthlyFamilies:h.arrearsMonthlyFamilies||{},monthlyCompanies:h.arrearsMonthlyCompanies||{}};

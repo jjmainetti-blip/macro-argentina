@@ -59,21 +59,33 @@ export function buildReleases(R = {}) {
   { const h = autosHistory(R), L = lastEntry(h); if (L) { const p = numOrNull(h[ymShift(L[0], -12)]), pubd = R.autos?.latest?.ym === L[0] ? R.autos.latest.published : null; releases.push({ releaseDate: pubd || `${ymShift(L[0], 1)}-01`, title: 'Patentamientos · ACARA', value: `${new Intl.NumberFormat('es-AR').format(L[1])} unidades${p ? ` · ${kpiPct((L[1] / p - 1) * 100)} interanual` : ''}`, displayDate: pubd ? `Publicado ${displayDay(pubd)} · período ${displayMonth(L[0])}` : `Período ${displayMonth(L[0])}` }); } }
   { const L = lastEntry(R.came?.monthlyYoy); if (L) { const lt = R.came?.latest?.ym === L[0] ? R.came.latest : null, mom = numOrNull(R.came?.monthlySaMom?.[L[0]]); const rd = lt?.published || `${ymShift(L[0], 1)}-05`;
     releases.push({ releaseDate: rd, title: 'Ventas minoristas pyme · CAME', value: `${kpiPct(L[1])} interanual real${mom !== null ? ` · ${kpiPct(mom)} mensual` : ''}`, displayDate: lt?.published ? `Publicado ${displayDay(lt.published)} · período ${displayMonth(L[0])}` : `Período ${displayMonth(L[0])}` }); } }
+  // v142: IPI manufacturero e ISAC (INDEC): interanual y mensual desestacionalizada del último mes.
+  for (const [k, title] of [['industryHistorical', 'IPI manufacturero · INDEC'], ['isacHistorical', 'Construcción (ISAC) · INDEC']]) {
+    const H = R[k], L = lastEntry(H?.monthlyYoy); if (!L) continue;
+    const mom = numOrNull(H?.monthlySaMom?.[L[0]]), pd = H?.latest?.ym === L[0] && H.latest.published ? H.latest.published : null, rd = pd || `${ymShift(L[0], 2)}-09`;
+    releases.push({ releaseDate: rd, title, value: `${kpiPct(L[1])} interanual${mom !== null ? ` · ${kpiPct(mom)} mensual s.e.` : ''}`, displayDate: pd ? `Publicado ${displayDay(pd)} · período ${displayMonth(L[0])}` : `Período ${displayMonth(L[0])}` });
+  }
   if (R.bopHistorical?.prepared && R.bopHistorical?.quarterly?.CA) { const k = Object.keys(R.bopHistorical.quarterly.CA).sort().at(-1), v = Number(R.bopHistorical.quarterly.CA[k]); releases.push({ releaseDate: R.bopHistorical.prepared, title: 'Balanza de pagos · INDEC', value: `Cuenta corriente ${v >= 0 ? '+' : '−'}USD ${new Intl.NumberFormat('es-AR', { maximumFractionDigits: 0 }).format(Math.abs(v))} M (${bopQuarterLabel(k)})`, displayDate: `Publicado ${displayDay(R.bopHistorical.prepared)}` }); }
   return releases;
 }
 // La más reciente por fecha de publicación (a igual fecha, la última de la lista).
+// La más reciente por fecha de publicación. v142: si ese día se publicó más de un dato (p. ej. IPI e ISAC), se muestran juntos.
 export function pickLatest(releases) {
   const valid = (releases || []).map(x => ({ ...x, sortKey: String(x.releaseDate || releaseSortKey(x.date)).slice(0, 10) })).filter(x => x.title && x.value && x.sortKey).sort((a, b) => a.sortKey.localeCompare(b.sortKey));
   const l = valid.at(-1); if (!l) return null;
-  return { title: l.title, value: l.value, date: l.displayDate || l.date || l.releaseDate || '', sortKey: l.sortKey };
+  const same = []; for (const x of valid) if (x.sortKey === l.sortKey && !same.some(y => y.title === x.title)) same.push(x);
+  if (same.length === 1) return { title: l.title, value: l.value, date: l.displayDate || l.date || l.releaseDate || '', sortKey: l.sortKey };
+  const short = t => t.split(' · ')[0], agencies = [...new Set(same.map(x => x.title.split(' · ')[1]).filter(Boolean))];
+  const names = same.map(x => short(x.title));
+  return { title: `${names.slice(0, -1).join(', ')} y ${names.at(-1)}${agencies.length === 1 ? ` · ${agencies[0]}` : ''}`, value: same.map(x => `${short(x.title)}: ${x.value}`).join(' | '),
+    date: (l.displayDate || '').replace(/ · período .*/, '') || l.releaseDate || '', sortKey: l.sortKey, items: same.map(x => short(x.title)) };
 }
 // v138 · Fecha de publicación del dato que muestra cada tarjeta (para ordenar el tablero: la más reciente primero).
 // Prioridad: (1) fecha exacta informada por la fuente; (2) fecha en que el sitio detectó el período nuevo
 // (window.__CARD_PUB__, registrada por el Worker); (3) calendario habitual del organismo (rezago en meses desde el
 // último mes del período + día habitual). ym = último mes del período (trimestre/semestre: su mes final).
-export const PUB_RULES = { ipc: [1, 13], ipcCaba: [1, 14], arca: [1, 2], icg: [0, 26], autos: [1, 2], came: [1, 5], emae: [2, 22], isac: [2, 9], fiscal: [1, 17],
-  cement: [1, 6], credit: [1, 20], arrears: [2, 20], ipi: [2, 9], trade: [1, 19], ila: [1, 28], iga: [1, 22], bop: [3, 23], poverty: [3, 26] };
+export const PUB_RULES = { ipc: [1, 13], ipcCaba: [1, 14], arca: [1, 2], icg: [0, 26], autos: [1, 2], came: [1, 5], emae: [2, 22], isac: [2, 7], fiscal: [1, 17],
+  cement: [1, 6], credit: [1, 20], arrears: [2, 20], ipi: [2, 7], trade: [1, 19], ila: [1, 28], iga: [1, 22], bop: [3, 23], poverty: [3, 26] };
 export function cardPublication(key, ymEnd, S = {}, seen = {}) {
   if (!/^\d{4}-\d{2}$/.test(String(ymEnd || ''))) return null;
   const ok = d => /^\d{4}-\d{2}-\d{2}/.test(String(d || '')) ? String(d).slice(0, 10) : null;
@@ -83,6 +95,8 @@ export function cardPublication(key, ymEnd, S = {}, seen = {}) {
   if (key === 'autos' && S.autos?.latest?.ym === ymEnd) exact = ok(S.autos.latest.published);
   if (key === 'came' && S.came?.latest?.ym === ymEnd) exact = ok(S.came.latest.published);
   if (key === 'cement' && S.cement?.latest?.ym === ymEnd) exact = ok(S.cement.latest.published);
+  if (key === 'ipi' && S.industryHistorical?.latest?.ym === ymEnd) exact = ok(S.industryHistorical.latest.published);
+  if (key === 'isac' && S.isacHistorical?.latest?.ym === ymEnd) exact = ok(S.isacHistorical.latest.published);
   if (key === 'icg' && S.icg?.latest && ymFromSpanishPeriod(S.icg.latest.period || '') === ymEnd) exact = ok(S.icg.publicationDate);
   if (key === 'bop' && S.bopHistorical?.quarterly?.CA) { const q = Object.keys(S.bopHistorical.quarterly.CA).sort().at(-1); if (q && `${q.slice(0, 4)}-${String(+q.slice(-1) * 3).padStart(2, '0')}` === ymEnd) exact = ok(S.bopHistorical.prepared); }
   if (exact) return { date: exact, basis: 'fuente' };

@@ -3,6 +3,7 @@ import * as XLSX from 'xlsx';
 import { BUNDLED_SOURCES } from './bundled-history.mjs';
 import { autosLive, ipcCabaLive, povertyLive, cementLive, cameLive } from './live-sources.mjs';
 import { cardStatus, CARDS, periodEndYm, todayAR } from './freshness.mjs';
+import { EVENTS } from './calendar-data.mjs';
 /* Macrodatos (antes Macro Argentina) v8 — stable server-side data contract.
    Each adapter fails independently. The browser keeps its bundled last-known value
    when a source is temporarily unavailable or changes format. */
@@ -157,13 +158,48 @@ function annualColumn(text, valueMatchers, reducer='last'){
 }
 // v115: variación mensual (%) de una serie desestacionalizada en niveles.
 async function saMomFromLevels(id,start='2020-06-01'){const x=await seriesRows(id,{start});const lv={};for(const r of x.rows){const k=String(r.date).slice(0,7);if(/^\d{4}-\d{2}$/.test(k)&&Number.isFinite(r.value))lv[k]=r.value;}const ks=Object.keys(lv).sort(),out={};for(let i=1;i<ks.length;i++)out[ks[i]]=round((lv[ks[i]]/lv[ks[i-1]]-1)*100,1)+0;if(Object.keys(out).length<12)throw new Error(`serie s.e. corta: ${id}`);return out;}
+// v142 · INDEC publica el informe técnico a las 16 h, pero Datos Argentina recién incorpora el mes días después.
+// La portada de INDEC (indec.gob.ar/indec/Portada) trae el resumen de cada informe del día ("En agosto de 2026, el
+// índice ... cayó 3,2% respecto a igual mes de 2025 ... la serie desestacionalizada subió 1,9% ..."). Se usa para
+// incorporar el mes nuevo ni bien sale; cuando Datos Argentina lo publica, su serie lo reemplaza.
+let INDEC_NEWS={at:0,text:''};
+async function indecNewsText(){
+  if(INDEC_NEWS.text&&Date.now()-INDEC_NEWS.at<10*60*1000)return INDEC_NEWS.text;
+  const c=new AbortController(),tm=setTimeout(()=>c.abort(),15000);
+  try{const r=await fetch('https://www.indec.gob.ar/indec/Portada',{signal:c.signal,headers:{'user-agent':'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36','accept-language':'es-AR,es;q=.9'},cf:{cacheTtl:600,cacheEverything:true}});if(!r.ok)throw new Error(`INDEC portada ${r.status}`);
+    const html=await r.text();const i=html.search(/Noticias/i);const part=i>=0?html.slice(i,i+400000):html.slice(0,400000);
+    INDEC_NEWS={at:Date.now(),text:part.replace(/<script[\s\S]*?<\/script>/gi,' ').replace(/<[^>]+>/g,' ').replace(/&#(\d+);/g,(_,n)=>String.fromCharCode(+n)).replace(/&nbsp;/g,' ').replace(/\s+/g,' ')};return INDEC_NEWS.text;}
+  finally{clearTimeout(tm);}
+}
+const MESES_NEWS={enero:1,febrero:2,marzo:3,abril:4,mayo:5,junio:6,julio:7,agosto:8,septiembre:9,setiembre:9,octubre:10,noviembre:11,diciembre:12};
+const NEWS_DOWN=/(cay|ca[ií]d|baj|disminu|descen|retroce|contraj|contracci|negativ|redujo|merma)/i;
+export function parseIndecNews(text,subject){
+  // subject: regex del nombre del indicador tal como aparece en la noticia.
+  const re=new RegExp(`En (enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre) de (20\\d{2}),? (?:el|la) ${subject}([^.%]{0,60}?)\\s([\\d.,]+)%\\s+respecto a igual mes`,'i');
+  const m=String(text||'').match(re);if(!m)return null;
+  const ym=`${m[2]}-${String(MESES_NEWS[m[1].toLowerCase()]).padStart(2,'0')}`,yoy=Number(m[4].replace(',','.'))*(NEWS_DOWN.test(m[3])?-1:1);
+  const rest=String(text).slice(m.index,m.index+700);
+  const sa=rest.match(/serie desestacionalizada (?:muestra una variaci[oó]n (positiva|negativa) de|([^.%\d]{1,40}?))\s+([\d.,]+)%/i);
+  let mom=null;if(sa){const v=Number(sa[3].replace(',','.'));mom=sa[1]?(sa[1].toLowerCase()==='negativa'?-v:v):(NEWS_DOWN.test(sa[2])?-v:v);}
+  return Number.isFinite(yoy)?{ym,yoy:Math.round(yoy*10)/10,mom:Number.isFinite(mom)?Math.round(mom*10)/10:null}:null;
+}
+// Fecha oficial de publicación (calendario INDEC) del último mes de la serie.
+const MES_LBL=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+function withCalendarDate(out,calRe){const last=Object.keys(out.monthlyYoy||{}).sort().at(-1);if(!last)return out;const lbl=`${MES_LBL[+last.slice(5)-1]} ${last.slice(0,4)}`;const ev=EVENTS.find(e=>calRe.test(e.title)&&String(e.period).toLowerCase()===lbl);out.latest={...(out.latest||{}),ym:last,yoy:out.monthlyYoy[last],mom:out.monthlySaMom?.[last]??null,...(ev?{published:ev.date}:{})};return out;}
+async function addIndecNews(out,subject){
+  try{const n=parseIndecNews(await indecNewsText(),subject);if(!n)return out;
+    const last=Object.keys(out.monthlyYoy||{}).sort().at(-1);
+    if(!last||n.ym>last){out.monthlyYoy={...(out.monthlyYoy||{}),[n.ym]:n.yoy};if(n.mom!==null)out.monthlySaMom={...(out.monthlySaMom||{}),[n.ym]:n.mom};out.indecNews={ym:n.ym,source:'INDEC — informe técnico (portada indec.gob.ar)'};}
+  }catch{}
+  return out;
+}
 async function industryHistorical(){
   const annual={}; const segments=[];
   try{const x=await seriesRows('12.1_E_2004_A_3',{start:'1994-01-01',end:'2015-12-31'});Object.assign(annual,growthFromAnnualLevels(annualFromRows(x.rows,'avg')));segments.push({range:'EMI hasta 2015',sourceUrl:x.url});}catch{}
   let monthlyYoy={};try{const x=await seriesRows('453.1_SERIE_ORIGNAL_0_0_14_46',{start:'2016-01-01'});Object.assign(annual,growthFromAnnualLevels(annualFromRows(x.rows,'avg')));monthlyYoy=yoyFromRows(x.rows);segments.push({range:'IPI desde 2016',sourceUrl:x.url});}catch{}
   if(!Object.keys(annual).length)throw new Error('series industriales no disponibles');
   let monthlySaMom;try{monthlySaMom=await saMomFromLevels('453.1_SERIE_DESEADA_0_0_24_58');}catch{}
-  return {status:'ok',source:'INDEC / Datos Argentina — EMI + IPI manufacturero',annual,monthlyYoy,...(monthlySaMom?{monthlySaMom}:{}),segments};
+  return await addIndecNews({status:'ok',source:'INDEC / Datos Argentina — EMI + IPI manufacturero',annual,monthlyYoy,...(monthlySaMom?{monthlySaMom}:{}),segments},'[ií]ndice de producci[oó]n industrial manufacturero(?: \\(IPI manufacturero\\))?').then(o=>withCalendarDate(o,/manufacturero \(IPI\)/i));
 }
 async function unemploymentHistorical(){
   const x=await seriesRows('45.1_ECTDT_0_A_33',{start:'2003-01-01'});
@@ -773,7 +809,7 @@ async function isacHistorical(){
   if(!Object.keys(monthly).length)throw new Error('serie ISAC interanual no disponible');
   const pctMonthly=fromApi?monthly:fractionMapToPct(monthly);for(const k of Object.keys(pctMonthly))monthly[k]=round(Number(pctMonthly[k]),1)+0;
   let monthlySaMom;try{monthlySaMom=await saMomFromLevels('33.2_ISAC_SIN_EDAD_0_M_23_56');}catch{}
-  return {status:'ok',source:'INDEC / Datos Argentina — ISAC',sourceUrl,monthlyYoy:monthly,...(monthlySaMom?{monthlySaMom}:{})};
+  return await addIndecNews({status:'ok',source:'INDEC / Datos Argentina — ISAC',sourceUrl,monthlyYoy:monthly,...(monthlySaMom?{monthlySaMom}:{})},'indicador sint[eé]tico de la actividad de la construcci[oó]n(?: \\(ISAC\\))?').then(o=>withCalendarDate(o,/construcci[oó]n \(ISAC\)/i));
 }
 
 async function emaeHistorical(){
@@ -1053,8 +1089,8 @@ export async function latestReleaseFor(env,ctx=null,opts={}){
   let cached=null;
   if(!opts.force){try{const r=await env?.MACRO_STORE?.getWithMetadata?.(RELEASE_KEY,'json');if(r?.value){cached=r.value;if(Date.now()-(r.metadata?.savedAt||0)<10*60*1000){RELEASE_MEMO={at:Date.now(),value:cached};return cached;}}}catch{}}
   const compute=async()=>{
-    const R={};for(const n of ['ipc','arca','salary','icg','autos','rem','bopHistorical','activityPulse','came'])if(BUNDLED_SOURCES[n])R[n]=BUNDLED_SOURCES[n];
-    for(const g of ['core','external','activity']){const snap=await readSnapshot(env,g);for(const n of ['ipc','arca','salary','icg','autos','rem','bopHistorical','activityPulse','came'])if(snap?.sources?.[n])R[n]=snap.sources[n];}
+    const R={};for(const n of ['ipc','arca','salary','icg','autos','rem','bopHistorical','activityPulse','came','industryHistorical','isacHistorical'])if(BUNDLED_SOURCES[n])R[n]=BUNDLED_SOURCES[n];
+    for(const g of ['core','external','activity','history']){const snap=await readSnapshot(env,g);for(const n of ['ipc','arca','salary','icg','autos','rem','bopHistorical','activityPulse','came','industryHistorical','isacHistorical'])if(snap?.sources?.[n])R[n]=snap.sources[n];}
     const value=latestRelease(R);
     if(value){RELEASE_MEMO={at:Date.now(),value};if(env?.MACRO_STORE?.put&&(!cached||JSON.stringify(cached)!==JSON.stringify(value)||opts.force)){try{await env.MACRO_STORE.put(RELEASE_KEY,JSON.stringify(value),{metadata:{savedAt:Date.now()}});}catch{}}}
     return value;

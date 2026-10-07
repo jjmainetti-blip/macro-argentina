@@ -304,3 +304,9 @@ Chequeo: `npm run validate:snapshot`.
   - Dólar: tipo de cambio promedio mensual esperado vs. el oficial mayorista observado.
   - PIB: variación trimestral desestacionalizada esperada vs. la del EMAE desestacionalizado (aproximación del PIB; sólo trimestres completos).
 - Datos: `macro-history.json → remSurveys` trae los relevamientos feb–sep 2026 (archivo histórico del REM del BCRA). Cada REM nuevo se agrega solo: `rem()` resume la tabla del mes con `remSurveyFromRows()` y lo guarda en `rem.surveys` (KV).
+
+## v142 — IPI e ISAC el mismo día que publica INDEC; ISAC en la agenda y en “Último dato publicado”
+- **Por qué no se actualizaban:** el sitio leía IPI e ISAC sólo de la API de Datos Argentina, que incorpora el mes nuevo varios días después del informe de INDEC. Ahora, además, se lee la portada de INDEC (`indec.gob.ar/indec/Portada`), que resume cada informe del día (“En agosto de 2026, el índice … cayó 3,2% respecto a igual mes … la serie desestacionalizada subió 1,9% …”) con `parseIndecNews()`. Si ese mes es más nuevo que el de Datos Argentina, se agrega; cuando Datos Argentina lo publica, su serie lo reemplaza.
+- Agosto 2026 incorporado (y revisiones de 2025–2026 de los cuadros 1 de ambos informes): IPI −3,2% i.a. / +1,9% mensual s.e.; ISAC −4,4% i.a. / +0,4% mensual s.e.
+- **Agenda:** se agregó el ISAC (7 oct, 6 nov y 9 dic) y se corrigió la fecha del IPI de septiembre (6 nov, no 9 nov), según el calendario oficial de INDEC. También se agregó la balanza de pagos del 3T (22 dic).
+- **Último dato publicado:** incluye IPI e ISAC (con la fecha oficial del calendario de INDEC). Si el mismo día se publican varios datos, se muestran juntos.
