@@ -88,18 +88,91 @@ async function mep(){try{return await liveDollar('bolsa')}catch{}try{const h=awa
 // v143 · Compras/ventas de divisas del BCRA (variable 78 de la API de Estadísticas: "Variación de reservas
 // internacionales por compra de divisas", millones de USD, dato diario con 1–3 días hábiles de rezago) y reservas (var. 1).
 let BCRA_FX={at:0,value:null};
-async function bcraFx(){
-  if(BCRA_FX.value&&Date.now()-BCRA_FX.at<30*60*1000)return BCRA_FX.value;
+// v144 · El BCRA informa la compra del día a la prensa al cierre (~17 h), pero la API oficial la incorpora con 2–3 días
+// hábiles de rezago. Para los días que la API todavía no tiene, se toma el monto informado en los titulares del día
+// (Google Noticias, "El BCRA compró US$ 41 millones…"): por cada rueda se usa el monto que más se repite entre medios
+// distintos. Se marca como preliminar y se reemplaza por el dato oficial apenas el BCRA lo publica.
+const AR_OFFSET=-3*3600e3;
+const prevBizDay=d=>{const x=new Date(d+'T12:00:00Z');do{x.setUTCDate(x.getUTCDate()-1);}while([0,6].includes(x.getUTCDay()));return x.toISOString().slice(0,10);};
+export function bcraPressDays(rss){
+  const votes={};
+  for(const m of String(rss||'').matchAll(/<item>[\s\S]*?<title>([\s\S]*?)<\/title>[\s\S]*?<pubDate>([\s\S]*?)<\/pubDate>/g)){
+    const title=m[1].replace(/<!\[CDATA\[|\]\]>/g,'').replace(/&amp;/g,'&').replace(/&quot;/g,'"'),pub=Date.parse(m[2]);if(!Number.isFinite(pub))continue;
+    const head=title.replace(/\s+-\s+[^-]+$/,''),source=(title.match(/\s+-\s+([^-]+)$/)||[])[1]||'';
+    if(/en lo que va|acumul|en la semana|en una semana|semanal/i.test(head))continue;
+    const x=head.match(/(?:BCRA|Banco Central)\s+(?:[a-záéíóúñ]+\s+){0,3}?(compró|adquirió|sumó|vendió|se desprendió de)\s+(?:otros\s+|unos?\s+)?(?:(?:US\$|U\$S|u\$s|USD|US)\s?)?([\d.,]+)\s*(?:millones|milones|M)\b(?:\s+de\s+d[oó]lares)?(.{0,40})/i);if(!x)continue;
+    if(/^\s*(en|durante)\s+(la|el|lo|una|dos|tres|cuatro|cinco|\d+)\s+(semana|mes|d[ií]as|ruedas|jornadas|año)/i.test(x[3]))continue;
+    if(!/(US\$|U\$S|u\$s|USD|US|d[oó]lares)/i.test(x[0]))continue;
+    const v=Number(x[2].replace(/\./g,'').replace(',','.'))*(/vendi|desprendi/i.test(x[1])?-1:1);if(!Number.isFinite(v)||Math.abs(v)>3000)continue;
+    const ar=new Date(pub+AR_OFFSET),hour=ar.getUTCHours();let day=ar.toISOString().slice(0,10);
+    if(hour<15)day=prevBizDay(day);if([0,6].includes(new Date(day+'T12:00:00Z').getUTCDay()))continue;
+    ((votes[day]??={})[v]??=new Set()).add(source.trim().toLowerCase()||title);
+  }
+  const out={};
+  for(const [day,byV] of Object.entries(votes)){const best=Object.entries(byV).sort((a,b)=>b[1].size-a[1].size)[0];const tie=Object.values(byV).filter(z=>z.size===best[1].size).length>1;if(!tie)out[day]={value:Number(best[0]),sources:best[1].size};}
+  return out;
+}
+async function bcraPress(){
+  try{const r=await fetch('https://news.google.com/rss/search?q=%22BCRA%22+OR+%22Banco+Central%22+compr%C3%B3+OR+vendi%C3%B3+millones+when:7d&hl=es-419&gl=AR&ceid=AR:es-419',{headers:{'user-agent':'Mozilla/5.0 (compatible; macrodatos.ar)',accept:'application/rss+xml,text/xml'},cf:{cacheTtl:600,cacheEverything:true}});if(!r.ok)return {};return bcraPressDays(await r.text());}catch{return {};}
+}
+// v145 · Cuenta oficial del BCRA en X (@BancoCentral_AR) vía API v2 (pago por uso: se cobra cada publicación leída).
+// Para gastar lo mínimo: sólo días hábiles entre las 16 y las 21 h (Argentina), como mucho una consulta cada 10 minutos
+// entre todas las instancias (KV), sólo publicaciones nuevas (since_id) y nada si el dato del día ya se obtuvo.
+// Token: secreto X_BEARER_TOKEN del Worker. Estado en KV: x:bcra {userId, sinceId, lastCheck, days{AAAA-MM-DD:{value,reserves,id}}}.
+const X_USER='BancoCentral_AR';
+export function parseBcraPost(text){
+  const t=String(text||'').replace(/\s+/g,' ');
+  const m=t.match(/(compr[oó]|adquiri[oó]|vendi[oó]|incorpor[oó])\s+(?:hoy\s+|en el d[ií]a de hoy\s+|en la jornada de hoy\s+)?(?:un total de\s+)?(?:USD|US\$|U\$S|u\$s)\s?([\d.,]+)\s*(millones|M)\b/i);
+  if(!m){const alt=t.match(/(compras?|ventas?)(?: netas?)? de (?:divisas|d[oó]lares)[^0-9]{0,30}?([+-]?)\s?(?:USD|US\$|U\$S|u\$s)?\s?([\d.,]+)\s*(millones|M)\b/i);
+    if(alt&&!/semana|en lo que va|acumul|en el mes|en el año/i.test(t)){const v=Number(alt[3].replace(/\./g,'').replace(',','.'))*(/venta/i.test(alt[1])||alt[2]==='-'?-1:1);if(Number.isFinite(v)&&Math.abs(v)<=5000){const r=t.match(/reservas[^.]{0,80}?(?:USD|US\$|U\$S|u\$s)\s?([\d.,]+)\s*millones/i);const res=r?Number(r[1].replace(/\./g,'').replace(',','.')):null;return {value:v,reserves:Number.isFinite(res)&&res>1000?res:null};}}
+    return null;}
+  if(/semana|en lo que va|acumul|en el mes|en el año|en (?:dos|tres|cuatro|\d+) (?:ruedas|d[ií]as|jornadas)/i.test(t.slice(Math.max(0,m.index-40),m.index+m[0].length+30)))return null;
+  const v=Number(m[2].replace(/\./g,'').replace(',','.'))*(/vendi/i.test(m[1])?-1:1);if(!Number.isFinite(v)||Math.abs(v)>5000)return null;
+  const r=t.match(/reservas[^.]{0,80}?(?:USD|US\$|U\$S|u\$s)\s?([\d.,]+)\s*millones/i);const res=r?Number(r[1].replace(/\./g,'').replace(',','.')):null;
+  return {value:v,reserves:Number.isFinite(res)&&res>1000?res:null};
+}
+async function bcraX(env){
+  const token=env?.X_BEARER_TOKEN,KV=env?.MACRO_STORE;if(!token||!KV?.get)return {};
+  let st={};try{st=(await KV.get('x:bcra','json'))||{};}catch{}
+  const now=Date.now(),ar=new Date(now-3*3600e3),today=ar.toISOString().slice(0,10),h=ar.getUTCHours(),wd=ar.getUTCDay();
+  const days=st.days||{};
+  const due=wd>=1&&wd<=5&&h>=16&&h<21&&!days[today]&&(!st.lastCheck||now-st.lastCheck>10*60*1000)&&(!st.backoffUntil||now>st.backoffUntil);
+  if(!due)return days;
+  st.lastCheck=now;
+  try{
+    const H={authorization:`Bearer ${token}`,'user-agent':'macrodatos.ar'};
+    if(!st.userId){const r=await fetch(`https://api.x.com/2/users/by/username/${X_USER}`,{headers:H});if(!r.ok)throw new Error(`X user ${r.status}`);st.userId=(await r.json())?.data?.id;if(!st.userId)throw new Error('X: usuario no encontrado');}
+    const q=new URLSearchParams({max_results:'10','tweet.fields':'created_at',exclude:'retweets,replies'});if(st.sinceId)q.set('since_id',st.sinceId);else{q.set('start_time',new Date(now-8*24*3600e3).toISOString());q.set('max_results','25');}
+    const r=await fetch(`https://api.x.com/2/users/${st.userId}/tweets?${q}`,{headers:H});
+    if(r.status===429||r.status===402||r.status===401||r.status===403){st.backoffUntil=now+60*60*1000;st.lastError=`X ${r.status}`;}
+    else if(!r.ok)throw new Error(`X tweets ${r.status}`);
+    else{const j=await r.json();if(j?.meta?.newest_id)st.sinceId=j.meta.newest_id;
+      for(const tw of j?.data||[]){const p=parseBcraPost(tw.text);if(!p)continue;const day=new Date(Date.parse(tw.created_at)-3*3600e3).toISOString().slice(0,10);days[day]={value:p.value,reserves:p.reserves,id:tw.id};}
+      st.lastError=null;}
+  }catch(e){st.lastError=String(e?.message||e);}
+  // Se guardan sólo los últimos 40 días.
+  st.days=Object.fromEntries(Object.entries(days).sort(([a],[b])=>a.localeCompare(b)).slice(-40));
+  try{await KV.put('x:bcra',JSON.stringify(st));}catch{}
+  return st.days;
+}
+async function bcraFx(prev=null,env=null){
+  if(BCRA_FX.value&&Date.now()-BCRA_FX.at<10*60*1000)return BCRA_FX.value;
   const d=new Date(),to=d.toISOString().slice(0,10);d.setUTCDate(d.getUTCDate()-70);const from=d.toISOString().slice(0,10);
   const get=async id=>{const j=await fetchJson(`https://api.bcra.gob.ar/estadisticas/v4.0/monetarias/${id}?desde=${from}&hasta=${to}`,8000);return (j?.results?.[0]?.detalle||[]).filter(x=>x&&x.fecha&&Number.isFinite(Number(x.valor))).map(x=>({date:String(x.fecha).slice(0,10),value:Number(x.valor)})).sort((a,b)=>a.date.localeCompare(b.date));};
-  const [fx,res]=await Promise.allSettled([get(78),get(1)]);
-  const rows=fx.status==='fulfilled'?fx.value:[];if(!rows.length)return null;
+  const [fx,res,press,xdays]=await Promise.allSettled([get(78),get(1),bcraPress(),bcraX(env)]);
+  const off=fx.status==='fulfilled'?fx.value:[];const lastOff=off.at(-1)?.date||'';
+  // Días preliminares: los guardados antes (KV) más los nuevos titulares, sólo posteriores al último dato oficial.
+  const pdays={...(prev?.pressDays||{}),...(press.status==='fulfilled'?press.value:{})};
+  // La publicación del BCRA en X tiene prioridad sobre los titulares de prensa.
+  const xd=xdays.status==='fulfilled'?xdays.value:{};for(const [k,o] of Object.entries(xd))pdays[k]={value:o.value,sources:'x',reserves:o.reserves};
+  const prelim=Object.entries(pdays).filter(([k])=>k>lastOff).map(([date,o])=>({date,value:Number(o.value),prelim:true,sources:o.sources,reserves:o.reserves??null,fromX:o.sources==='x'})).sort((a,b)=>a.date.localeCompare(b.date));
+  const rows=[...off,...prelim];if(!rows.length)return null;
   const last=rows.at(-1),month=last.date.slice(0,7),mtd=rows.filter(r=>r.date.slice(0,7)===month).reduce((a,r)=>a+r.value,0);
-  const prevMonth=(()=>{let [y,m]=month.split('-').map(Number);m--;if(!m){m=12;y--;}return `${y}-${String(m).padStart(2,'0')}`;})();
-  const prevTotal=rows.filter(r=>r.date.slice(0,7)===prevMonth).reduce((a,r)=>a+r.value,0);
-  const ytdRows=rows;// sólo para la serie corta del gráfico
-  const R=res.status==='fulfilled'?res.value.at(-1):null;
-  const value={date:last.date,value:Math.round(last.value*10)/10,monthToDate:Math.round(mtd*10)/10,month,prevMonth,prevMonthTotal:Math.round(prevTotal*10)/10,reserves:R?.value??null,reservesDate:R?.date??null,history:ytdRows.slice(-45),source:'BCRA',updatedAt:new Date().toISOString()};
+  let R=res.status==='fulfilled'?res.value.at(-1):null;const lastX=prelim.filter(p=>p.fromX&&p.reserves).at(-1);if(lastX&&(!R||lastX.date>R.date))R={date:lastX.date,value:lastX.reserves};
+  const keep=Object.fromEntries(prelim.map(r=>[r.date,{value:r.value,sources:r.sources,...(r.reserves?{reserves:r.reserves}:{})}]));
+  // ¿Falta alguna rueda entre el último dato oficial y el último preliminar? Entonces el acumulado del mes es parcial.
+  let mtdPartial=false;if(prelim.length&&lastOff){const have=new Set(rows.map(r=>r.date));let k=lastOff;const x=new Date(k+'T12:00:00Z');while(true){x.setUTCDate(x.getUTCDate()+1);k=x.toISOString().slice(0,10);if(k>last.date)break;if([0,6].includes(x.getUTCDay()))continue;if(k.slice(0,7)===month&&!have.has(k)){mtdPartial=true;break;}}}
+  const value={date:last.date,value:Math.round(last.value*10)/10,preliminary:!!last.prelim,monthToDate:Math.round(mtd*10)/10,mtdPartial,month,officialThrough:lastOff||null,pressDays:keep,reserves:R?.value??null,reservesDate:R?.date??null,history:rows.slice(-45),source:last.prelim?(last.fromX?'BCRA en X (preliminar)':'BCRA (informado a la prensa; preliminar)'):'BCRA',viaX:!!last.fromX,updatedAt:new Date().toISOString()};
   BCRA_FX={at:Date.now(),value};return value;
 }
 async function bna(){
@@ -155,7 +228,7 @@ export default async(request=null,ctx=null,env=null,opts={})=>{
   }
   let prev=null,prevAt=0;
   try{const r=await env?.MACRO_STORE?.getWithMetadata?.(KV_KEY);if(r?.value){prev=JSON.parse(r.value);prevAt=r.metadata?.savedAt||0;if(!opts.force&&Date.now()-prevAt<60000){MEMO={at:prevAt,body:r.value};return json(r.value,'kv');}}}catch{}
-  const [a,b,c,d,e]=await Promise.allSettled([merval(),mep(),risk(),bna(),bcraFx()]);
+  const [a,b,c,d,e]=await Promise.allSettled([merval(),mep(),risk(),bna(),bcraFx(prev?.latest?.bcra,env)]);
   const val=x=>x.status==='fulfilled'?x.value:null,P=prev?.latest||{};
   const latest={merval:newer(val(a),P.merval),dollar:newer(val(b),P.dollar),risk:newer(val(c),P.risk),bna:newer(val(d),P.bna),bcra:newer(val(e),P.bcra)};
   const body=JSON.stringify({version:133,generatedAt:new Date().toISOString(),mode:'live',refreshSeconds:30,latest});

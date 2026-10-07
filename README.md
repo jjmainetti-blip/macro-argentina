@@ -315,3 +315,12 @@ Chequeo: `npm run validate:snapshot`.
 - **Logo:** `public/logo.svg` (cuatro barras ascendentes en azules, vectorial a partir de la imagen enviada) en el encabezado y el pie, sobre un recuadro blanco para que se lea sobre el fondo oscuro; `public/favicon.svg` como ícono del sitio.
 - **Portada:** el título “La economía argentina, en perspectiva.” es más chico y está centrado, con el texto y los botones; “Mercados ahora” pasa debajo, a todo el ancho, con las tarjetas alineadas en una fila (5 en escritorio, 3 en tablet, 2 o 1 en celular).
 - **Compras BCRA:** nueva tarjeta en “Mercados ahora” con la última compra/venta neta de divisas del BCRA (API de Estadísticas del BCRA, variable 78 “Variación de reservas internacionales por compra de divisas”, millones de USD), el acumulado del mes y el nivel de reservas (variable 1). El BCRA publica este dato con 1–3 días hábiles de rezago; la tarjeta muestra la fecha de la operación.
+
+## v144 — compras del BCRA del día (preliminar)
+- La API oficial del BCRA (variable 78) incorpora la compra/venta diaria con 2–3 días hábiles de rezago (hoy, 7/10, llega hasta el 2/10). El BCRA informa el monto a la prensa al cierre de cada rueda, así que para los días que la API todavía no tiene se toma el monto de los titulares del día (Google Noticias, `bcraPressDays()`): por cada rueda se usa el monto que más se repite entre medios distintos, se descartan totales semanales o acumulados y las notas publicadas antes de las 15 h se asignan a la rueda anterior.
+- La tarjeta indica “(preliminar)” mientras el dato no es oficial y lo reemplaza por el del BCRA cuando éste lo publica. Los días preliminares se guardan en KV para que el acumulado del mes no se pierda. Si falta alguna rueda en el acumulado del mes, se marca con “*”.
+
+## v145 — compras del BCRA desde su cuenta de X
+- Fuente principal del dato del día: la publicación de @BancoCentral_AR en X (API v2, `X_BEARER_TOKEN` cargado como secreto del Worker). `parseBcraPost()` toma el monto comprado/vendido y, si figura, el nivel de reservas.
+- Para minimizar el costo (pago por publicación leída): sólo días hábiles de 16 a 21 h, como mucho una consulta cada 10 minutos (control en KV `x:bcra`), sólo publicaciones nuevas (`since_id`) y ninguna consulta cuando el dato del día ya se obtuvo. Ante 401/402/403/429 se suspende una hora.
+- Prioridad: dato oficial del BCRA (API de Estadísticas) > publicación en X > titulares de prensa. `/api/status` muestra el estado de la lectura de X (`xBcra`: última consulta, último error, días leídos).

@@ -28,9 +28,9 @@ export function bcraView(b) {
   const usd = n => `${n > 0 ? '+' : n < 0 ? '−' : ''}US$ ${fmt0.format(Math.abs(n))} M`;
   const [y, m, d] = String(b.date || '').split('-'), mm = +String(b.month || '').slice(5);
   const value = Number(b.value) === 0 ? 'US$ 0 M' : usd(Number(b.value));
-  const mt = Number(b.monthToDate), change = Number.isFinite(mt) && mm ? `${MES[mm - 1]}: ${mt > 0 ? '+' : mt < 0 ? '−' : ''}${fmt0.format(Math.abs(mt))} M` : '—';
+  const mt = Number(b.monthToDate), change = Number.isFinite(mt) && mm ? `${MES[mm - 1]}: ${mt > 0 ? '+' : mt < 0 ? '−' : ''}${fmt0.format(Math.abs(mt))} M${b.mtdPartial ? '*' : ''}` : '—';
   const cls = 'market-change ' + (Number(b.monthToDate) > 0 ? 'positive' : Number(b.monthToDate) < 0 ? 'negative' : 'neutral');
-  const date = `${Number(b.value) < 0 ? 'Vendió' : 'Compró'} el ${d}/${m}/${y}${Number.isFinite(Number(b.reserves)) ? ` · reservas US$ ${fmt0.format(b.reserves)} M` : ''}`;
+  const date = `${Number(b.value) < 0 ? 'Vendió' : 'Compró'} el ${d}/${m}/${y}${b.preliminary ? ' (preliminar)' : ''}${Number.isFinite(Number(b.reserves)) ? ` · reservas US$ ${fmt0.format(b.reserves)} M` : ''}`;
   return { value, change, cls, date };
 }
 // id del elemento → { text, cls? }
