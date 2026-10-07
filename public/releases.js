@@ -74,10 +74,13 @@ export function pickLatest(releases) {
   const valid = (releases || []).map(x => ({ ...x, sortKey: String(x.releaseDate || releaseSortKey(x.date)).slice(0, 10) })).filter(x => x.title && x.value && x.sortKey).sort((a, b) => a.sortKey.localeCompare(b.sortKey));
   const l = valid.at(-1); if (!l) return null;
   const same = []; for (const x of valid) if (x.sortKey === l.sortKey && !same.some(y => y.title === x.title)) same.push(x);
-  if (same.length === 1) return { title: l.title, value: l.value, date: l.displayDate || l.date || l.releaseDate || '', sortKey: l.sortKey };
-  const short = t => t.split(' · ')[0], agencies = [...new Set(same.map(x => x.title.split(' · ')[1]).filter(Boolean))];
+  // v151 · En la portada se muestra sólo el nombre corto del índice (IPI, ISAC, IPC…), sin el valor.
+  const SHORT = { 'IPI manufacturero': 'IPI', 'Construcción (ISAC)': 'ISAC', 'IPC Nacional': 'IPC' };
+  const abbr = t => { const [n, ...rest] = String(t).split(' · '); return [SHORT[n] || n, ...rest].join(' · '); };
+  if (same.length === 1) return { title: abbr(l.title), value: l.value, date: l.displayDate || l.date || l.releaseDate || '', sortKey: l.sortKey };
+  const short = t => abbr(t).split(' · ')[0], agencies = [...new Set(same.map(x => x.title.split(' · ')[1]).filter(Boolean))];
   const names = same.map(x => short(x.title));
-  return { title: `${names.slice(0, -1).join(', ')} y ${names.at(-1)}${agencies.length === 1 ? ` · ${agencies[0]}` : ''}`, value: same.map(x => `${short(x.title)}: ${x.value}`).join(' | '),
+  return { title: `${names.slice(0, -1).join(', ')} ${/^h?i(?!e)/i.test(names.at(-1)) ? 'e' : 'y'} ${names.at(-1)}${agencies.length === 1 ? ` · ${agencies[0]}` : ''}`, value: same.map(x => `${short(x.title)}: ${x.value}`).join(' | '),
     date: (l.displayDate || '').replace(/ · período .*/, '') || l.releaseDate || '', sortKey: l.sortKey, items: same.map(x => short(x.title)) };
 }
 // v138 · Fecha de publicación del dato que muestra cada tarjeta (para ordenar el tablero: la más reciente primero).

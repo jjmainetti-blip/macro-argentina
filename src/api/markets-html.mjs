@@ -56,7 +56,7 @@ export async function homeWithMarkets(request, env, latestBody, release = null, 
   let data = null; try { data = latestBody ? JSON.parse(latestBody) : null; } catch { }
   const view = marketsView(data?.latest);
   // v134: "Último dato publicado" también sale escrito en el HTML.
-  if (release?.title) { view.latestReleaseTitle = { text: release.title }; view.latestReleaseValue = { text: release.value }; view.latestReleaseDate = { text: release.date || '' }; }
+  if (release?.title) { view.latestReleaseTitle = { text: release.title }; view.latestReleaseDate = { text: release.date || '' }; }
   let rw = new HTMLRewriter();
   for (const [id, o] of Object.entries(view)) {
     rw = rw.on(`#${id}`, { element(el) { el.setInnerContent(o.text); if (o.cls) el.setAttribute('class', o.cls); } });

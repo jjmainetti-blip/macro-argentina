@@ -339,3 +339,7 @@ Chequeo: `npm run validate:snapshot`.
 - Se lee primero el texto del posteo y el texto alternativo de la imagen; si no traen el dato, la imagen se lee con **Workers AI** (binding `AI` en wrangler.jsonc; modelos `@cf/meta/llama-4-scout-17b-16e-instruct` y, de respaldo, `@cf/google/gemma-3-12b-it`). Se valida el resultado (compra/venta ≤ 5.000 M, reservas entre 10.000 y 200.000 M) y se toma la fecha escrita en la placa.
 - Como mucho 6 lecturas de imagen por consulta (v150: de la más nueva a la más vieja) y sólo si falta el dato de ese día.
 - `/api/status` → `xBcra.aiConfigured`, `aiError` y, en `recent`, `via` (texto, alt o imagen).
+
+## v151 — "Mercados ahora" arriba del título
+- El panel de mercados pasa arriba del título de la portada, con tarjetas compactas: textos de hora de actualización, fuente y reservas del mes más chicos.
+- "Último dato publicado" muestra sólo el nombre corto del índice (IPI, ISAC, IPC…) y la fecha, sin el valor.
