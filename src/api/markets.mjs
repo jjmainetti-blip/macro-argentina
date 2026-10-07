@@ -184,7 +184,7 @@ export async function bcraX(env){
   let fp=0;for(const c of token)fp=(fp*31+c.charCodeAt(0))>>>0;
   if(st.tokenFp!==fp){st.tokenFp=fp;st.backoffUntil=null;st.lastCheck=null;}
   // v148 · Si cambia el lector de publicaciones, se vuelven a leer los últimos 8 días.
-  const PARSER=3;if(st.parser!==PARSER){st.parser=PARSER;st.sinceId=null;st.lastCheck=null;}
+  const PARSER=4;if(st.parser!==PARSER){st.parser=PARSER;st.sinceId=null;st.lastCheck=null;}
   const now=Date.now(),ar=new Date(now-3*3600e3),today=ar.toISOString().slice(0,10),h=ar.getUTCHours(),wd=ar.getUTCDay();
   const days=st.days||{};
   const due=wd>=1&&wd<=5&&h>=16&&h<21&&!days[today]&&(!st.lastCheck||now-st.lastCheck>10*60*1000)&&(!st.backoffUntil||now>st.backoffUntil);
@@ -200,20 +200,20 @@ export async function bcraX(env){
     else{const j=await r.json();if(j?.meta?.newest_id)st.sinceId=j.meta.newest_id;
       const media=Object.fromEntries((j?.includes?.media||[]).map(m=>[m.media_key,m]));
       const seen=[];let aiUsed=0;
-      // Las más viejas primero, así el día más reciente queda último.
-      for(const tw of [...(j?.data||[])].reverse()){
+      // v150 · Las más nuevas primero: el límite de lecturas de imagen nunca deja afuera el día de hoy.
+      for(const tw of (j?.data||[])){
         const imgs=(tw.attachments?.media_keys||[]).map(k=>media[k]).filter(m=>m&&m.type==='photo');
         const alt=imgs.map(m=>m.alt_text||'').join(' ');
         const dataPost=/#?data\s?bcra|principales variables/i.test(tw.text+' '+alt);
         let p=parseBcraPost(tw.text)||(alt?parseBcraCard(alt)||parseBcraPost(alt):null),via=p?(parseBcraPost(tw.text)?'texto':'alt'):null;
         // v149 · #DataBCRA "Principales variables": el dato viene sólo en la imagen → se lee con Workers AI (binding AI).
         const postDay=new Date(Date.parse(tw.created_at)-3*3600e3).toISOString().slice(0,10);
-        if(!p&&dataPost&&imgs[0]?.url&&env?.AI&&aiUsed<3&&!days[postDay]){aiUsed++;try{p=await readBcraCard(env,imgs[0].url,tw.created_at);via=p?'imagen':null;}catch(e){st.aiError=String(e?.message||e).slice(0,200);}}
+        if(!p&&dataPost&&imgs[0]?.url&&env?.AI&&aiUsed<6&&!days[postDay]){aiUsed++;try{p=await readBcraCard(env,imgs[0].url,tw.created_at);via=p?'imagen':null;}catch(e){st.aiError=String(e?.message||e).slice(0,200);}}
         seen.push({id:tw.id,at:tw.created_at,text:String(tw.text||'').replace(/\s+/g,' ').slice(0,160),alt:alt.slice(0,160)||null,images:imgs.length,dataPost,parsed:p,via});
         if(!p)continue;
-        const day=p.date||postDay;days[day]={value:p.value,reserves:p.reserves,id:tw.id,via};
+        const day=p.date||postDay;if(!days[day])days[day]={value:p.value,reserves:p.reserves,id:tw.id,via};
       }
-      if(seen.length)st.recent=[...seen.reverse(),...(st.recent||[])].slice(0,12);
+      if(seen.length)st.recent=[...seen,...(st.recent||[])].slice(0,12);
       st.lastRead=seen.length;
       st.lastError=null;}
   }catch(e){st.lastError=String(e?.message||e);}
