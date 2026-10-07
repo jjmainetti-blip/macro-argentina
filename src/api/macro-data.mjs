@@ -535,7 +535,7 @@ async function bcra(){
 // v126: además de los datos del texto, se leen las tablas del REM (xlsx) para tener la inflación mensual
 // esperada (mediana) de cada mes. La tarjeta de recaudación la usa para estimar la variación real
 // mientras INDEC no publica el IPC del mes.
-const REM_CPI_FALLBACK={survey:'2026-08',published:'2026-09-03',monthly:{'2026-08':1.7,'2026-09':1.8,'2026-10':1.7,'2026-11':1.6,'2026-12':1.8,'2027-01':1.6,'2027-02':1.6}};
+const REM_CPI_FALLBACK={survey:'2026-09',published:'2026-10-06',monthly:{'2026-09':1.9,'2026-10':1.7,'2026-11':1.62,'2026-12':1.8,'2027-01':1.6,'2027-02':1.6,'2027-03':1.7},next12:21.05,fxDec:{year:2026,value:1614}};
 async function remCpiMonthly(html){
   const links=[...String(html||'').matchAll(/href="([^"]*relevamiento-expectativas-mercado-tablas-(\d{4})-(\d{2})\.xlsx)"/gi)].map(m=>({url:new URL(m[1],URLS.rem).href,ym:`${m[2]}-${m[3]}`})).sort((a,b)=>b.ym.localeCompare(a.ym));
   const cand=links[0]||(()=>{const d=new Date();const p=new Date(Date.UTC(d.getUTCFullYear(),d.getUTCMonth()-1,1));const ym=`${p.getUTCFullYear()}-${String(p.getUTCMonth()+1).padStart(2,'0')}`;return {ym,url:`https://www.bcra.gob.ar/archivos/Pdfs/PublicacionesEstadisticas/informes/relevamiento-expectativas-mercado-tablas-${ym}.xlsx`};})();
@@ -556,17 +556,30 @@ async function remCpiMonthly(html){
       if(ym&&Number.isFinite(med))monthly[ym]=round(med,2);
     }
     if(Object.keys(monthly).length<3)throw new Error('REM: pocas filas mensuales');
-    return {survey:cand.ym,url:cand.url,monthly};
+    // v140: inflación esperada próximos 12 meses (mismo bloque IPC) y tipo de cambio esperado para diciembre del año.
+    let next12=null;for(const r of rows.slice(start+1,start+20)){if(r&&/pr[oó]x\.?\s*12\s*meses/i.test(String(r.find(v=>v!=null)??''))){const i=r.findIndex(v=>/var\.?\s*%\s*i\.?a/i.test(String(v??'')));const v=Number(r[i+1]);if(Number.isFinite(v))next12=round(v,2);break;}}
+    let fxDec=null;const fxStart=rows.findIndex(r=>r&&r.some(v=>/Tipo de cambio nominal/i.test(String(v??''))));
+    if(fxStart>=0)for(const r of rows.slice(fxStart+1,fxStart+20)){const ref=r?.find(v=>/\$\/USD;\s*dic-(\d{2})/i.test(String(v??'')));if(ref){const yy=2000+Number(String(ref).match(/dic-(\d{2})/i)[1]),v=Number(r[r.indexOf(ref)+1]);if(Number.isFinite(v)&&(!fxDec||yy<fxDec.year))fxDec={year:yy,value:Math.round(v)};}}
+    return {survey:cand.ym,url:cand.url,monthly,next12,fxDec};
   }finally{clearTimeout(tm);}
 }
 async function rem(){
   let html='',text='';try{html=await get(URLS.rem);text=strip(html);}catch{}
   const participants=text.match(/contemplando a\s*(\d+)\s*participantes, entre\s*(\d+)\s*consultoras[^\d]+(\d+)\s*entidades financieras/i);
-  const gdp=text.match(/PIB real\s*([\d,]+)%\s*superior al promedio de 2025/i) || text.match(/nivel de PIB real\s*([\d,]+)%\s*superior/i);
-  const fx=text.match(/diciembre de 2026[^$]{0,100}\$\s*([\d\.]+)\/USD/i);
+  // v140: sin años fijos — "nivel de PIB real 1,5% superior al promedio de 2025" → 2026: +1,5%.
+  const gdpM=text.match(/PIB real\s*([\d,]+)%\s*(superior|inferior)\s+al promedio de\s+(20\d{2})/i);
+  const gdp=gdpM?[gdpM[0],(gdpM[2].toLowerCase()==='inferior'?'-':'')+gdpM[1]]:null,gdpYear=gdpM?+gdpM[3]+1:null;
+  const fxM=text.match(/diciembre de\s+(20\d{2})[^$]{0,100}\$\s*([\d\.]+)\/USD/i);
+  const fx=fxM?[fxM[0],fxM[2]]:null,fxYear=fxM?+fxM[1]:null;
   let cpi=null;try{cpi=await remCpiMonthly(html);}catch(e){cpi={...REM_CPI_FALLBACK,fallback:true,error:String(e?.message||e)};}
   if(!text&&cpi.fallback)throw new Error('REM no disponible');
-  return {status:'ok',source:'REM BCRA',sourceUrl:URLS.rem,latest:{participants:participants?+participants[1]:null,consultants:participants?+participants[2]:null,banks:participants?+participants[3]:null,gdp2026:gdp?Number(gdp[1].replace(',','.')):null,fxDec2026:fx?Number(fx[1].replace(/\./g,'')):null},cpiExpected:cpi};
+  const pub=text.match(/publicado el d[ií]a\s+(\d{1,2})\s+de\s+(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)\s+de\s+(20\d{2})/i);
+  const MES={enero:1,febrero:2,marzo:3,abril:4,mayo:5,junio:6,julio:7,agosto:8,septiembre:9,setiembre:9,octubre:10,noviembre:11,diciembre:12};
+  const surveyM=text.match(/RESUMEN EJECUTIVO\s*\|\s*(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)\s+DE\s+(20\d{2})/i);
+  const survey=surveyM?`${surveyM[2]}-${String(MES[surveyM[1].toLowerCase()]).padStart(2,'0')}`:(cpi?.survey||null);
+  // v140: si el texto y el xlsx corresponden a relevamientos distintos, no se mezclan.
+  const sameSurvey=!cpi?.survey||!survey||cpi.survey===survey;
+  return {status:'ok',source:'REM BCRA',sourceUrl:URLS.rem,latest:{survey,published:pub?`${pub[3]}-${String(MES[pub[2].toLowerCase()]).padStart(2,'0')}-${String(+pub[1]).padStart(2,'0')}`:null,participants:participants?+participants[1]:null,consultants:participants?+participants[2]:null,banks:participants?+participants[3]:null,gdpYear,gdp:gdp?Number(gdp[1].replace(',','.')):null,gdp2026:gdp&&gdpYear===2026?Number(gdp[1].replace(',','.')):null,fxDecYear:fxYear||(sameSurvey?cpi?.fxDec?.year:null)||null,fxDec:fx?Number(fx[1].replace(/\./g,'')):(sameSurvey&&cpi?.fxDec?cpi.fxDec.value:null),fxDec2026:fx&&fxYear===2026?Number(fx[1].replace(/\./g,'')):(sameSurvey&&cpi?.fxDec?.year===2026?cpi.fxDec.value:null),inflationNext12:sameSurvey&&Number.isFinite(cpi?.next12)?cpi.next12:null},cpiExpected:cpi};
 }
 async function salaryRipte(){
   // Serie oficial Datos Argentina: mensual desde julio de 1994. Se completa con la publicación vigente de Seguridad Social.

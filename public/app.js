@@ -686,6 +686,23 @@ function applyReleases(S){
     if(S.salary?.status==='ok'&&currentSeries==='salary'&&window.Chart)safeApply('salaryRender',()=>renderHistory('salary'));
     if(window.MacroReleases)showLatestRelease(window.MacroReleases.latestRelease(kpiSourceCache||{}));
 }
+// v140: sección Expectativas con el último REM (antes era texto fijo).
+function applyRemExpectations(S){
+  // Se usa el relevamiento más reciente entre el de la API y el incluido en el sitio (una copia vieja guardada no lo pisa).
+  const cands=[S.rem?.latest,apiKpiSources?.rem?.latest,bundledKpiSources?.rem?.latest].filter(x=>x&&typeof x==='object');
+  const L=cands.sort((a,b)=>String(b.survey||'').localeCompare(String(a.survey||'')))[0];if(!L)return;const set=(id,t)=>{const el=document.getElementById(id);if(el&&t)el.textContent=t;};
+  const MES=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  const sv=/^\d{4}-\d{2}$/.test(L.survey||'')?`${MES[+L.survey.slice(5)-1]} ${L.survey.slice(0,4)}`:'';
+  const svShort=sv?sv.split(' ')[0]:'';
+  const pct=v=>`${new Intl.NumberFormat('es-AR',{minimumFractionDigits:1,maximumFractionDigits:1}).format(v)}%`;
+  const gdp=Number.isFinite(Number(L.gdp))?Number(L.gdp):Number(L.gdp2026),gy=L.gdpYear||2026;
+  if(Number.isFinite(gdp)){set('remGdp',pct(gdp));set('remGdpTitle',`PIB real ${gy}`);set('remGdpNote',`Crecimiento anual esperado en el REM${sv?` de ${svShort}`:''}.`);}
+  const fx=Number.isFinite(Number(L.fxDec))?Number(L.fxDec):Number(L.fxDec2026),fy=L.fxDecYear||2026;
+  if(Number.isFinite(fx)){set('remFx',`$${new Intl.NumberFormat('es-AR',{maximumFractionDigits:0}).format(fx)}`);set('remFxTitle',`USD oficial · dic ${fy}`);}
+  if(Number.isFinite(Number(L.inflationNext12))){set('remInf',pct(Number(L.inflationNext12)));if(sv){const [y,m]=L.survey.split('-').map(Number);set('remInfNote',`Expectativa del REM de ${sv} (hasta ${MES[m-1]} ${y+1}).`);}}
+  const c=document.getElementById('remCallout');
+  if(c&&sv&&L.participants){c.innerHTML=`<strong>REM de ${sv}</strong>${L.published?` (publicado el ${displayDay(L.published)})`:''}: ${L.participants} participantes${L.consultants?`: ${L.consultants} consultoras y centros de investigación`:''}${L.banks?` y ${L.banks} entidades financieras`:''}. Las proyecciones del REM no son pronósticos propios del BCRA.`;}
+}
 function paintAutoStatus(when){const status=document.getElementById('autoStatus');if(!status)return;const S=apiKpiSources||{};const ok=Object.values(S).filter(v=>v?.status==='ok'||v?.status==='snapshot'||v?.status==='partial').length,total=Object.keys(S).length,errors=Object.values(S).filter(v=>v?.status==='error').length;
   status.innerHTML=total?`<strong>Datos verificados</strong><small>Última comprobación: ${when||'—'} · ${ok}/${total} fuentes activas${errors?' · algunos datos usan respaldo':''}</small>`:'<strong>Datos verificados</strong><small>Mostrando el último dato incluido · se reintentará la conexión con las fuentes</small>';}
 function applyMacroSources(when){
@@ -694,6 +711,7 @@ function applyMacroSources(when){
   safeApply('historySources',()=>applyHistorySources(S));
   safeApply('kpiCards',renderKpiCards);
   safeApply('releases',()=>applyReleases(kpiSourceCache||{}));
+  safeApply('remExpectations',()=>applyRemExpectations(kpiSourceCache||{}));
   paintAutoStatus(when);
   safeApply('coverage',updateCoverage);
   if(window.Chart)safeApply('history',()=>renderHistory(currentSeries));
@@ -855,7 +873,7 @@ function loadBundledMacroHistory(){return bundledMacroHistoryPromise??=(async()=
     if(h.bopQuarterly)B.bopHistorical={status:'ok',source:'INDEC — Balanza de pagos (SDMX)',prepared:h.bopPrepared||null,quarterly:h.bopQuarterly};
     if(h.povertySemesters)B.poverty={status:'ok',source:'INDEC — EPH',semesters:h.povertySemesters};
     if(h.cameRetail)B.came=h.cameRetail;
-    if(h.remCpiExpected)B.rem={status:'ok',source:'REM BCRA',cpiExpected:h.remCpiExpected};
+    if(h.remCpiExpected)B.rem={status:'ok',source:'REM BCRA',cpiExpected:h.remCpiExpected,...(h.remLatest?{latest:h.remLatest}:{})};
     if(h.igaMonthly)B.igaHistorical={status:'ok',source:'OJF & Asociados — IGA-OJF',monthly:h.igaMonthly};
     if(h.marketsHistory){for(const k of ['financialHistorical','exchangeHistorical','salary'])if(h.marketsHistory[k])B[k]=h.marketsHistory[k];}
     // v118: ICL, CER y UVA (calculadora) — respaldo local desde el archivo plano del BCRA.
@@ -1015,7 +1033,7 @@ function computeKpiCards(){
    if(L){const pr=L[1],fi=numOrNull(hp.financial?.[L[0]]);C.fiscal={ym:L[0],fiscal:{...A.fiscal,period:displayMonth(L[0])},signal:pr<=0?'red':fi!==null&&fi<=0?'yellow':'green',why:pr<=0?'Déficit primario acumulado.':fi!==null&&fi<=0?'Superávit primario, pero déficit financiero.':'Superávit primario y financiero acumulados.'};}}
   // Cemento: grande interanual; chico volumen del mes (si coincide el período).
   {const L=kpiLastEntries(cementYoyMap(S),1)[0];
-   if(L){const c=A.cement,tons=c&&ymFromSpanishPeriod(c.period)===L[0]&&Number.isFinite(Number(c.tons))?Number(c.tons):null;
+   if(L){const c=S.cement?.latest?.ym===L[0]&&Number.isFinite(Number(S.cement.latest.tons))?{tons:S.cement.latest.tons,period:displayMonth(L[0])}:A.cement,tons=c&&ymFromSpanishPeriod(c.period)===L[0]&&Number.isFinite(Number(c.tons))?Number(c.tons):null;
      C.cement={ym:L[0],value:kpiPct(L[1]),period:`${displayMonth(L[0])} · interanual`,detail:tons!==null?`${new Intl.NumberFormat('es-AR',{maximumFractionDigits:0}).format(tons/1000)} mil toneladas`:'Despachos totales',signal:signalFrom(L[1],0.5,true),why:`Despachos ${L[1]>0?'por encima':L[1]<0?'por debajo':'en línea con'} del mismo mes del año anterior.`};}}
   // Patentamientos: grande interanual; chico unidades del mes.
   {const h=autosHistory(S),L=kpiLastEntries(h,1)[0];

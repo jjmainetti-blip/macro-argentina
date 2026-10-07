@@ -87,14 +87,14 @@ export async function povertyLive() {
 // ---------- Despachos de cemento (AFCP) ----------
 // Se revisan los últimos meses hacia adelante; cada página mensual de AFCP trae la variación interanual.
 export async function cementLive() {
-  const now = new Date(), monthly = {};
+  const now = new Date(), monthly = {}; let latest = null;
   let y = now.getUTCFullYear(), m = now.getUTCMonth() + 1 - 3; if (m < 1) { m += 12; y--; }
   for (let i = 0; i < 4; i++) {
-    try { const x = await cementMonth(y, m); if (x) monthly[x.period] = x.yoy; } catch { }
+    try { const x = await cementMonth(y, m); if (x) { monthly[x.period] = x.yoy; if (!latest || x.period > latest.ym) latest = { ym: x.period, yoy: x.yoy, tons: x.tons ?? null, status: x.status, sourceUrl: x.sourceUrl }; } } catch { }
     m++; if (m === 13) { m = 1; y++; }
   }
   if (!Object.keys(monthly).length) throw new Error('AFCP: sin meses nuevos');
-  return { status: 'ok', source: 'AFCP — Despacho Nacional de Cemento', sourceUrl: 'https://afcp.info/ESTADISTICAS/DATOS-DEFINITIVOS/', monthlyYoy: monthly };
+  return { status: 'ok', source: 'AFCP — Despacho Nacional de Cemento', sourceUrl: 'https://www.afcp.org.ar/despacho-mensual', monthlyYoy: monthly, ...(latest ? { latest } : {}) };
 }
 
 // ---------- v137 · Ventas minoristas pyme (CAME, Índice de Ventas Minoristas) ----------
