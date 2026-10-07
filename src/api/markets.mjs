@@ -138,15 +138,53 @@ export function xTokenShape(raw){
   const kind=/^A{10,}/.test(t)?'bearer (correcto)':/^\d+-[A-Za-z0-9]+$/.test(t)?'parece Access Token (no sirve: hace falta el Bearer Token)':t.length===25&&/^[A-Za-z0-9]+$/.test(t)?'parece API Key (no sirve: hace falta el Bearer Token)':t.length===50&&/^[A-Za-z0-9]+$/.test(t)?'parece API Key Secret o Access Token Secret (no sirve)':/^[A-Za-z0-9_-]{30,40}$/.test(t)?'parece Client ID/Secret de OAuth 2.0 (no sirve)':'desconocido';
   return {length:t.length,kind,cleaned:t!==r,hadSpacesOrQuotes:/^\s|\s$|["'`]/.test(r),hadBearerPrefix:/^\s*["'`]?Bearer\s/i.test(r)};
 }
+// Texto de la placa "Principales variables" (texto alternativo o lectura de la imagen).
+const numBCRA=x=>Number(String(x).replace(/\s/g,'').replace(/\.(?=\d{3}(\D|$))/g,'').replace(',','.'));
+export function parseBcraCard(t){
+  t=String(t||'').replace(/\s+/g,' ');
+  const c1=t.match(/(compras?|ventas?) de divisas(?: netas?)?(?: en millones de USD)?(?:\s*\(\d\))?\s*[:=]\s*([+\-−–]?\s?\d[\d.,]*\d|\d)/i);
+  const c2=c1?null:t.match(/([+\-−–]?\s?\d[\d.,]*\d|\d)\s*(?:millones de USD\s*)?(?:\(\d\)\s*)?(compras?|ventas?) de divisas/i);
+  if(!c1&&!c2)return null;
+  const raw=(c1?c1[2]:c2[1]).replace(/\s/g,''),lab=c1?c1[1]:c2[2],neg=/^[\-−–]/.test(raw)||/venta/i.test(lab);
+  const v=numBCRA(raw.replace(/^[+\-−–]/,''))*(neg?-1:1);if(!Number.isFinite(v)||Math.abs(v)>5000)return null;
+  const r=t.match(/reservas(?: internacionales)?(?: en millones de USD)?(?:\s*\(\d\))?\s*[:=]\s*(?:USD\s*)?(\d[\d.,]*\d)/i)||t.match(/(\d[\d.,]*\d)\s*(?:\(\d\)\s*)?reservas/i);
+  const res=r?numBCRA(r[1]):null;
+  return {value:v,reserves:Number.isFinite(res)&&res>10000&&res<200000?res:null};
+}
+const AI_MODELS=['@cf/meta/llama-4-scout-17b-16e-instruct','@cf/google/gemma-3-12b-it'];
+const MESES={enero:1,febrero:2,marzo:3,abril:4,mayo:5,junio:6,julio:7,agosto:8,septiembre:9,setiembre:9,octubre:10,noviembre:11,diciembre:12};
+async function readBcraCard(env,url,createdAt){
+  const img=await fetch(url+(url.includes('?')?'':'?name=medium'));if(!img.ok)throw new Error(`imagen ${img.status}`);
+  const buf=new Uint8Array(await img.arrayBuffer());let bin='';for(let i=0;i<buf.length;i+=0x8000)bin+=String.fromCharCode(...buf.subarray(i,i+0x8000));
+  const data=`data:${img.headers.get('content-type')||'image/jpeg'};base64,${btoa(bin)}`;
+  const prompt='Esta es una placa del Banco Central de la República Argentina con "Principales variables". Copiá EXACTAMENTE como aparecen escritos (como texto, sin convertir separadores): la fecha, el número de "Reservas en millones de USD" y el número de la fila de compra o venta de divisas, con su signo si lo tiene, y el rótulo de esa fila. Respondé sólo con JSON: {"fecha":"...","reservas":"...","divisas":"...","rotulo":"..."}';
+  let last='';
+  for(const model of AI_MODELS){
+    try{
+      const out=await env.AI.run(model,{messages:[{role:'user',content:[{type:'text',text:prompt},{type:'image_url',image_url:{url:data}}]}],max_tokens:200,temperature:0});
+      const txt=typeof out?.response==='string'?out.response:JSON.stringify(out?.response??out);last=txt;
+      const m=txt.match(/\{[\s\S]*\}/);if(!m)continue;const o=JSON.parse(m[0]);
+      const raw=String(o.divisas||'').replace(/\s/g,''),neg=/^[\-−–]/.test(raw)||/venta|vend/i.test(String(o.rotulo||''));
+      const v=numBCRA(raw.replace(/^[+\-−–]/,''))*(neg?-1:1);if(!Number.isFinite(v)||Math.abs(v)>5000)continue;
+      const res=numBCRA(String(o.reservas||''));
+      // Fecha de la placa ("Miércoles 7 de octubre de 2026"); si no se entiende, se usa la de la publicación.
+      let date=null;const f=String(o.fecha||'').toLowerCase().match(/(\d{1,2})\s+de\s+([a-záéíóú]+)\s+de\s+(20\d{2})/);
+      if(f&&MESES[f[2]])date=`${f[3]}-${String(MESES[f[2]]).padStart(2,'0')}-${f[1].padStart(2,'0')}`;
+      const pub=new Date(Date.parse(createdAt)-3*3600e3).toISOString().slice(0,10);if(date&&(date>pub||date<pub.slice(0,8)+'01'&&date.slice(0,7)!==pub.slice(0,7)))date=null;
+      return {value:v,reserves:Number.isFinite(res)&&res>10000&&res<200000?res:null,date,model};
+    }catch(e){last=String(e?.message||e);}
+  }
+  throw new Error(`IA sin resultado: ${last.slice(0,150)}`);
+}
 async function xErr(r,label){let d='';try{const j=await r.json();d=j?.detail||j?.title||j?.errors?.[0]?.message||'';}catch{}return `${label} ${r.status}${d?`: ${String(d).slice(0,160)}`:''}`;}
-async function bcraX(env){
+export async function bcraX(env){
   const token=cleanXToken(env?.X_BEARER_TOKEN),KV=env?.MACRO_STORE;if(!token||!KV?.get)return {};
   let st={};try{st=(await KV.get('x:bcra','json'))||{};}catch{}
   // Si se cargó un token nuevo, se reintenta enseguida (sin esperar el freno por error anterior).
   let fp=0;for(const c of token)fp=(fp*31+c.charCodeAt(0))>>>0;
   if(st.tokenFp!==fp){st.tokenFp=fp;st.backoffUntil=null;st.lastCheck=null;}
   // v148 · Si cambia el lector de publicaciones, se vuelven a leer los últimos 8 días.
-  const PARSER=2;if(st.parser!==PARSER){st.parser=PARSER;st.sinceId=null;st.lastCheck=null;}
+  const PARSER=3;if(st.parser!==PARSER){st.parser=PARSER;st.sinceId=null;st.lastCheck=null;}
   const now=Date.now(),ar=new Date(now-3*3600e3),today=ar.toISOString().slice(0,10),h=ar.getUTCHours(),wd=ar.getUTCDay();
   const days=st.days||{};
   const due=wd>=1&&wd<=5&&h>=16&&h<21&&!days[today]&&(!st.lastCheck||now-st.lastCheck>10*60*1000)&&(!st.backoffUntil||now>st.backoffUntil);
@@ -155,16 +193,28 @@ async function bcraX(env){
   try{
     const H={authorization:`Bearer ${token}`,'user-agent':'macrodatos.ar'};
     if(!st.userId){const r=await fetch(`https://api.x.com/2/users/by/username/${X_USER}`,{headers:H});if(!r.ok){if([401,402,403,429].includes(r.status))st.backoffUntil=now+30*60*1000;throw new Error(await xErr(r,'X user'));}st.userId=(await r.json())?.data?.id;if(!st.userId)throw new Error('X: usuario no encontrado');}
-    const q=new URLSearchParams({max_results:'10','tweet.fields':'created_at',exclude:'retweets,replies'});if(st.sinceId)q.set('since_id',st.sinceId);else{q.set('start_time',new Date(now-8*24*3600e3).toISOString());q.set('max_results','25');}
+    const q=new URLSearchParams({max_results:'10','tweet.fields':'created_at,attachments',expansions:'attachments.media_keys','media.fields':'url,alt_text,type',exclude:'retweets,replies'});if(st.sinceId)q.set('since_id',st.sinceId);else{q.set('start_time',new Date(now-8*24*3600e3).toISOString());q.set('max_results','25');}
     const r=await fetch(`https://api.x.com/2/users/${st.userId}/tweets?${q}`,{headers:H});
     if(r.status===429||r.status===402||r.status===401||r.status===403){st.backoffUntil=now+60*60*1000;st.lastError=await xErr(r,'X tweets');}
     else if(!r.ok)throw new Error(`X tweets ${r.status}`);
     else{const j=await r.json();if(j?.meta?.newest_id)st.sinceId=j.meta.newest_id;
-      // Muestra de las últimas publicaciones leídas (texto recortado) para revisar el formato en /api/status.
-      const seen=(j?.data||[]).map(tw=>({id:tw.id,at:tw.created_at,text:String(tw.text||'').replace(/\s+/g,' ').slice(0,220),parsed:parseBcraPost(tw.text)}));
-      if(seen.length)st.recent=[...seen,...(st.recent||[])].slice(0,12);
+      const media=Object.fromEntries((j?.includes?.media||[]).map(m=>[m.media_key,m]));
+      const seen=[];let aiUsed=0;
+      // Las más viejas primero, así el día más reciente queda último.
+      for(const tw of [...(j?.data||[])].reverse()){
+        const imgs=(tw.attachments?.media_keys||[]).map(k=>media[k]).filter(m=>m&&m.type==='photo');
+        const alt=imgs.map(m=>m.alt_text||'').join(' ');
+        const dataPost=/#?data\s?bcra|principales variables/i.test(tw.text+' '+alt);
+        let p=parseBcraPost(tw.text)||(alt?parseBcraCard(alt)||parseBcraPost(alt):null),via=p?(parseBcraPost(tw.text)?'texto':'alt'):null;
+        // v149 · #DataBCRA "Principales variables": el dato viene sólo en la imagen → se lee con Workers AI (binding AI).
+        const postDay=new Date(Date.parse(tw.created_at)-3*3600e3).toISOString().slice(0,10);
+        if(!p&&dataPost&&imgs[0]?.url&&env?.AI&&aiUsed<3&&!days[postDay]){aiUsed++;try{p=await readBcraCard(env,imgs[0].url,tw.created_at);via=p?'imagen':null;}catch(e){st.aiError=String(e?.message||e).slice(0,200);}}
+        seen.push({id:tw.id,at:tw.created_at,text:String(tw.text||'').replace(/\s+/g,' ').slice(0,160),alt:alt.slice(0,160)||null,images:imgs.length,dataPost,parsed:p,via});
+        if(!p)continue;
+        const day=p.date||postDay;days[day]={value:p.value,reserves:p.reserves,id:tw.id,via};
+      }
+      if(seen.length)st.recent=[...seen.reverse(),...(st.recent||[])].slice(0,12);
       st.lastRead=seen.length;
-      for(const tw of j?.data||[]){const p=parseBcraPost(tw.text);if(!p)continue;const day=new Date(Date.parse(tw.created_at)-3*3600e3).toISOString().slice(0,10);days[day]={value:p.value,reserves:p.reserves,id:tw.id};}
       st.lastError=null;}
   }catch(e){st.lastError=String(e?.message||e);}
   // Se guardan sólo los últimos 40 días.

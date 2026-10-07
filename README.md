@@ -333,3 +333,9 @@ Chequeo: `npm run validate:snapshot`.
 ## v148 — muestra de publicaciones del BCRA en X
 - `/api/status` → `xBcra.recent` muestra las últimas publicaciones leídas (texto recortado) y si se pudo extraer el dato; `lastRead` indica cuántas trajo la última consulta.
 - Al cambiar el lector de publicaciones se vuelven a leer los últimos 8 días.
+
+## v149 — compras del BCRA desde la placa #DataBCRA
+- El BCRA publica en X la placa "Principales variables" (#DataBCRA): reservas y compra/venta de divisas vienen **en la imagen**, no en el texto.
+- Se lee primero el texto del posteo y el texto alternativo de la imagen; si no traen el dato, la imagen se lee con **Workers AI** (binding `AI` en wrangler.jsonc; modelos `@cf/meta/llama-4-scout-17b-16e-instruct` y, de respaldo, `@cf/google/gemma-3-12b-it`). Se valida el resultado (compra/venta ≤ 5.000 M, reservas entre 10.000 y 200.000 M) y se toma la fecha escrita en la placa.
+- Como mucho 3 lecturas de imagen por consulta y sólo si falta el dato de ese día.
+- `/api/status` → `xBcra.aiConfigured`, `aiError` y, en `recent`, `via` (texto, alt o imagen).

@@ -18,6 +18,8 @@
   "triggers": {
     "crons": ["*/10 * * * *", "5-55/10 * * * *"]
   },
+  // v149: Workers AI para leer la placa #DataBCRA "Principales variables" que el BCRA publica en X (el dato viene en la imagen).
+  "ai": { "binding": "AI" },
   "observability": {
     "enabled": true
   }
