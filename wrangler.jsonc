@@ -3,6 +3,8 @@
   "name": "macro-argentina-dashboard",
   "main": "src/worker.mjs",
   "compatibility_date": "2026-09-27",
+  // v146: conservar las variables y secretos cargados en el panel de Cloudflare al desplegar desde GitHub.
+  "keep_vars": true,
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",
