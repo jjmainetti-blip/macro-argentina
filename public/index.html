@@ -14,10 +14,10 @@
   <meta name="theme-color" content="#071b35">
   <title>Macrodatos | Indicadores económicos de Argentina</title>
   <link rel="icon" type="image/svg+xml" href="favicon.svg?v=143">
-  <link rel="stylesheet" href="styles.css?v=152">
+  <link rel="stylesheet" href="styles.css?v=157">
   <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
   <script type="module" src="releases.js?v=156"></script>
-  <script defer src="app.js?v=153"></script>
+  <script defer src="app.js?v=157"></script>
   <script defer src="uva-calc.js?v=139b"></script>
   <script defer src="update-schedule.js?v=152"></script>
   <script defer src="birth.js?v=155"></script>
@@ -32,7 +32,7 @@
   </a>
   <button class="menu-btn" id="menuBtn" aria-expanded="false" aria-controls="nav">☰<span class="sr-only">Abrir menú</span></button>
   <nav id="nav" aria-label="Navegación principal">
-    <a href="#tablero">Tablero</a><a href="#un-dia-como-hoy">Un día como hoy</a><a href="#tipo-cambio">Tipo de cambio</a><a href="#historicos">Históricos</a><a href="#expectativas">Expectativas</a><a href="#nacimiento">Cuando naciste</a><a href="#agenda">Agenda</a><a href="#calculadoras">Calculadoras</a><a href="#fuentes">Fuentes</a>
+    <a href="#tablero">Tablero</a><a href="#semaforo">Semáforo</a><a href="#un-dia-como-hoy">Un día como hoy</a><a href="#tipo-cambio">Tipo de cambio</a><a href="#historicos">Históricos</a><a href="#expectativas">Expectativas</a><a href="#nacimiento">Cuando naciste</a><a href="#agenda">Agenda</a><a href="#calculadoras">Calculadoras</a><a href="#fuentes">Fuentes</a>
   </nav>
 </header>
 
@@ -83,7 +83,15 @@
 </section>
 
 
-<section class="section alt" id="un-dia-como-hoy" aria-labelledby="otdTitle">
+<section class="section alt" id="semaforo" aria-labelledby="semTitle">
+  <div class="section-title"><div><span class="eyebrow">Semáforo de la economía</span><h2 id="semTitle">Cómo vienen los últimos 5 meses</h2></div><p>Cada punto usa el mismo criterio que la tarjeta del indicador en "Pulso económico". Pasá el cursor (o tocá) un punto para ver el dato.</p></div>
+  <div class="chart-card sem-card"><div class="sem-wrap" id="semaforoTable"><p class="chart-empty">Cargando indicadores…</p></div>
+    <p class="sem-detail" id="semDetail" aria-live="polite">Tocá un punto para ver el dato.</p>
+    <div class="sem-legend"><span><i class="sem-dot sem-green"></i>Favorable</span><span><i class="sem-dot sem-yellow"></i>Neutral</span><span><i class="sem-dot sem-red"></i>Desfavorable</span><span><i class="sem-dot sem-na"></i>Sin dato publicado</span></div>
+    <p class="sem-note">Inflación, mora y confianza: según el cambio respecto del mes anterior. Actividad, industria, construcción, crédito e Índice Líder: variación mensual desestacionalizada (o interanual si no hay serie s.e.). Cemento, ventas pyme, patentamientos y recaudación real: variación interanual. Balanza comercial y resultado fiscal: saldo y su comparación.</p></div>
+</section>
+
+<section class="section" id="un-dia-como-hoy" aria-labelledby="otdTitle">
   <div class="section-title"><div><span class="eyebrow">Un día como hoy</span><h2 id="otdTitle">Efemérides de la economía argentina</h2></div><p>Un hecho económico por cada día del año: planes, devaluaciones, defaults, canjes, leyes, ministros y las ruedas más extremas del mercado.</p></div>
   <div class="otd" id="otd" aria-live="polite">
     <div class="otd-card"><div class="otd-date"><span id="otdDay">—</span><b id="otdYear">—</b><small id="otdAgo"></small></div>
@@ -175,7 +183,7 @@
 </section>
 
 </main>
-<footer><div class="brand"><span class="brand-mark" aria-hidden="true"><img src="logo.svg?v=143" alt="" width="40" height="34"></span><span><strong>MACRODATOS</strong><small>ECONOMÍA ARGENTINA</small></span></div><p>Información económica para análisis. No constituye asesoramiento financiero.</p><a href="#inicio">Volver arriba ↑</a><span class="build-version">macrodatos.ar · v156</span></footer>
+<footer><div class="brand"><span class="brand-mark" aria-hidden="true"><img src="logo.svg?v=143" alt="" width="40" height="34"></span><span><strong>MACRODATOS</strong><small>ECONOMÍA ARGENTINA</small></span></div><p>Información económica para análisis. No constituye asesoramiento financiero.</p><a href="#inicio">Volver arriba ↑</a><span class="build-version">macrodatos.ar · v157</span></footer>
 
 <div id="kpiModal" class="kpi-modal" hidden aria-hidden="true">
   <div class="kpi-modal-backdrop" data-kpi-close></div>

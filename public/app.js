@@ -406,10 +406,18 @@ function rebuildFxDerived(){
   const pOf=ym=>{if(P[ym]!=null)return Number(P[ym]);if(ym>lastP)return Number(P[lastP]);return null;};
   const usKeys=Object.keys(usCpiMonthlyMap).sort();const usOf=ym=>{if(usCpiMonthlyMap[ym]!=null)return Number(usCpiMonthlyMap[ym]);if(usKeys.length&&ym>usKeys.at(-1))return Number(usCpiMonthlyMap[usKeys.at(-1)]);const a=Number(usCpiAnnual[ym.slice(0,4)]);return Number.isFinite(a)?a:null;};
   const pb=pOf(base),ub=usOf(base);
-  const derive=(nom,real,tcr,keyToYm)=>{for(const k of Object.keys(real))delete real[k];for(const k of Object.keys(tcr))delete tcr[k];
-    for(const [k,v] of Object.entries(nom)){const ym=keyToYm(k),p=pOf(ym);if(!p||!pb)continue;const r=Number(v)*pb/p;real[k]=Number(r.toFixed(4));const u=usOf(ym);if(u&&ub)tcr[k]=Number((r*u/ub).toFixed(4));}};
-  derive(fxFreeMonthlyNominal,fxFreeMonthlyReal,fxFreeMonthlyTcr,k=>k);derive(fxOfficialMonthlyNominal,fxOfficialMonthlyReal,fxOfficialMonthlyTcr,k=>k);
-  derive(fxFreeDailyNominal,fxFreeDailyReal,fxFreeDailyTcr,k=>k.slice(0,7));derive(fxOfficialDailyNominal,fxOfficialDailyReal,fxOfficialDailyTcr,k=>k.slice(0,7));
+  const derive=(nom,real,tcr,pFn,uFn)=>{for(const k of Object.keys(real))delete real[k];for(const k of Object.keys(tcr))delete tcr[k];
+    for(const [k,v] of Object.entries(nom)){const p=pFn(k);if(!p||!pb)continue;const r=Number(v)*pb/p;real[k]=Number(r.toFixed(4));const u=uFn(k);if(u&&ub)tcr[k]=Number((r*u/ub).toFixed(4));}};
+  // v157 · Índice DIARIO: el IPC es un promedio mensual, así que se lo ubica a mitad de mes y se interpola
+  // geométricamente día a día entre meses consecutivos. Antes cada día usaba el índice de su mes y, con inflación
+  // de dos dígitos, la serie real daba un salto el día 1 de cada mes (efecto "serrucho"). Pasado el último mes con
+  // dato, el índice queda fijo en ese valor (no se proyecta inflación).
+  const midT=ym=>Date.UTC(+ym.slice(0,4),+ym.slice(5,7)-1,15),ymAdd=(ym,d)=>{const t=+ym.slice(0,4)*12+(+ym.slice(5,7)-1)+d;return `${Math.floor(t/12)}-${String(t%12+1).padStart(2,'0')}`;};
+  const dailyOf=of=>k=>{const ym=k.slice(0,7),t=Date.parse(k+'T00:00:00Z');if(!Number.isFinite(t))return of(ym);const m0=t>=midT(ym)?ym:ymAdd(ym,-1),m1=ymAdd(m0,1),a=of(m0),b=of(m1);
+    if(!a||!b)return of(ym);const w=(t-midT(m0))/(midT(m1)-midT(m0));return a*Math.pow(b/a,w);};
+  const pDay=dailyOf(pOf),uDay=dailyOf(usOf);
+  derive(fxFreeMonthlyNominal,fxFreeMonthlyReal,fxFreeMonthlyTcr,pOf,usOf);derive(fxOfficialMonthlyNominal,fxOfficialMonthlyReal,fxOfficialMonthlyTcr,pOf,usOf);
+  derive(fxFreeDailyNominal,fxFreeDailyReal,fxFreeDailyTcr,pDay,uDay);derive(fxOfficialDailyNominal,fxOfficialDailyReal,fxOfficialDailyTcr,pDay,uDay);
   // 4) Brecha diaria (mismo día; si falta el oficial, el último de los 5 días previos) y mensual.
   for(const k of Object.keys(fxDailyGap))delete fxDailyGap[k];for(const k of Object.keys(fxMonthlyGap))delete fxMonthlyGap[k];
   const offKeys=Object.keys(fxOfficialDailyNominal).sort();let j=0;
@@ -1130,6 +1138,51 @@ function arcaRealYoy(S,ym,nominal){
 }
 // v124: el comunicado de ARCA (latest) puede ser más nuevo que la serie mensual; se incorpora al histórico.
 function arcaHistory(S){const h={...(S?.arca?.history||{})},L=S?.arca?.latest;if(L&&Number.isFinite(Number(L.yoy))){const ym=L.ym||ymFromSpanishPeriod(L.period||'');if(ym&&/^\d{4}-\d{2}$/.test(ym))h[ym]=Number(L.yoy);}return h;}
+// v157 · Semáforo de la economía: para cada indicador mensual, la misma regla de color que su tarjeta de "Pulso
+// económico", aplicada a cada uno de los últimos 5 meses. La inflación figura una vez (IPC nacional del INDEC).
+function semaforoRows(S){
+  const A=S.activityPulse||{},rows=[];
+  const fromMap=(m)=>Object.fromEntries(kpiLastEntries(m,400));
+  const add=(name,agency,fn)=>rows.push({name,agency,fn});
+  // Inflación (INDEC): baja vs mes anterior = verde.
+  {const r=(Array.isArray(S.ipc?.monthly)?S.ipc.monthly:[]).filter(x=>/^\d{4}-\d{2}$/.test(String(x?.date||''))&&Number.isFinite(Number(x.value)));const v=Object.fromEntries(r.map(x=>[x.date,Number(x.value)]));
+   add('Inflación','INDEC',m=>{if(v[m]==null)return null;const p=v[ymShift(m,-1)];const pp=p!=null?v[m]-p:null;return {s:signalFrom(pp,0.1,false),t:`${kpiNum(v[m])}% mensual${pp!=null?` (${signedPpText(pp)})`:''}`};});}
+  const act=(name,agency,src)=>{const sa=fromMap(src?.monthlySaMom),yo=fromMap(src?.monthlyYoy);
+    add(name,agency,m=>sa[m]!=null?{s:signalFrom(sa[m],0.1,true),t:`${kpiPct(sa[m])} mensual s.e.${yo[m]!=null?` · ${kpiPct(yo[m])} interanual`:''}`}:yo[m]!=null?{s:signalFrom(yo[m],0.5,true),t:`${kpiPct(yo[m])} interanual`}:null);};
+  act('Actividad (EMAE)','INDEC',S.emaeHistorical);
+  act('Industria (IPI)','INDEC',S.industryHistorical);
+  act('Construcción (ISAC)','INDEC',S.isacHistorical);
+  {const H=S.igaHistorical?.monthly||{};act('Actividad (IGA-OJF)','OJF',{monthlySaMom:Object.fromEntries(Object.entries(H).map(([k,v])=>[k,v?.momSa])),monthlyYoy:Object.fromEntries(Object.entries(H).map(([k,v])=>[k,v?.yoy]))});}
+  {const c=fromMap(cementYoyMap(S));add('Despachos de cemento','AFCP',m=>c[m]!=null?{s:signalFrom(c[m],0.5,true),t:`${kpiPct(c[m])} interanual`}:null);}
+  {const c=fromMap(S.came?.monthlyYoy);add('Ventas minoristas pyme','CAME',m=>c[m]!=null?{s:signalFrom(c[m],0.5,true),t:`${kpiPct(c[m])} interanual real`}:null);}
+  {const h=fromMap(autosHistory(S));add('Patentamientos 0 km','ACARA',m=>{if(h[m]==null)return null;const p=h[ymShift(m,-12)];const y=p?(h[m]/p-1)*100:null;return y==null?null:{s:signalFrom(y,0.5,true),t:`${kpiPct(y)} interanual`};});}
+  {const h=fromMap(arcaHistory(S));add('Recaudación','ARCA',m=>{if(h[m]==null)return null;const R=arcaRealYoy(S,m,h[m]);return R?{s:signalFrom(R.real,0.5,true),t:`${kpiPct(R.real)} interanual real${R.estimated?' (IPC estimado)':''}`}:{s:'yellow',t:`${kpiPct(h[m])} interanual nominal (sin IPC para deflactar)`};});}
+  {const c=fromMap(S.creditHistorical?.monthlySaRealMom);add('Crédito en pesos','BCRA',m=>c[m]!=null?{s:signalFrom(c[m],0.1,true),t:`${kpiPct(c[m])} real mensual s.e.`}:null);}
+  {const c=fromMap(S.arrearsHistorical?.monthlyTotal);add('Mora bancaria','BCRA',m=>{if(c[m]==null)return null;const p=c[ymShift(m,-1)],pp=p!=null?c[m]-p:null;return {s:signalFrom(pp,0.1,false),t:`${kpiNum(c[m])}% de irregularidad${pp!=null?` (${signedPpText(pp)})`:''}`};});}
+  {const c=fromMap(tradeBalanceMonthly);add('Balanza comercial','INDEC',m=>{if(c[m]==null)return null;const p=c[ymShift(m,-12)],d=p!=null?c[m]-p:null,sup=c[m]>=0;const f=new Intl.NumberFormat('es-AR',{maximumFractionDigits:0});return {s:!sup?'red':d!=null&&d<0?'yellow':'green',t:`${sup?'Superávit':'Déficit'} de USD ${f.format(Math.abs(c[m]))} M`};});}
+  {const hp=A.fiscal?.historyPctGDP||{},pr=fromMap(hp.primary),fi=fromMap(hp.financial);add('Resultado fiscal','Economía',m=>{if(pr[m]==null)return null;const f=fi[m];return {s:pr[m]<=0?'red':f!=null&&f<=0?'yellow':'green',t:`Primario ${kpiNum(pr[m])}% del PIB${f!=null?` · financiero ${kpiNum(f)}%`:''} (acumulado)`};});}
+  {const h=fromMap(S.icg?.history);add('Confianza en el gobierno','UTDT',m=>{if(h[m]==null)return null;const p=h[ymShift(m,-1)],mom=p?(h[m]/p-1)*100:null;return {s:signalFrom(mom,1,true),t:`${new Intl.NumberFormat('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2}).format(h[m])} puntos${mom!=null?` (${kpiPct(mom)})`:''}`};});}
+  {const H=S.ilaHistorical?.monthly||{};const c=fromMap(Object.fromEntries(Object.entries(H).map(([k,v])=>[k,v?.mom])));add('Índice Líder (ILA)','UTDT',m=>c[m]!=null?{s:signalFrom(c[m],0.1,true),t:`${kpiPct(c[m])} mensual`}:null);}
+  return rows;
+}
+function renderSemaforo(){
+  const box=document.getElementById('semaforoTable');if(!box)return;
+  let rows=[];try{rows=semaforoRows(kpiSourceCache||{});}catch(e){console.warn('semaforo',e);return;}
+  // Columnas: los 5 meses más recientes con algún dato (el último mes con datos de al menos 3 indicadores).
+  const cur=new Date(Date.now()-3*3600e3),curYm=`${cur.getUTCFullYear()}-${String(cur.getUTCMonth()+1).padStart(2,'0')}`;
+  let last=null;for(let k=ymShift(curYm,-1),i=0;i<6&&!last;i++,k=ymShift(k,-1)){if(rows.filter(r=>{try{return r.fn(k)}catch{return null}}).length>=3)last=k;}
+  if(!last){box.innerHTML='<p class="chart-empty">Cargando indicadores…</p>';return;}
+  const months=[4,3,2,1,0].map(d=>ymShift(last,-d));
+  const LBL={green:'Favorable',yellow:'Neutral',red:'Desfavorable'},esc=t=>String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const head=`<tr><th scope="col">Indicador</th>${months.map(m=>`<th scope="col">${MONTH_LABELS[+m.slice(5)-1]} ${m.slice(2,4)}</th>`).join('')}</tr>`;
+  const body=rows.map(r=>{const cells=months.map(m=>{let x=null;try{x=r.fn(m);}catch{}
+      if(!x)return `<td><span class="sem-dot sem-na" title="${esc(`${r.name} · ${displayMonth(m)}: sin dato publicado`)}"></span></td>`;
+      const tip=`${r.name} · ${displayMonth(m)}: ${x.t} — ${LBL[x.s]}`;return `<td><span class="sem-dot sem-${x.s}" title="${esc(tip)}" aria-label="${esc(tip)}" tabindex="0"></span></td>`;}).join('');
+    return `<tr><th scope="row">${esc(r.name)}<small>${esc(r.agency)}</small></th>${cells}</tr>`;}).join('');
+  box.innerHTML=`<table class="sem-table"><thead>${head}</thead><tbody>${body}</tbody></table>`;
+  if(!box.dataset.wired){box.dataset.wired='1';const show=e=>{const d=e.target.closest?.('.sem-dot');if(!d)return;const out=document.getElementById('semDetail');if(out)out.textContent=d.getAttribute('title')||'';box.querySelectorAll('.sem-dot.sel').forEach(x=>x.classList.remove('sel'));d.classList.add('sel');};
+    box.addEventListener('click',show);box.addEventListener('focusin',show);box.addEventListener('mouseover',show);}
+}
 function renderKpiCards(){
   document.querySelectorAll('.kpi[data-kpi]').forEach((c,i)=>{if(c.dataset.order===undefined)c.dataset.order=String(i);const k=c.dataset.kpi;if(!kpiInitial[k])kpiInitial[k]={period:c.querySelector('[data-period]')?.textContent||'',detail:c.querySelector('[data-detail]')?.textContent||''};
     if(!c.dataset.ym){const ym=ymFromSpanishPeriod(kpiInitial[k].period);const sem=kpiInitial[k].period.match(/([12])S\s*(20\d{2})/);c.dataset.ym=ym||(sem?`${sem[2]}-${sem[1]==='1'?'06':'12'}`:'');}});
@@ -1139,6 +1192,7 @@ function renderKpiCards(){
       card.dataset.ym=x.ym;setKpiSignal(card,x.signal,x.why);
       const pub=window.MacroReleases?.cardPublication?.(key,x.ym,kpiSourceCache||{},window.__CARD_PUB__||{});if(pub){card.dataset.pub=pub.date;card.dataset.pubBasis=pub.basis;}}catch(e){console.warn('kpi',key,e);}}
   sortKpiGrid();
+  try{renderSemaforo();}catch(e){console.warn('semaforo',e);}
   if(typeof applyCardStatus==='function')applyCardStatus();
 }
 

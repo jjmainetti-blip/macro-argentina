@@ -368,3 +368,8 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 - La fecha de publicación sale del Last-Modified del PDF; con ella el IPC CABA entra en "Último dato publicado".
 - Calendario habitual del IPCBA: día 8 del mes siguiente (antes 15), para que el sitio lo busque con prioridad desde ese día.
 - Septiembre 2026 (1,8% mensual; 32,9% interanual) agregado al respaldo local.
+
+## v157 — IPC CABA en "Último dato publicado", dólar real sin serrucho y semáforo
+- IPC CABA: si Datos Argentina no responde (se cortaba por tiempo y anulaba todo), se parte del respaldo local y se completa igual con el informe de IDECBA. El informe del último mes se lee también cuando ya está en la serie, para obtener la fecha de publicación; se guarda en memoria 6 h por mes.
+- Dólar en pesos constantes y TCR (series diarias): índice de precios diario interpolado geométricamente entre los meses (IPC ubicado a mitad de mes; igual para el CPI de EE.UU.). Elimina el salto del día 1 de cada mes con inflación alta.
+- Nueva sección "Semáforo de la economía" debajo de "Pulso económico": 15 indicadores mensuales × últimos 5 meses, con la misma regla de color que cada tarjeta; detalle al pasar el cursor o tocar cada punto. La inflación figura una sola vez (IPC nacional del INDEC).

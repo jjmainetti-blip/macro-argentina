@@ -139,3 +139,20 @@
 .share-btn{display:inline-flex;align-items:center;border:1px solid #cfdbe8;background:#fff;color:var(--navy);border-radius:8px;padding:6px 11px;font:inherit;font-size:12px;font-weight:700;text-decoration:none;cursor:pointer}.share-btn:hover{border-color:#8fb3dd}.share-btn.wa{background:#25d366;border-color:#25d366;color:#fff}.share-btn.wa:hover{background:#1ebe5a}
 .result .upd-schedule strong{font-size:inherit}.upd-table td strong{font-size:12.5px;color:var(--navy)}.upd-current strong,.upd-next strong{font-size:15px}
 .upd-note{display:block;font-size:10.5px;color:#7a8ca1;margin-top:6px}
+
+/* v157 · Semáforo de la economía */
+.sem-card{padding:18px 20px}.sem-wrap{overflow-x:auto}
+.sem-table{width:100%;border-collapse:collapse;font-size:13px;min-width:520px}
+.sem-table th,.sem-table td{padding:9px 10px;border-bottom:1px solid #edf2f7;text-align:center}
+.sem-table thead th{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:800;background:#f6f9fc}
+.sem-table th[scope=row]{text-align:left;font-weight:700;color:var(--navy);white-space:nowrap}.sem-table th[scope=row] small{display:block;font-size:10px;font-weight:600;color:var(--muted);letter-spacing:.03em}
+.sem-table thead th:first-child{text-align:left}
+.sem-dot{display:inline-block;width:16px;height:16px;border-radius:50%;vertical-align:middle;cursor:help}
+.sem-green{background:#1f9d55;box-shadow:0 0 0 3px rgba(31,157,85,.15)}.sem-yellow{background:#e0a100;box-shadow:0 0 0 3px rgba(224,161,0,.16)}.sem-red{background:#d64545;box-shadow:0 0 0 3px rgba(214,69,69,.15)}
+.sem-na{background:transparent;border:2px dashed #c9d5e3;width:14px;height:14px}
+.sem-legend{display:flex;flex-wrap:wrap;gap:16px;margin-top:14px;font-size:12px;color:var(--muted)}.sem-legend span{display:inline-flex;align-items:center;gap:7px}.sem-legend .sem-dot{width:12px;height:12px;cursor:default}.sem-legend .sem-na{width:10px;height:10px}
+.sem-note{margin:10px 0 0;font-size:11.5px;color:#6b7c90;line-height:1.5}
+@media(max-width:620px){.sem-table{font-size:12px}.sem-table th,.sem-table td{padding:8px 6px}.sem-dot{width:14px;height:14px}}
+.sem-detail{margin:12px 0 0;min-height:20px;font-size:13px;color:var(--navy);font-weight:600}.sem-dot.sel{outline:2px solid var(--navy);outline-offset:3px}
+.sem-table th[scope=row]{position:sticky;left:0;background:#fff;z-index:1}.sem-table thead th:first-child{position:sticky;left:0;z-index:2}
+@media(max-width:620px){.sem-card{padding:12px 10px}.sem-table{min-width:0;table-layout:fixed}.sem-table thead th{font-size:9.5px;letter-spacing:.02em;padding:7px 2px}.sem-table thead th:first-child{width:34%}.sem-table th[scope=row]{white-space:normal;font-size:11.5px;line-height:1.25;padding:7px 4px}.sem-table td{padding:7px 2px}}
