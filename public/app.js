@@ -1175,3 +1175,16 @@ loadMarketsDaily().then(()=>loadFxDaily());
   document.addEventListener('keydown',e=>{if(e.key==='Escape')set(false);});
   window.addEventListener('resize',()=>{if(window.innerWidth>900)set(false);});
 })();
+// v153 · Enlaces con ancla (p. ej. macrodatos.ar/#calculadoras): el navegador salta a la sección apenas carga, pero
+// después los gráficos y tarjetas de arriba crecen y la empujan hacia abajo. Mientras la página termina de cargar se
+// mantiene la sección pedida en pantalla; se deja de hacerlo cuando la persona se mueve o a los 12 segundos.
+(function keepHashTarget(){
+  const id=decodeURIComponent((location.hash||'').slice(1));if(!id)return;
+  const el=document.getElementById(id);if(!el)return;
+  try{if('scrollRestoration' in history)history.scrollRestoration='manual';}catch{}
+  let active=true;const stop=()=>{active=false;ro?.disconnect();};
+  const align=()=>{if(!active)return;const top=el.getBoundingClientRect().top;if(Math.abs(top-(parseFloat(getComputedStyle(el).scrollMarginTop)||0))>4)el.scrollIntoView({block:'start'});};
+  for(const ev of ['wheel','touchstart','keydown','mousedown'])window.addEventListener(ev,stop,{once:true,passive:true});
+  const ro=window.ResizeObserver?new ResizeObserver(align):null;ro?.observe(document.body);
+  align();window.addEventListener('load',align);setTimeout(stop,12000);
+})();

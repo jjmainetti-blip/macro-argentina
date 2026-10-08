@@ -348,3 +348,6 @@ Chequeo: `npm run validate:snapshot`.
 - Gráfico del dólar: opción "Mostrar promedio del período" (línea punteada) para el rango elegido (5/10/20 años, máximo o fechas propias). El promedio se pondera por tiempo para que los tramos anuales, mensuales y diarios cuenten según el período que cubren. El resumen indica cuánto está el último dato por encima o por debajo del promedio.
 - Calculadora de actualización: frecuencia de ajuste (mensual, bimestral, trimestral, cuatrimestral, semestral, anual u otra) con la tabla de todos los ajustes del período (índice, ajuste, acumulado y monto), el monto vigente y la fecha del próximo ajuste. Botones para compartir por WhatsApp, mail, copiar o el menú del sistema (public/update-schedule.js).
 - Portada: el HTML se pide a los assets sin encabezados condicionales y sale con `cache-control: no-store`, sin ETag ni Last-Modified. Antes, un 304 hacía que el navegador reusara una copia vieja con valores de mercado de días atrás. También se pide el dato al instante si la página vuelve del caché de atrás/adelante.
+
+## v153 — enlaces con ancla
+- `macrodatos.ar/#calculadoras` (y cualquier otra sección) llega a la sección pedida: mientras la página termina de cargar se mantiene en pantalla aunque los gráficos de arriba crezcan; se deja de hacerlo cuando la persona se mueve o a los 12 s.
