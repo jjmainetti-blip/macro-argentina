@@ -379,3 +379,6 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 - Errores de lectura de IDECBA visibles: `/api/status` → `ipcCaba` (fuente, último mes, latest, idecbaError) y `/api/status?probe=idecba` prueba en vivo la conexión con IDECBA y la lectura del PDF del último mes.
 - Un fallo de IDECBA se reintenta a los 10 minutos (antes 1 hora); tiempos de espera de 30 s (página) y 40 s (PDF).
 - Una fuente que se actualiza bien deja de arrastrar el `refreshError` de un intento anterior.
+
+## v159 — lectura del PDF de IDECBA en Cloudflare
+- En Workers, DecompressionStream descarta el stream completo si hay bytes sobrantes después de los datos comprimidos (el salto de línea antes de `endstream`). Ahora cada stream se recorta con su `/Length` (o quitando esos saltos de línea) y se omiten los ASCII85 (imágenes). Probado simulando el comportamiento estricto: antes 0 caracteres; ahora el texto completo.

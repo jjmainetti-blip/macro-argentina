@@ -11,10 +11,15 @@ export async function pdfText(buf, maxStreams = 60) {
     let start = s + 6; if (latin[start] === '\r') start++; if (latin[start] === '\n') start++;
     const e = latin.indexOf('endstream', start); if (e < 0) break;
     pos = e + 9;
-    if (!/FlateDecode/.test(dict) || /\/Subtype\s*\/(Image|Type1C|CIDFontType0C)|\/Length1|\/Length2/.test(dict)) continue;
+    if (!/FlateDecode/.test(dict) || /ASCII85|ASCIIHex|\/Subtype\s*\/(Image|Type1C|CIDFontType0C)|\/Length1|\/Length2/.test(dict)) continue;
     n++;
+    // v159 · Se recorta el stream exacto: /Length directo si está, o se quitan los saltos de línea previos a
+    // "endstream". En Cloudflare Workers, DecompressionStream descarta todo el stream si hay bytes sobrantes al final.
+    const L = dict.match(/\/Length\s+(\d+)(?!\s+\d+\s+R)/);
+    let end = L ? Math.min(start + Number(L[1]), e) : e;
+    if (!L) while (end > start && (u8[end - 1] === 10 || u8[end - 1] === 13)) end--;
     try {
-      const txt = await inflate(u8.subarray(start, e));
+      const txt = await inflate(u8.subarray(start, end));
       if (!/T[jJ]/.test(txt)) continue;
       out.push(contentText(txt));
     } catch { }
