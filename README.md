@@ -373,3 +373,9 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 - IPC CABA: si Datos Argentina no responde (se cortaba por tiempo y anulaba todo), se parte del respaldo local y se completa igual con el informe de IDECBA. El informe del último mes se lee también cuando ya está en la serie, para obtener la fecha de publicación; se guarda en memoria 6 h por mes.
 - Dólar en pesos constantes y TCR (series diarias): índice de precios diario interpolado geométricamente entre los meses (IPC ubicado a mitad de mes; igual para el CPI de EE.UU.). Elimina el salto del día 1 de cada mes con inflación alta.
 - Nueva sección "Semáforo de la economía" debajo de "Pulso económico": 15 indicadores mensuales × últimos 5 meses, con la misma regla de color que cada tarjeta; detalle al pasar el cursor o tocar cada punto. La inflación figura una sola vez (IPC nacional del INDEC).
+
+## v158 — IPC CABA en "Último dato publicado" (causa real)
+- El "Último dato publicado" del servidor (KV release:latest y HTML inicial) se arma con una lista fija de fuentes y no incluía `ipcCaba`. Agregada.
+- Errores de lectura de IDECBA visibles: `/api/status` → `ipcCaba` (fuente, último mes, latest, idecbaError) y `/api/status?probe=idecba` prueba en vivo la conexión con IDECBA y la lectura del PDF del último mes.
+- Un fallo de IDECBA se reintenta a los 10 minutos (antes 1 hora); tiempos de espera de 30 s (página) y 40 s (PDF).
+- Una fuente que se actualiza bien deja de arrastrar el `refreshError` de un intento anterior.

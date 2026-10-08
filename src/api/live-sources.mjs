@@ -93,10 +93,16 @@ export async function ipcCabaLive() {
       out.source = `IDECBA — IPCBA Nivel General (informe de resultados; serie histórica vía ${base})`;
     }
   } catch (e) { out.idecbaError = String(e?.message || e).slice(0, 160); }
+  if (!out.latest?.published && IPCBA_LAST_ERR.v) out.idecbaError = IPCBA_LAST_ERR.v;
   return out;
 }
+// Prueba de conexión con IDECBA (para /api/status?probe=idecba).
+export async function probeIdecba() {
+  const t0 = Date.now(), now = new Date(Date.now() - 3 * 3600e3), m = now.getUTCMonth() === 0 ? 12 : now.getUTCMonth(), y = now.getUTCMonth() === 0 ? now.getUTCFullYear() - 1 : now.getUTCFullYear();
+  try { const r = await ipcbaReportFetch(ym(y, m)); return { ok: !!r, ms: Date.now() - t0, result: r }; } catch (e) { return { ok: false, ms: Date.now() - t0, error: String(e?.message || e) }; }
+}
 // Memoria por isolate: el informe de un mes se descarga una sola vez cada 6 h.
-const IPCBA_MEMO = new Map();
+const IPCBA_MEMO = new Map(), IPCBA_LAST_ERR = { v: null };
 const MES_SLUG = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 export function parseIpcbaReport(text, mesName) {
   const t = String(text || '').replace(/\s+/g, ' ').replace(/ - /g, '');
@@ -109,19 +115,20 @@ export function parseIpcbaReport(text, mesName) {
   return { mom, yoy: n(yoy), ytd: n(ytd) };
 }
 async function ipcbaReport(period) {
-  const hit = IPCBA_MEMO.get(period); if (hit && Date.now() - hit.at < (hit.v ? 6 : 1) * 3600e3) return hit.v;
-  const v = await ipcbaReportFetch(period).catch(() => null); IPCBA_MEMO.set(period, { at: Date.now(), v }); return v;
+  const hit = IPCBA_MEMO.get(period); if (hit && Date.now() - hit.at < (hit.v ? 6 * 3600e3 : 10 * 60e3)) { if (!hit.v && hit.err) IPCBA_LAST_ERR.v = hit.err; return hit.v; }
+  let v = null, err = null; try { v = await ipcbaReportFetch(period); if (!v) err = 'informe sin el dato'; } catch (e) { err = String(e?.message || e).slice(0, 140); }
+  IPCBA_MEMO.set(period, { at: Date.now(), v, err }); if (err) IPCBA_LAST_ERR.v = `${period}: ${err}`; return v;
 }
 async function ipcbaReportFetch(period) {
   const [y, m] = period.split('-').map(Number), mes = MES_SLUG[m - 1];
   const page = `https://www.estadisticaciudad.gob.ar/eyc/publicaciones/ipcba-ciudad-de-buenos-aires-${mes}-de-${y}/`;
-  const r = await fetchWithTimeout(page, {}, 15000); if (!r.ok) return null;
+  let r; try { r = await fetchWithTimeout(page, {}, 30000); } catch (e) { if (/^404 /.test(String(e?.message))) return null; throw new Error(`página: ${e?.message || e}`); }
   const html = await r.text();
   const pdf = (html.match(/https?:\/\/www\.estadisticaciudad\.gob\.ar\/eyc\/wp-content\/uploads\/\d{4}\/\d{2}\/ir_\d{4}_\d+\.pdf/) || [])[0];
-  if (!pdf) return null;
-  const pr = await fetchWithTimeout(pdf, {}, 25000); if (!pr.ok) return null;
+  if (!pdf) throw new Error('página sin enlace al PDF');
+  let pr; try { pr = await fetchWithTimeout(pdf, {}, 40000); } catch (e) { throw new Error(`PDF: ${e?.message || e}`); }
   const { pdfText } = await import('./pdf-text.mjs');
-  const x = parseIpcbaReport(await pdfText(await pr.arrayBuffer(), 400), mes); if (!x) return null;
+  const x = parseIpcbaReport(await pdfText(await pr.arrayBuffer(), 400), mes); if (!x) throw new Error('no se encontró la variación mensual en el PDF');
   // Fecha de publicación: Last-Modified del PDF (momento en que IDECBA lo subió), en hora argentina.
   let pd = null; const lm = Date.parse(pr.headers.get('last-modified') || '');
   if (Number.isFinite(lm)) pd = new Date(lm - 3 * 3600e3).toISOString().slice(0, 10);

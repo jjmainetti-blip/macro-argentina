@@ -1089,8 +1089,8 @@ export async function latestReleaseFor(env,ctx=null,opts={}){
   let cached=null;
   if(!opts.force){try{const r=await env?.MACRO_STORE?.getWithMetadata?.(RELEASE_KEY,'json');if(r?.value){cached=r.value;if(Date.now()-(r.metadata?.savedAt||0)<10*60*1000){RELEASE_MEMO={at:Date.now(),value:cached};return cached;}}}catch{}}
   const compute=async()=>{
-    const R={};for(const n of ['ipc','arca','salary','icg','autos','rem','bopHistorical','activityPulse','came','industryHistorical','isacHistorical'])if(BUNDLED_SOURCES[n])R[n]=BUNDLED_SOURCES[n];
-    for(const g of ['core','external','activity','history']){const snap=await readSnapshot(env,g);for(const n of ['ipc','arca','salary','icg','autos','rem','bopHistorical','activityPulse','came','industryHistorical','isacHistorical'])if(snap?.sources?.[n])R[n]=snap.sources[n];}
+    const R={};for(const n of ['ipc','ipcCaba','arca','salary','icg','autos','rem','bopHistorical','activityPulse','came','industryHistorical','isacHistorical'])if(BUNDLED_SOURCES[n])R[n]=BUNDLED_SOURCES[n];
+    for(const g of ['core','external','activity','history']){const snap=await readSnapshot(env,g);for(const n of ['ipc','ipcCaba','arca','salary','icg','autos','rem','bopHistorical','activityPulse','came','industryHistorical','isacHistorical'])if(snap?.sources?.[n])R[n]=snap.sources[n];}
     const value=latestRelease(R);
     if(value){RELEASE_MEMO={at:Date.now(),value};if(env?.MACRO_STORE?.put&&(!cached||JSON.stringify(cached)!==JSON.stringify(value)||opts.force)){try{await env.MACRO_STORE.put(RELEASE_KEY,JSON.stringify(value),{metadata:{savedAt:Date.now()}});}catch{}}}
     return value;
@@ -1136,7 +1136,7 @@ export default async(env={},ctx=null,request=null,opts={})=>{
   const results=await Promise.allSettled(names.map(n=>Promise.resolve().then(JOBS[n])));
   results.forEach((j,i)=>{
     const name=names[i],old=previous?.sources?.[name];
-    if(j.status==='fulfilled'){out.sources[name]=mergeSnapshot(old,j.value);}
+    if(j.status==='fulfilled'){const m=mergeSnapshot(old,j.value);if(m&&typeof m==='object'){delete m.refreshError;delete m.snapshotFallback;if(j.value&&!('idecbaError' in j.value))delete m.idecbaError;}out.sources[name]=m;}
     else if(old){out.sources[name]={...old,status:old.status==='error'?'snapshot':'ok',snapshotFallback:true,refreshError:String(j.reason?.message||j.reason)};}
     else out.sources[name]={status:'error',error:String(j.reason?.message||j.reason)};
   });
