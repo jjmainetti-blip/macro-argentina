@@ -50,7 +50,11 @@ export function marketsView(L) {
 }
 
 export async function homeWithMarkets(request, env, latestBody, release = null, seen = null) {
-  const res = await env.ASSETS.fetch(request);
+  // v152 · Se pide el HTML sin encabezados condicionales (If-None-Match / If-Modified-Since): si el navegador los manda,
+  // los assets responden 304 y el navegador reusa una copia vieja de la portada, con valores de mercado de días atrás.
+  const clean = new Request(new URL('/', request.url), { headers: { accept: request.headers.get('accept') || 'text/html' } });
+  let res = await env.ASSETS.fetch(clean);
+  if (res.status === 304) res = await env.ASSETS.fetch(new Request(new URL('/', request.url), { headers: { accept: 'text/html', 'cache-control': 'no-cache' } }));
   const type = res.headers.get('content-type') || '';
   if (!res.ok || !type.includes('text/html') || (!latestBody && !release) || typeof HTMLRewriter === 'undefined') return res;
   let data = null; try { data = latestBody ? JSON.parse(latestBody) : null; } catch { }
@@ -67,6 +71,7 @@ export async function homeWithMarkets(request, env, latestBody, release = null, 
   rw = rw.on('head', { element(el) { el.append(`<script>${inject}</script>`, { html: true }); } });
   const out = rw.transform(res);
   const h = new Headers(out.headers);
-  h.set('cache-control', 'no-cache'); h.delete('etag'); h.delete('content-length');
+  // no-store: el navegador nunca guarda la portada (tampoco en el caché de "atrás/adelante"), así siempre llega el último dato.
+  h.set('cache-control', 'no-store, max-age=0'); h.delete('etag'); h.delete('last-modified'); h.delete('content-length'); h.delete('cf-cache-status'); h.delete('age');
   return new Response(out.body, { status: out.status, headers: h });
 }

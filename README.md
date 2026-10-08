@@ -343,3 +343,8 @@ Chequeo: `npm run validate:snapshot`.
 ## v151 — "Mercados ahora" arriba del título
 - El panel de mercados pasa arriba del título de la portada, con tarjetas compactas: textos de hora de actualización, fuente y reservas del mes más chicos.
 - "Último dato publicado" muestra sólo el nombre corto del índice (IPI, ISAC, IPC…) y la fecha, sin el valor.
+
+## v152 — promedio en el TCR, cronograma de ajustes y portada siempre fresca
+- Gráfico del dólar: opción "Mostrar promedio del período" (línea punteada) para el rango elegido (5/10/20 años, máximo o fechas propias). El promedio se pondera por tiempo para que los tramos anuales, mensuales y diarios cuenten según el período que cubren. El resumen indica cuánto está el último dato por encima o por debajo del promedio.
+- Calculadora de actualización: frecuencia de ajuste (mensual, bimestral, trimestral, cuatrimestral, semestral, anual u otra) con la tabla de todos los ajustes del período (índice, ajuste, acumulado y monto), el monto vigente y la fecha del próximo ajuste. Botones para compartir por WhatsApp, mail, copiar o el menú del sistema (public/update-schedule.js).
+- Portada: el HTML se pide a los assets sin encabezados condicionales y sale con `cache-control: no-store`, sin ETag ni Last-Modified. Antes, un 304 hacía que el navegador reusara una copia vieja con valores de mercado de días atrás. También se pide el dato al instante si la página vuelve del caché de atrás/adelante.

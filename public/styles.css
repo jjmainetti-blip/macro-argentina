@@ -126,3 +126,16 @@
 .latest-release small{font-size:10px;opacity:.68}
 @media(max-width:720px){.hero-panel .pill{display:none}.market-grid .market-card:last-child{grid-column:1/-1}}
 @media(max-width:440px){.market-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.market-grid .market-card>strong{font-size:.95rem}}
+
+/* v152 · promedio del período en el gráfico del dólar */
+.fx-avg-note{white-space:normal}.fx-avg-note i{display:inline-block;width:18px;height:0;border-top:2px dashed #e0832b;vertical-align:middle;margin:0 6px 0 2px}
+/* v152 · cronograma de ajustes y botones para compartir */
+.upd-schedule{margin-top:14px;padding-top:12px;border-top:1px solid #dce6f1}.upd-schedule h4{margin:0 0 8px;font-size:13px;color:var(--navy)}.upd-schedule p{margin:8px 0 0;font-size:12.5px}
+.upd-table-wrap{overflow-x:auto;max-height:340px;overflow-y:auto;border:1px solid #e3ebf4;border-radius:9px;background:#fff}
+.upd-table{width:100%;border-collapse:collapse;font-size:12px;font-variant-numeric:tabular-nums}.upd-table th{position:sticky;top:0;background:#f1f6fb;text-align:right;font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:#5d7088;padding:7px 9px;white-space:nowrap}
+.upd-table td{padding:6px 9px;border-top:1px solid #edf2f7;text-align:right;white-space:nowrap}.upd-table th:nth-child(-n+2),.upd-table td:nth-child(-n+2){text-align:left}.upd-table td small{display:block;font-size:10px;color:#8093a8}.upd-table tr.upd-base td{color:#5d7088}
+.upd-current strong,.upd-next strong{color:var(--navy)}.upd-warn{color:#b4533a;font-size:12px;margin:10px 0 0}
+.upd-share{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:12px}.upd-share span{font-size:11px;font-weight:800;color:#5d7088;margin-right:2px}
+.share-btn{display:inline-flex;align-items:center;border:1px solid #cfdbe8;background:#fff;color:var(--navy);border-radius:8px;padding:6px 11px;font:inherit;font-size:12px;font-weight:700;text-decoration:none;cursor:pointer}.share-btn:hover{border-color:#8fb3dd}.share-btn.wa{background:#25d366;border-color:#25d366;color:#fff}.share-btn.wa:hover{background:#1ebe5a}
+.result .upd-schedule strong{font-size:inherit}.upd-table td strong{font-size:12.5px;color:var(--navy)}.upd-current strong,.upd-next strong{font-size:15px}
+.upd-note{display:block;font-size:10.5px;color:#7a8ca1;margin-top:6px}
