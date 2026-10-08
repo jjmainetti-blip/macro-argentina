@@ -354,3 +354,10 @@ Chequeo: `npm run validate:snapshot`.
 
 ## v154 — Fuentes al final
 - La sección "Fuentes y metodología" pasa al final del sitio, después de las calculadoras (también último en el menú).
+
+## v155 — más precios en "La economía cuando naciste"
+Búsqueda complementaria con el mismo criterio (precio nominal observado en su época, con moneda, mes, lugar y fuente enlazada en data/precios.xlsx, origen "v155 búsqueda complementaria"):
+- INDEC, informes de prensa del IPC-GBA (cuadro "Precios al consumidor de un conjunto de alimentos y bebidas"): nov-2000, jun-2001 y dic-2001 para pan, harina, arroz, asado, pollo, aceite, leche, manteca, huevos, papa, azúcar, vino, café y yerba; mar/abr-2008 para pollo y papa.
+- Secretaría de Energía, Anuarios de Combustibles 1976–1994: precio oficial de la nafta común en cada fecha de vigencia y, desde 1991, promedio mensual sugerido por YPF en Capital Federal (en 1991 se expresa en australes).
+- Otras fuentes verificadas: INDEC 2003–2008 y 2017–2025 (copias de informes de prensa), IDECBA 2012–2020, Decreto PBA 545/1973, precios máximos de octubre de 1987, INDEC enero 1992 citado por El Día.
+- No se incorporan valores reconstruidos con porcentajes (salvo el asado de enero 2010, calculado de la variación publicada por IPCVA), promedios anuales de dudosa naturaleza ni datos del INDEC intervenido posteriores a 2008.
