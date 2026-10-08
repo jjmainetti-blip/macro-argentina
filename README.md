@@ -351,3 +351,6 @@ Chequeo: `npm run validate:snapshot`.
 
 ## v153 — enlaces con ancla
 - `macrodatos.ar/#calculadoras` (y cualquier otra sección) llega a la sección pedida: mientras la página termina de cargar se mantiene en pantalla aunque los gráficos de arriba crezcan; se deja de hacerlo cuando la persona se mueve o a los 12 s.
+
+## v154 — Fuentes al final
+- La sección "Fuentes y metodología" pasa al final del sitio, después de las calculadoras (también último en el menú).
