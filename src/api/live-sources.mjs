@@ -67,7 +67,50 @@ export async function ipcCabaLive() {
   const ks = Object.keys(lv).sort(), history = {};
   for (let i = 1; i < ks.length; i++) history[ks[i]] = Math.round((lv[ks[i]] / lv[ks[i - 1]] - 1) * 1000) / 10;
   if (Object.keys(history).length < 24) throw new Error('IPCBA: serie incompleta');
-  return { status: 'ok', source: 'IDECBA — IPCBA Nivel General (vía Datos Argentina)', sourceUrl: 'https://www.estadisticaciudad.gob.ar/', history, index: lv };
+  const out = { status: 'ok', source: 'IDECBA — IPCBA Nivel General (vía Datos Argentina)', sourceUrl: 'https://www.estadisticaciudad.gob.ar/', history, index: lv };
+  // v156 · Datos Argentina replica el IPCBA unos días después. Se busca directamente el informe de IDECBA de los meses
+  // que faltan (publicación "IPCBA. Ciudad de Buenos Aires. <Mes> de <Año>", PDF "ir_AAAA_NNNN.pdf") y se toma la
+  // variación mensual del texto: "Durante el mes de septiembre el Índice ... registró un incremento de 1,8%".
+  try {
+    const now = new Date(Date.now() - 3 * 3600e3), cur = ym(now.getUTCFullYear(), now.getUTCMonth() + 1);
+    let last = Object.keys(history).sort().at(-1);
+    for (let i = 0; i < 3; i++) {
+      const [y, m] = last.split('-').map(Number), next = m === 12 ? ym(y + 1, 1) : ym(y, m + 1);
+      if (next >= cur) break;
+      const r = await ipcbaReport(next); if (!r) break;
+      history[next] = r.mom; lv[next] = Math.round(lv[last] * (1 + r.mom / 100) * 1e4) / 1e4;
+      out.latest = { ym: next, mom: r.mom, yoy: r.yoy, ytd: r.ytd, published: r.published, sourceUrl: r.pdf };
+      out.source = 'IDECBA — IPCBA Nivel General (informe de resultados; serie histórica vía Datos Argentina)';
+      last = next;
+    }
+  } catch (e) { out.idecbaError = String(e?.message || e).slice(0, 160); }
+  return out;
+}
+const MES_SLUG = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+export function parseIpcbaReport(text, mesName) {
+  const t = String(text || '').replace(/\s+/g, ' ').replace(/ - /g, '');
+  const m = t.match(new RegExp(`Durante el mes de ${mesName} el [ÍI]ndice de Precios al Consumidor de la Ciudad[^%]{0,160}?registr[óo] (?:un|una) (incremento|alza|suba|aumento|descenso|baja|ca[íi]da|variaci[óo]n) de (-?[\\d]+,\\d+) ?%`, 'i'));
+  if (!m) return null;
+  const mom = Number(m[2].replace(',', '.')) * (/descenso|baja|ca[íi]da/i.test(m[1]) ? -1 : 1);
+  if (!Number.isFinite(mom) || Math.abs(mom) > 30) return null;
+  const yoy = t.match(/interanual[^%]{0,60}?se ubic[óo] en (-?[\d.]+,\d+) ?%/i), ytd = t.match(/acumulando en los primeros[^%]{0,700}?(?:suba|alza|incremento) de (-?[\d.]+,\d+) ?%/i);
+  const n = x => x ? Number(x[1].replace(/\./g, '').replace(',', '.')) : null;
+  return { mom, yoy: n(yoy), ytd: n(ytd) };
+}
+async function ipcbaReport(period) {
+  const [y, m] = period.split('-').map(Number), mes = MES_SLUG[m - 1];
+  const page = `https://www.estadisticaciudad.gob.ar/eyc/publicaciones/ipcba-ciudad-de-buenos-aires-${mes}-de-${y}/`;
+  const r = await fetchWithTimeout(page, {}, 15000); if (!r.ok) return null;
+  const html = await r.text();
+  const pdf = (html.match(/https?:\/\/www\.estadisticaciudad\.gob\.ar\/eyc\/wp-content\/uploads\/\d{4}\/\d{2}\/ir_\d{4}_\d+\.pdf/) || [])[0];
+  if (!pdf) return null;
+  const pr = await fetchWithTimeout(pdf, {}, 25000); if (!pr.ok) return null;
+  const { pdfText } = await import('./pdf-text.mjs');
+  const x = parseIpcbaReport(await pdfText(await pr.arrayBuffer(), 400), mes); if (!x) return null;
+  // Fecha de publicación: Last-Modified del PDF (momento en que IDECBA lo subió), en hora argentina.
+  let pd = null; const lm = Date.parse(pr.headers.get('last-modified') || '');
+  if (Number.isFinite(lm)) pd = new Date(lm - 3 * 3600e3).toISOString().slice(0, 10);
+  return { ...x, pdf, published: pd };
 }
 
 // ---------- Pobreza (INDEC EPH, personas, total aglomerados) vía Datos Argentina ----------

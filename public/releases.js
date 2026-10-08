@@ -50,6 +50,8 @@ export function buildReleases(R = {}) {
     if (L) { const ym = String(L.date).slice(0, 7), rd = R.ipc?.publishedAt || pub(ym, 1, 12); const prev = M.find(r => String(r.date).slice(0, 7) === ymShift(ym, -12));
       const yoy = Number.isFinite(Number(R.ipc?.latest?.yoy)) && R.ipc.latest?.date?.slice?.(0, 7) === ym ? Number(R.ipc.latest.yoy) : (prev ? ((Number(L.index) / Number(prev.index)) - 1) * 100 : null);
       releases.push({ releaseDate: rd, title: 'IPC Nacional · INDEC', value: `${fmt.format(Number(L.value))}% mensual${Number.isFinite(yoy) ? ` · ${fmt.format(yoy)}% interanual` : ''}`, displayDate: shown(R.ipc?.publishedAt, ym) }); } }
+  // v156: IPC de la Ciudad (IDECBA), sólo con fecha de publicación exacta (informe leído el día que sale).
+  { const L = R.ipcCaba?.latest; if (L?.ym && L.published && Number.isFinite(Number(L.mom))) releases.push({ releaseDate: L.published, title: 'IPC CABA · IDECBA', value: `${fmt.format(Number(L.mom))}% mensual${Number.isFinite(Number(L.yoy)) ? ` · ${fmt.format(Number(L.yoy))}% interanual` : ''}`, displayDate: shown(L.published, L.ym) }); }
   { const L = R.arca?.latest, H = arcaHistory(R), last = lastEntry(H); const ym = L?.ym || (L?.period ? ymFromSpanishPeriod(L.period) : null) || last?.[0];
     if (ym) { const same = (L?.ym || ymFromSpanishPeriod(L?.period || '')) === ym; const yoy = Number.isFinite(Number(L?.yoy)) && same ? Number(L.yoy) : Number(H[ym]); const rr = Number.isFinite(yoy) ? arcaRealYoy(R, ym, yoy) : null;
       const parts = [Number.isFinite(Number(L?.value)) && same ? moneyMillionsToBillions(L.value) : null, Number.isFinite(yoy) ? `${kpiPct(yoy)} interanual` : null, rr ? `${kpiPct(rr.real)} real${rr.estimated ? ' (est. REM)' : ''}` : null].filter(Boolean);
@@ -87,7 +89,7 @@ export function pickLatest(releases) {
 // Prioridad: (1) fecha exacta informada por la fuente; (2) fecha en que el sitio detectó el período nuevo
 // (window.__CARD_PUB__, registrada por el Worker); (3) calendario habitual del organismo (rezago en meses desde el
 // último mes del período + día habitual). ym = último mes del período (trimestre/semestre: su mes final).
-export const PUB_RULES = { ipc: [1, 13], ipcCaba: [1, 14], arca: [1, 2], icg: [0, 26], autos: [1, 2], came: [1, 5], emae: [2, 22], isac: [2, 7], fiscal: [1, 17],
+export const PUB_RULES = { ipc: [1, 13], ipcCaba: [1, 8], arca: [1, 2], icg: [0, 26], autos: [1, 2], came: [1, 5], emae: [2, 22], isac: [2, 7], fiscal: [1, 17],
   cement: [1, 6], credit: [1, 20], arrears: [2, 20], ipi: [2, 7], trade: [1, 19], ila: [1, 28], iga: [1, 22], bop: [3, 23], poverty: [3, 26] };
 export function cardPublication(key, ymEnd, S = {}, seen = {}) {
   if (!/^\d{4}-\d{2}$/.test(String(ymEnd || ''))) return null;

@@ -361,3 +361,10 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 - Secretaría de Energía, Anuarios de Combustibles 1976–1994: precio oficial de la nafta común en cada fecha de vigencia y, desde 1991, promedio mensual sugerido por YPF en Capital Federal (en 1991 se expresa en australes).
 - Otras fuentes verificadas: INDEC 2003–2008 y 2017–2025 (copias de informes de prensa), IDECBA 2012–2020, Decreto PBA 545/1973, precios máximos de octubre de 1987, INDEC enero 1992 citado por El Día.
 - No se incorporan valores reconstruidos con porcentajes (salvo el asado de enero 2010, calculado de la variación publicada por IPCVA), promedios anuales de dudosa naturaleza ni datos del INDEC intervenido posteriores a 2008.
+
+## v156 — Inflación CABA el mismo día que publica IDECBA
+- Datos Argentina replica el IPCBA días después de su publicación. Ahora, si falta el mes nuevo, el Worker busca el informe de resultados de IDECBA (`/eyc/publicaciones/ipcba-ciudad-de-buenos-aires-<mes>-de-<año>/` → PDF `ir_AAAA_NNNN.pdf`) y lee la variación mensual, interanual y acumulada del texto ("Durante el mes de septiembre el Índice … registró un incremento de 1,8%").
+- `src/api/pdf-text.mjs`: extractor mínimo de texto de PDF (streams FlateDecode con DecompressionStream) que corre en Workers.
+- La fecha de publicación sale del Last-Modified del PDF; con ella el IPC CABA entra en "Último dato publicado".
+- Calendario habitual del IPCBA: día 8 del mes siguiente (antes 15), para que el sitio lo busque con prioridad desde ese día.
+- Septiembre 2026 (1,8% mensual; 32,9% interanual) agregado al respaldo local.

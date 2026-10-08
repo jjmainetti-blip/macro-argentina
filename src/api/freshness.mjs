@@ -13,7 +13,7 @@ const dd = (ym, day) => `${ym}-${String(Math.min(day, 28)).padStart(2, '0')}`;
 // group = grupo de /api/macro-data que la actualiza. lag = meses entre el período y la publicación; day = día habitual.
 export const CARDS = [
   { key: 'ipc', title: 'Inflación nacional', group: 'core', freq: 'M', lag: 1, day: 15, cal: /precios al consumidor \(IPC\)/i, latest: S => lastKey(Object.fromEntries((S.ipc?.monthly || []).map(r => [String(r.date).slice(0, 7), r.value]))) },
-  { key: 'ipcCaba', title: 'Inflación CABA', group: 'core', freq: 'M', lag: 1, day: 15, latest: S => lastKey(S.ipcCaba?.history) },
+  { key: 'ipcCaba', title: 'Inflación CABA', group: 'core', freq: 'M', lag: 1, day: 8, latest: S => lastKey(S.ipcCaba?.history) },
   { key: 'arca', title: 'Recaudación', group: 'core', freq: 'M', lag: 1, day: 2, cal: /Recaudaci[oó]n tributaria/i, latest: S => maxKey(lastKey(S.arca?.history), S.arca?.latest?.ym) },
   { key: 'icg', title: 'Confianza en el gobierno', group: 'core', freq: 'M', lag: 0, day: 28, latest: S => lastKey(S.icg?.history) },
   { key: 'autos', title: 'Patentamientos 0 km', group: 'core', freq: 'M', lag: 1, day: 2, latest: S => maxKey(lastKey(S.autos?.history?.['Patentamientos (unidades)']), lastKey(S.activityPulse?.autos?.history?.['Patentamientos (unidades)'])) },
