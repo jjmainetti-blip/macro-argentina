@@ -382,3 +382,9 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 
 ## v159 — lectura del PDF de IDECBA en Cloudflare
 - En Workers, DecompressionStream descarta el stream completo si hay bytes sobrantes después de los datos comprimidos (el salto de línea antes de `endstream`). Ahora cada stream se recorta con su `/Length` (o quitando esos saltos de línea) y se omiten los ASCII85 (imágenes). Probado simulando el comportamiento estricto: antes 0 caracteres; ahora el texto completo.
+
+## v160 — Reservas brutas y netas del BCRA (Históricos)
+- Nuevo gráfico en "Series históricas": reservas brutas (desde 1996) y netas desde 2003 con tres metodologías a elección: de mercado, metodología FMI (acuerdo 2025, desde ene-2025) y líquidas. El tooltip muestra la cuenta completa de cada mes.
+- `/api/reserves` (src/api/reserves.mjs): lee de la API del BCRA las reservas (var 1), encajes en dólares (var 1243), repos con bancos del exterior (var 76) y la valuación en USD de las asignaciones de DEG de 2009 (var 83, para pasar DEG a dólares); toma la posición mensual de Argentina en el FMI (tenencias de DEG y crédito vigente) de la página oficial del FMI, guardada en KV (`imfpos:v1`) y completada de a poco por la revisión programada (8 meses por ejecución; unas 6 horas para todo 2003–2026). Respuesta en KV `reserves:v1` (6 h; 30 min mientras se completa el FMI).
+- `public/reserves-components.json`: swap con China (CNY y tipo de cambio), BIS y otros pasivos de corto plazo, SEDESA, oro (toneladas y precio), con notas y fuentes. Actualizar `through` y los componentes cuando cambien (p. ej., pagos del BIS o el swap).
+- `/api/status` → `reserves`: cuántos meses del FMI ya se cargaron y el último error.

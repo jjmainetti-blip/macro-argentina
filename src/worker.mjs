@@ -3,6 +3,7 @@ import { pickCronGroup } from './api/freshness.mjs';
 import calendarData from './api/calendar-data.mjs';
 import marketsData, { latestMarketsBody, xTokenShape } from './api/markets.mjs';
 import { homeWithMarkets } from './api/markets-html.mjs';
+import reservesData, { imfBackfill } from './api/reserves.mjs';
 import tradeMonthly from './api/trade-monthly.mjs';
 import cementMonthly from './api/cement-monthly.mjs';
 import uvaLoans from './api/uva-loans.mjs';
@@ -32,6 +33,11 @@ export default {
     if (request.method === 'GET' && url.pathname === '/api/markets') {
       return withHeaders(await marketsData(request, ctx, env));
     }
+    // v160: reservas brutas y netas del BCRA (componentes documentados en public/reserves-components.json).
+    if (request.method === 'GET' && url.pathname === '/api/reserves') {
+      let comp = null; try { const r = await env.ASSETS.fetch(new Request(new URL('/reserves-components.json', request.url))); if (r.ok) comp = await r.json(); } catch { }
+      return withHeaders(await reservesData(env, ctx, comp));
+    }
     // v139: tasas de créditos hipotecarios UVA por banco (BCRA, Régimen de Transparencia).
     if (request.method === 'GET' && url.pathname === '/api/uva-loans') {
       return withHeaders(await uvaLoans(env, ctx));
@@ -52,7 +58,7 @@ export default {
       let xbcra = null; try { const x = await env?.MACRO_STORE?.get?.('x:bcra', 'json'); if (x) xbcra = { tokenConfigured: !!env?.X_BEARER_TOKEN, lastCheck: x.lastCheck ? new Date(x.lastCheck).toISOString() : null, lastError: x.lastError || null, backoffUntil: x.backoffUntil ? new Date(x.backoffUntil).toISOString() : null, days: x.days || {}, lastRead: x.lastRead ?? null, aiConfigured: !!env?.AI, aiError: x.aiError || null, recent: x.recent || [] }; else xbcra = { tokenConfigured: !!env?.X_BEARER_TOKEN, lastCheck: null }; } catch { }
       // Diagnóstico: nombres (nunca valores) de variables que parecen el token, por si quedó con otro nombre.
       try { xbcra = { ...(xbcra || {}), tokenShape: env?.X_BEARER_TOKEN ? xTokenShape(env.X_BEARER_TOKEN) : null, similarVarNames: Object.keys(env || {}).filter(k => /x_|bearer|token|twitter/i.test(k) && typeof env[k] === 'string').map(k => JSON.stringify(k)) }; } catch { }
-      return withHeaders(new Response(JSON.stringify({ generatedAt: new Date().toISOString(), kv: !!env?.MACRO_STORE, xBcra: xbcra, ipcCaba: await (async () => { try { const c = (await env?.MACRO_STORE?.get?.('macro:snapshot:v131:core', 'json'))?.sources?.ipcCaba; return c ? { source: c.source, last: Object.keys(c.history || {}).sort().at(-1), latest: c.latest || null, idecbaError: c.idecbaError || null, baseError: c.baseError || null, refreshError: c.refreshError || null } : null; } catch { return null; } })(), cards }, null, 1), { headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', 'access-control-allow-origin': '*' } }));
+      return withHeaders(new Response(JSON.stringify({ generatedAt: new Date().toISOString(), kv: !!env?.MACRO_STORE, xBcra: xbcra, reserves: await (async () => { try { const p = await env?.MACRO_STORE?.get?.('imfpos:v1', 'json'); return p ? { imfMonths: Object.keys(p).filter(k => /^\d{4}-\d{2}$/.test(k)).length, imfError: p._err || null, current: p._cur || null } : null; } catch { return null; } })(), ipcCaba: await (async () => { try { const c = (await env?.MACRO_STORE?.get?.('macro:snapshot:v131:core', 'json'))?.sources?.ipcCaba; return c ? { source: c.source, last: Object.keys(c.history || {}).sort().at(-1), latest: c.latest || null, idecbaError: c.idecbaError || null, baseError: c.baseError || null, refreshError: c.refreshError || null } : null; } catch { return null; } })(), cards }, null, 1), { headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', 'access-control-allow-origin': '*' } }));
     }
     if (request.method === 'GET' && url.pathname === '/api/calendar-data') {
       return withHeaders(await calendarData());
@@ -80,6 +86,8 @@ export default {
     try { statuses = await freshnessReport(env); } catch { }
     const { group, reason } = pickCronGroup(statuses, groups, tick);
     // v133: en cada ejecución se renueva también el último dato de mercados (KV), aunque nadie esté mirando el sitio.
+    // v160: completa de a poco la posición mensual de Argentina en el FMI (DEG y crédito) para las reservas netas.
+    ctx.waitUntil(imfBackfill(env, 8).catch(e => console.log(`cron imf: ${e?.message || e}`)));
     ctx.waitUntil(marketsData(null, ctx, env, { force: true }).catch(e => console.log(`cron markets: error ${e?.message || e}`)));
     ctx.waitUntil(macroData(env, ctx, new Request(`https://cron.invalid/api/macro-data?group=${group}`), { force: true })
       .then(r => r.json()).then(async j => { try { await latestReleaseFor(env, null, { force: true }); } catch { } return j; }).then(j => console.log(`cron ${group} (${reason}): guardado=${j.stored} esperando=${statuses.filter(s => s.state === 'esperando').map(s => s.key).join(',') || '—'}`))

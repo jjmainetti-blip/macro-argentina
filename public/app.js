@@ -1242,3 +1242,48 @@ loadMarketsDaily().then(()=>loadFxDaily());
   const ro=window.ResizeObserver?new ResizeObserver(align):null;ro?.observe(document.body);
   align();window.addEventListener('load',align);setTimeout(stop,12000);
 })();
+// v160 · Reservas internacionales del BCRA: brutas y netas (de mercado, metodología FMI, líquidas).
+(function reservesChart(){
+  const cv=document.getElementById('resChart');if(!cv)return;
+  let rows=[],method='mercado',range='max',chart=null,loaded=false;
+  const f0=new Intl.NumberFormat('es-AR',{maximumFractionDigits:0});
+  const usd=v=>v==null?'—':`${v<0?'−':''}US$ ${f0.format(Math.abs(v))} M`;
+  const LABEL={mercado:'Netas de mercado',fmi:'Netas metodología FMI',liquidas:'Netas líquidas'};
+  const EXPL={mercado:'<strong>Netas de mercado:</strong> lo que queda de las reservas brutas después de restar lo que no es propio del BCRA o vence en el corto plazo: encajes de los depósitos en dólares, swap con China, repos con bancos, préstamos del BIS y otros, y SEDESA.',
+    fmi:'<strong>Metodología FMI (acuerdo 2025):</strong> parte de las netas de mercado y además excluye los dólares netos que prestó el FMI desde enero de 2025 (desembolsos menos pagos). Por eso sólo hay datos desde 2025. El FMI la calcula a tipos de cambio fijos del programa.',
+    liquidas:'<strong>Netas líquidas:</strong> netas de mercado sin el oro ni las tenencias de DEG del FMI, que no se pueden usar de inmediato para intervenir en el mercado.'};
+  const ym=m=>{const [y,mm]=m.split('-');return `${MONTH_LABELS[+mm-1]} ${y}`;};
+  function render(){
+    if(!window.Chart||!rows.length)return;
+    const showG=document.getElementById('resGross')?.checked!==false;
+    let R=rows;const last=rows.at(-1).m;
+    if(range==='3'||range==='10'){const y=+last.slice(0,4)-Number(range);R=rows.filter(r=>r.m>=`${y}${last.slice(4)}`);}
+    else if(range==='max')R=rows.filter(r=>r.m>='2003-01');
+    if(method==='fmi'&&range!=='all')R=R.filter(r=>r.m>='2024-07');
+    const labels=R.map(r=>r.m),net=R.map(r=>r[method]??null),gross=R.map(r=>r.brutas??null);
+    document.getElementById('resExplainer').innerHTML=EXPL[method];
+    document.getElementById('resSubtitle').textContent=`${showG?'Brutas y ':''}${LABEL[method].toLowerCase()} · millones de USD · fin de cada mes${method==='fmi'?' · desde 2025':''}`;
+    const L=[...rows].reverse().find(r=>r[method]!=null),G=rows.at(-1);
+    document.getElementById('resSummary').innerHTML=L?`<strong>${ym(G.m)}${G.date?` (dato del ${G.date.split('-').reverse().join('/')})`:''}:</strong> brutas <b>${usd(G.brutas)}</b> · ${LABEL[method].toLowerCase()} <b>${usd(L[method])}</b>${L.m!==G.m?` (${ym(L.m)})`:''}.`:'';
+    const ds=[{label:LABEL[method],data:net,borderColor:'#e0832b',backgroundColor:'rgba(224,131,43,.10)',fill:'origin',tension:.15,pointRadius:0,pointHoverRadius:4,borderWidth:2.2,spanGaps:false}];
+    if(showG)ds.unshift({label:'Brutas',data:gross,borderColor:'#0b5bd3',backgroundColor:'rgba(11,91,211,.06)',fill:false,tension:.15,pointRadius:0,pointHoverRadius:4,borderWidth:2.2});
+    const byM=Object.fromEntries(rows.map(r=>[r.m,r]));
+    const detail=r=>{if(!r)return [];const out=[`Brutas: ${usd(r.brutas)}`];if(r.encajes==null)return out;
+      out.push(`− Encajes: ${usd(r.encajes)}`,`− Swap China: ${usd(r.swap)}`);if(r.repos)out.push(`− Repos: ${usd(r.repos)}`);if(r.bis)out.push(`− BIS y otros: ${usd(r.bis)}`);if(r.sedesa)out.push(`− SEDESA: ${usd(r.sedesa)}`);
+      out.push(`= De mercado: ${usd(r.mercado)}`);if(method==='liquidas'&&r.liquidas!=null)out.push(`− Oro: ${usd(r.oro)}`,`− DEG: ${usd(r.deg)}`,`= Líquidas: ${usd(r.liquidas)}`);
+      if(method==='fmi'&&r.fmi!=null)out.push(`− Crédito neto FMI desde 2025: ${usd(r.fmiNeto)}`,`= Metodología FMI: ${usd(r.fmi)}`);return out;};
+    if(chart)chart.destroy();
+    chart=new Chart(cv,{type:'line',data:{labels,datasets:ds},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
+      plugins:{legend:{display:true,position:'bottom',labels:{boxWidth:12,usePointStyle:true}},tooltip:{callbacks:{title:it=>it.length?ym(it[0].label):'',label:c=>`${c.dataset.label}: ${usd(c.raw)}`,afterBody:it=>it.length?['',...detail(byM[it[0].label])]:[]}}},
+      scales:{x:{grid:{display:false},ticks:{maxTicksLimit:10,callback:function(v){const l=this.getLabelForValue(v);return l.endsWith('-01')||labels.length<40?ym(l):l.slice(0,4);}}},y:{grid:{color:ctx=>ctx.tick.value===0?'#9fb0c3':'#edf2f7'},ticks:{callback:v=>f0.format(v)}}}}});
+  }
+  async function load(){if(loaded)return;loaded=true;
+    try{const r=await fetch('/api/reserves',{headers:{accept:'application/json'}});const j=await r.json();if(!j?.rows?.length)throw new Error(j?.error||'sin datos');rows=j.rows;document.getElementById('resEmpty').hidden=true;render();}
+    catch(e){const el=document.getElementById('resEmpty');el.hidden=false;el.textContent='No se pudieron cargar las reservas en este momento.';loaded=false;console.warn('reservas',e);}}
+  document.querySelectorAll('[data-res-method]').forEach(b=>b.addEventListener('click',()=>{method=b.dataset.resMethod;document.querySelectorAll('[data-res-method]').forEach(x=>x.classList.toggle('active',x===b));render();}));
+  document.querySelectorAll('[data-res-range]').forEach(b=>b.addEventListener('click',()=>{range=b.dataset.resRange;document.querySelectorAll('[data-res-range]').forEach(x=>x.classList.toggle('active',x===b));render();}));
+  document.getElementById('resGross')?.addEventListener('change',render);
+  // Se carga cuando el gráfico se acerca a la pantalla (o enseguida si el navegador no tiene IntersectionObserver).
+  const go=()=>{const t=setInterval(()=>{if(window.Chart){clearInterval(t);load();}},300);};
+  if('IntersectionObserver' in window){const io=new IntersectionObserver(es=>{if(es.some(e=>e.isIntersecting)){io.disconnect();go();}},{rootMargin:'600px'});io.observe(cv);}else go();
+})();
