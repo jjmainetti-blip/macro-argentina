@@ -389,6 +389,12 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 - `public/reserves-components.json`: swap con China (CNY y tipo de cambio), BIS y otros pasivos de corto plazo, SEDESA, oro (toneladas y precio), con notas y fuentes. Actualizar `through` y los componentes cuando cambien (p. ej., pagos del BIS o el swap).
 - `/api/status` → `reserves`: cuántos meses del FMI ya se cargaron y el último error.
 
+## v162 — Reservas netas FMI y líquidas
+
+- Causa: la conversión de DEG a dólares usaba la variable 83 del BCRA, que es una serie de flujos (todo ceros), así que nunca se calculaban las tenencias de DEG ni el crédito del FMI en dólares; sin eso, «Líquidas» y «Metodología FMI» quedaban vacías.
+- `public/reserves-components.json` suma `usdPerSdr`: dólares por DEG a fin de cada mes 2003-01…2026-09, inversa de la tabla «SDRs per Currency unit» del FMI (ene–mar 2003 no publicados: se usa abr 2003). Desde octubre 2026 se usa la cotización diaria del FMI (`rms_sdrv.aspx`).
+- Caché KV renovada (`reserves:v4`).
+
 ## v161 — Pestañas, reservas dentro de Series históricas y FMI completo
 - Pestañas: "Dólar", "Series históricas", "Cuando naciste" y "Calculadoras" se ven en su propia pestaña; el resto queda en "Inicio" (public/tabs.js + script temprano en `<head>` que elige la pestaña según el enlace, sin parpadeo). Los enlaces existentes (#tipo-cambio, #historicos, #reservas, #nacimiento-AAAA-MM, #calculadoras) abren su pestaña.
 - Reservas BCRA: ahora es una opción más del selector de "Series históricas" (reemplaza al gráfico principal al elegirla).

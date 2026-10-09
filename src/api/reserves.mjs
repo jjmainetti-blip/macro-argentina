@@ -16,7 +16,7 @@
 //              crédito FMI(dic-2024)). Sólo desde ene-2025. Se calcula a precios de mercado, no a los "tipos de cambio
 //              del programa".
 const API = 'https://api.bcra.gob.ar/estadisticas/v4.0/monetarias';
-const KV_KEY = 'reserves:v2';
+const KV_KEY = 'reserves:v4';
 const TTL = 6 * 3600e3;
 
 async function fetchJson(url, ms = 12000) {
@@ -88,11 +88,9 @@ export function buildReserves(gross, encajes, repos, C, imfPos = {}, sdr83 = {},
   const months = Object.keys(G).sort().filter(k => k >= '1996-01');
   const val = (map, k) => { const x = map?.[k]; return Number.isFinite(Number(x)) ? Number(x) : null; };
   const carry = (map, k) => { if (!map) return null; if (val(map, k) != null) return val(map, k); const ks = Object.keys(map).filter(x => x <= k).sort(); return ks.length ? val(map, ks.at(-1)) : null; };
-  // USD por DEG: la serie diaria del BCRA de las asignaciones de DEG de 2009 (var 83, en USD) se divide por esa misma
-  // asignación en DEG, que se obtiene con la cotización actual del FMI. Antes de sep-2009 se usa la del primer dato.
-  const S83 = monthEnds(sdr83), k83 = Object.keys(S83).sort(), last83 = k83.length ? S83[k83.at(-1)].v : null;
-  const alloc = usdPerSdrNow && last83 ? last83 / usdPerSdrNow : null;
-  const usdPerSdr = k => { if (!alloc) return C.usdPerSdr?.[k] ?? null; const x = S83[k]?.v ?? (k < (k83[0] || '') ? S83[k83[0]]?.v : null); return x ? x / alloc : null; };
+  // USD por DEG: cotización de fin de mes del FMI (public/reserves-components.json → usdPerSdr); para los meses
+  // posteriores al último cargado se usa la cotización actual que publica el FMI.
+  const usdPerSdr = k => { const v = Number(C.usdPerSdr?.[k]); if (v > 0) return v; if (usdPerSdrNow && (!C.through || k > C.through)) return usdPerSdrNow; return carry(C.usdPerSdr, k); };
   const imfUsd = (k, field) => { const p = imfPos[k]; const r = usdPerSdr(k); return p && r ? p[field] * r : null; };
   const imfBase = imfUsd('2024-12', 'credit') ?? carry(C.imfCreditUsd, '2024-12');
   const rows = [];
@@ -129,14 +127,14 @@ export async function usdPerSdr() {
 export default async function reserves(env, ctx, components) {
   const headers = { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'public, max-age=1800', 'access-control-allow-origin': '*' };
   let stored = null; try { stored = await env?.MACRO_STORE?.get?.(KV_KEY, 'json'); } catch { }
-  if (stored?.generatedAt && Date.now() - Date.parse(stored.generatedAt) < (stored.imfMonths >= 280 ? TTL : 30 * 60e3)) return new Response(JSON.stringify(stored), { headers: { ...headers, 'x-reserves-cache': 'kv' } });
+  if (stored?.generatedAt && Date.now() - Date.parse(stored.generatedAt) < (stored.imfMonths >= 280 && stored.liquidMonths > 200 ? TTL : 30 * 60e3)) return new Response(JSON.stringify(stored), { headers: { ...headers, 'x-reserves-cache': 'kv' } });
   try {
-    const [g, e, r, a83, pos, rate] = await Promise.all([bcraSeries(1, '1996-01-01'), bcraSeries(1243, '2003-01-01'), bcraSeries(76, '2003-01-01'), bcraSeries(83, '2009-08-01').catch(() => ({})), imfBackfill(env, 6).catch(() => ({})), usdPerSdr().catch(() => null)]);
+    const [g, e, r, a83, pos, rate] = await Promise.all([bcraSeries(1, '1996-01-01'), bcraSeries(1243, '2003-01-01'), bcraSeries(76, '2003-01-01'), Promise.resolve({}), imfBackfill(env, 6).catch(() => ({})), usdPerSdr().catch(() => null)]);
     if (Object.keys(g).length < 1000) throw new Error('BCRA: serie de reservas incompleta');
     const cur = pos?._cur; const P = { ...(components?.imfPos || {}), ...pos }; if (cur?.date) P[cur.date.slice(0, 7)] = cur;
     const rows = buildReserves(g, e, r, components || {}, P, a83, rate);
-    const imfMonths = Object.keys(P).filter(k => /^\d{4}-\d{2}$/.test(k)).length;
-    const body = { status: 'ok', imfMonths, imfError: pos?._err || null, usdPerSdr: rate, generatedAt: new Date().toISOString(), source: 'BCRA (reservas, encajes, repos) + componentes documentados (swap China, BIS, SEDESA, oro, DEG, FMI)', componentsThrough: components?.through || null, rows };
+    const imfMonths = Object.keys(P).filter(k => /^\d{4}-\d{2}$/.test(k)).length, liquidMonths = rows.filter(x => x.liquidas != null).length, fmiMonths = rows.filter(x => x.fmi != null).length;
+    const body = { status: 'ok', imfMonths, liquidMonths, fmiMonths, imfError: pos?._err || null, usdPerSdr: rate, generatedAt: new Date().toISOString(), source: 'BCRA (reservas, encajes, repos) + componentes documentados (swap China, BIS, SEDESA, oro, DEG, FMI)', componentsThrough: components?.through || null, rows };
     try { const w = env?.MACRO_STORE?.put?.(KV_KEY, JSON.stringify(body)); if (w && ctx?.waitUntil) ctx.waitUntil(w); } catch { }
     return new Response(JSON.stringify(body), { headers });
   } catch (err) {
