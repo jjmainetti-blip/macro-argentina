@@ -360,7 +360,7 @@ function renderHistory(key){
   if(historyChart)historyChart.destroy();const asBars=key==='gdp'; // v138: PIB en barras (verde crecimiento, rojo caída), como los gráficos de las tarjetas
   historyChart=new Chart(document.getElementById('historyChart'),{type:asBars?'bar':'line',data:{labels,datasets:[asBars?{label:cfg.title,data:values,backgroundColor:barValueColor,borderColor:barValueColor,borderWidth:0,borderRadius:2,maxBarThickness:22}:{label:cfg.title,data:values,borderColor:'#0b5bd3',backgroundColor:'rgba(11,91,211,.08)',fill:true,tension:.18,pointRadius:shown.length>35?0:2,pointHoverRadius:5,borderWidth:2.3}]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>seriesValueLabel(currentSeries,c.raw)}}},scales:{x:{grid:{display:false},ticks:{maxRotation:0,autoSkip:true,maxTicksLimit:12}},y:{grid:{color:'#edf2f7'},ticks:{callback:v=>seriesTickLabel(currentSeries,v)}}}}});
 }
-document.querySelectorAll('[data-series]').forEach(btn=>btn.addEventListener('click',()=>{document.querySelectorAll('[data-series]').forEach(b=>b.classList.remove('active'));btn.classList.add('active');currentRange='max';zoomFactor=1;document.querySelectorAll('[data-range]').forEach(b=>b.classList.toggle('active',b.dataset.range==='max'));renderHistory(btn.dataset.series)}));
+document.querySelectorAll('[data-series]').forEach(btn=>btn.addEventListener('click',()=>{if(btn.dataset.series==='reserves'){showReservesSeries(true);document.querySelectorAll('[data-series]').forEach(b=>b.classList.toggle('active',b===btn));return;}showReservesSeries(false);document.querySelectorAll('[data-series]').forEach(b=>b.classList.remove('active'));btn.classList.add('active');currentRange='max';zoomFactor=1;document.querySelectorAll('[data-range]').forEach(b=>b.classList.toggle('active',b.dataset.range==='max'));renderHistory(btn.dataset.series)}));
 document.querySelectorAll('[data-range]').forEach(btn=>btn.addEventListener('click',()=>{document.querySelectorAll('[data-range]').forEach(b=>b.classList.remove('active'));btn.classList.add('active');currentRange=btn.dataset.range;zoomFactor=1;renderHistory(currentSeries)}));
 ['periodFrom','periodTo'].forEach(id=>document.getElementById(id)?.addEventListener('change',()=>{const a=document.getElementById('periodFrom').value,b=document.getElementById('periodTo').value;if(a>b){if(id==='periodFrom')document.getElementById('periodTo').value=String(a);else document.getElementById('periodFrom').value=String(b);}currentRange='custom';document.querySelectorAll('[data-range]').forEach(x=>x.classList.remove('active'));zoomFactor=1;renderHistory(currentSeries);}));
 document.querySelectorAll('[data-inf-frequency]').forEach(btn=>btn.addEventListener('click',()=>{inflationFrequency=btn.dataset.infFrequency;document.querySelectorAll('[data-inf-frequency]').forEach(b=>b.classList.toggle('active',b===btn));currentRange='max';renderHistory('inflation');}));
@@ -1242,6 +1242,8 @@ loadMarketsDaily().then(()=>loadFxDaily());
   const ro=window.ResizeObserver?new ResizeObserver(align):null;ro?.observe(document.body);
   align();window.addEventListener('load',align);setTimeout(stop,12000);
 })();
+// v161 · Reservas como una serie más de "Series históricas": al elegirla se reemplaza el gráfico principal.
+function showReservesSeries(on){const a=document.getElementById('historyCard'),b=document.getElementById('reservas');if(a)a.hidden=!!on;if(b)b.hidden=!on;if(on){document.dispatchEvent(new Event('macro:reserves'));requestAnimationFrame(()=>window.dispatchEvent(new Event('resize')));}}
 // v160 · Reservas internacionales del BCRA: brutas y netas (de mercado, metodología FMI, líquidas).
 (function reservesChart(){
   const cv=document.getElementById('resChart');if(!cv)return;
@@ -1285,5 +1287,6 @@ loadMarketsDaily().then(()=>loadFxDaily());
   document.getElementById('resGross')?.addEventListener('change',render);
   // Se carga cuando el gráfico se acerca a la pantalla (o enseguida si el navegador no tiene IntersectionObserver).
   const go=()=>{const t=setInterval(()=>{if(window.Chart){clearInterval(t);load();}},300);};
-  if('IntersectionObserver' in window){const io=new IntersectionObserver(es=>{if(es.some(e=>e.isIntersecting)){io.disconnect();go();}},{rootMargin:'600px'});io.observe(cv);}else go();
+  document.addEventListener('macro:reserves',()=>{if(!loaded)go();else render();});
+  if(location.hash==='#reservas'){const b=document.querySelector('[data-series="reserves"]');if(b)b.click();}
 })();

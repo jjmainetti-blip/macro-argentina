@@ -16,7 +16,7 @@
 //              crédito FMI(dic-2024)). Sólo desde ene-2025. Se calcula a precios de mercado, no a los "tipos de cambio
 //              del programa".
 const API = 'https://api.bcra.gob.ar/estadisticas/v4.0/monetarias';
-const KV_KEY = 'reserves:v1';
+const KV_KEY = 'reserves:v2';
 const TTL = 6 * 3600e3;
 
 async function fetchJson(url, ms = 12000) {
@@ -49,8 +49,8 @@ const r1 = x => x == null || !Number.isFinite(x) ? null : Math.round(x);
 const IMF_KEY = 'imfpos:v1';
 export function parseImfPosition(html) {
   const t = String(html || '').replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, '|').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').replace(/(\s*\|\s*)+/g, '|');
-  const sdrSec = (t.match(/SDR Department:(.*?)IV\. ?Outstanding/i) || [])[1];
-  const ivSec = (t.match(/IV\. ?Outstanding Purchases and Loans:?(.*?)V\. ?Latest Financial/i) || [])[1];
+  const sdrSec = (t.match(/SDR Department:(.*?)IV\.[|\s]*Outstanding/i) || [])[1];
+  const ivSec = (t.match(/IV\.[|\s]*Outstanding Purchases and Loans:?(.*?)\bV\.[|\s]*Latest Financial/i) || [])[1];
   if (sdrSec == null || ivSec == null) return null;
   const num = x => Number(String(x).replace(/,/g, ''));
   const h = sdrSec.match(/Holdings\|?\s*([\d,]+\.\d+)/i);
@@ -68,14 +68,15 @@ const monthEnd = ym => { const [y, m] = ym.split('-').map(Number); return new Da
 export async function imfBackfill(env, max = 10) {
   let st = {}; try { st = (await env?.MACRO_STORE?.get?.(IMF_KEY, 'json')) || {}; } catch { }
   const now = new Date(Date.now() - 3 * 3600e3), cur = now.toISOString().slice(0, 7), want = [];
-  for (let y = 2003; y <= now.getUTCFullYear(); y++) for (let m = 1; m <= 12; m++) { const k = `${y}-${String(m).padStart(2, '0')}`; if (k < cur) want.push(k); }
+  // 2003–sep 2026 vienen en public/reserves-components.json (imfPos); acá sólo se agregan los meses posteriores.
+  for (let y = 2026; y <= now.getUTCFullYear(); y++) for (let m = 1; m <= 12; m++) { const k = `${y}-${String(m).padStart(2, '0')}`; if (k >= '2026-09' && k < cur) want.push(k); }
   const missing = want.filter(k => !st[k]).sort((a, b) => (b >= '2024-12') - (a >= '2024-12') || b.localeCompare(a));
   // El mes en curso se vuelve a leer como mucho una vez por día.
   const today = now.toISOString().slice(0, 10), todo = missing.slice(0, max).map(k => [k, monthEnd(k)]);
   if (!st._cur || st._cur.date !== today) todo.unshift(['_cur', today]);
   let changed = false;
   for (const [k, d] of todo.slice(0, max)) {
-    try { const x = parseImfPosition(await fetchText(`https://www.imf.org/external/np/fin/tad/exfin2.aspx?memberKey1=30&date1key=${d}`)); if (x) { st[k] = { ...x, date: d }; changed = true; } } catch (e) { st._err = String(e?.message || e).slice(0, 120); }
+    try { const x = parseImfPosition(await fetchText(`https://www.imf.org/external/np/fin/tad/exfin2.aspx?memberKey1=30&date1key=${d}`)); if (x) { st[k] = { ...x, date: d }; changed = true; } else { st._err = `${d}: formato de la página del FMI no reconocido`; changed = true; } } catch (e) { st._err = String(e?.message || e).slice(0, 120); }
   }
   if (changed) { try { await env?.MACRO_STORE?.put?.(IMF_KEY, JSON.stringify(st)); } catch { } }
   return st;
@@ -132,9 +133,9 @@ export default async function reserves(env, ctx, components) {
   try {
     const [g, e, r, a83, pos, rate] = await Promise.all([bcraSeries(1, '1996-01-01'), bcraSeries(1243, '2003-01-01'), bcraSeries(76, '2003-01-01'), bcraSeries(83, '2009-08-01').catch(() => ({})), imfBackfill(env, 6).catch(() => ({})), usdPerSdr().catch(() => null)]);
     if (Object.keys(g).length < 1000) throw new Error('BCRA: serie de reservas incompleta');
-    const cur = pos?._cur; const P = { ...pos }; if (cur?.date) P[cur.date.slice(0, 7)] = cur;
+    const cur = pos?._cur; const P = { ...(components?.imfPos || {}), ...pos }; if (cur?.date) P[cur.date.slice(0, 7)] = cur;
     const rows = buildReserves(g, e, r, components || {}, P, a83, rate);
-    const imfMonths = Object.keys(pos || {}).filter(k => /^\d{4}-\d{2}$/.test(k)).length;
+    const imfMonths = Object.keys(P).filter(k => /^\d{4}-\d{2}$/.test(k)).length;
     const body = { status: 'ok', imfMonths, imfError: pos?._err || null, usdPerSdr: rate, generatedAt: new Date().toISOString(), source: 'BCRA (reservas, encajes, repos) + componentes documentados (swap China, BIS, SEDESA, oro, DEG, FMI)', componentsThrough: components?.through || null, rows };
     try { const w = env?.MACRO_STORE?.put?.(KV_KEY, JSON.stringify(body)); if (w && ctx?.waitUntil) ctx.waitUntil(w); } catch { }
     return new Response(JSON.stringify(body), { headers });
