@@ -165,3 +165,5 @@ html:not([data-tab="inicio"]) main>section[data-tab]{min-height:calc(100vh - 72p
 .topbar nav a.sub{color:#9fb3cb}
 @media(max-width:900px){.topbar nav .nav-sep{width:auto;height:1px;margin:2px 0}.topbar nav a.active:after{display:none}.topbar nav a.active{color:#75b6ff}}
 .chart-card[hidden]{display:none!important}
+/* v163 · Las tarjetas de Expectativas abren el gráfico: misma "manito" y realce que las del tablero. */
+.forecast[data-kpi]{cursor:pointer;transition:transform .16s ease,box-shadow .16s ease,border-color .16s ease}.forecast[data-kpi]:hover,.forecast[data-kpi]:focus-visible{transform:translateY(-2px);box-shadow:0 12px 30px rgba(20,55,95,.12);border-color:#8db7e8}.forecast[data-kpi]:focus-visible{outline:3px solid rgba(37,99,235,.22);outline-offset:2px}.forecast.featured[data-kpi]:hover{border-color:#2b7de9}

@@ -1,11 +1,12 @@
 // v133 · La portada sale del Worker con los últimos valores de "Mercados ahora" ya escritos en el HTML
 // (último dato guardado en KV), para que al abrir el sitio nunca se vean valores viejos mientras carga /api/markets.
+import { closeDay } from './market-days.mjs';
 const TZ = 'America/Argentina/Buenos_Aires';
 const fmt = new Intl.NumberFormat('es-AR', { maximumFractionDigits: 1 });
 const fmt0 = new Intl.NumberFormat('es-AR', { maximumFractionDigits: 0 });
 
 function stamp(x) {
-  const d = String(x?.date || '').slice(0, 10); if (!d) return '';
+  x = closeDay(x); const d = String(x?.date || '').slice(0, 10); if (!d) return '';
   const today = new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(new Date());
   if (d === today) {
     let hm = '';

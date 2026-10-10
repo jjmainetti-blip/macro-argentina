@@ -1,3 +1,4 @@
+import { closeDay } from './market-days.mjs';
 const round=(n,d=2)=>Number(Number(n).toFixed(d));
 async function fetchJson(url,ms=4500){const c=new AbortController(),t=setTimeout(()=>c.abort(),ms);try{const r=await fetch(url,{signal:c.signal,headers:{accept:'application/json','user-agent':'Macrodatos/1.0 (+https://macrodatos.ar)'}});if(!r.ok)throw new Error(`${r.status}`);return await r.json();}finally{clearTimeout(t)}}
 async function fetchText(url,ms=4500){const c=new AbortController(),t=setTimeout(()=>c.abort(),ms);try{const r=await fetch(url,{signal:c.signal,headers:{accept:'text/html','user-agent':'Mozilla/5.0 Macrodatos/1.0 (+https://macrodatos.ar)'}});if(!r.ok)throw new Error(`${r.status}`);return await r.text();}finally{clearTimeout(t)}}
@@ -297,7 +298,7 @@ export default async(request=null,ctx=null,env=null,opts={})=>{
   try{const r=await env?.MACRO_STORE?.getWithMetadata?.(KV_KEY);if(r?.value){prev=JSON.parse(r.value);prevAt=r.metadata?.savedAt||0;if(!opts.force&&Date.now()-prevAt<60000){MEMO={at:prevAt,body:r.value};return json(r.value,'kv');}}}catch{}
   const [a,b,c,d,e]=await Promise.allSettled([merval(),mep(),risk(),bna(),bcraFx(prev?.latest?.bcra,env)]);
   const val=x=>x.status==='fulfilled'?x.value:null,P=prev?.latest||{};
-  const latest={merval:newer(val(a),P.merval),dollar:newer(val(b),P.dollar),risk:newer(val(c),P.risk),bna:newer(val(d),P.bna),bcra:newer(val(e),P.bcra)};
+  const C=closeDay;const latest={merval:newer(C(val(a)),C(P.merval)),dollar:newer(C(val(b)),C(P.dollar)),risk:newer(C(val(c)),C(P.risk)),bna:newer(C(val(d)),C(P.bna)),bcra:newer(val(e),P.bcra)};
   const body=JSON.stringify({version:133,generatedAt:new Date().toISOString(),mode:'live',refreshSeconds:30,latest});
   MEMO={at:Date.now(),body};
   try{const put=caches?.default?.put(cacheKey,new Response(body,{headers:{'content-type':'application/json','cache-control':'public, max-age=20'}}));if(put&&ctx?.waitUntil)ctx.waitUntil(put);}catch{}

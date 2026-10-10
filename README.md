@@ -389,6 +389,12 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 - `public/reserves-components.json`: swap con China (CNY y tipo de cambio), BIS y otros pasivos de corto plazo, SEDESA, oro (toneladas y precio), con notas y fuentes. Actualizar `through` y los componentes cuando cambien (p. ej., pagos del BIS o el swap).
 - `/api/status` → `reserves`: cuántos meses del FMI ya se cargaron y el último error.
 
+## v163 — Menú, Expectativas y cierres de fin de semana
+
+- Menú: Semáforo, Expectativas y Agenda se subrayan al visitarlas (por clic o al desplazarse por Inicio).
+- Expectativas: las tarjetas muestran la "manito" y el realce al pasar el cursor, como las del tablero.
+- Mercados: los fines de semana y feriados (nacionales y no laborables con fines turísticos) Merval, MEP, riesgo país y BNA se fechan en el último día hábil ("Cierre 09/10/2026") en vez de "Hoy · hora". Calendario en `src/api/market-days.mjs` (y copia en `app.js`); hay que sumar los feriados móviles de 2027 cuando se publiquen.
+
 ## v162 — Reservas netas FMI y líquidas
 
 - Causa: la conversión de DEG a dólares usaba la variable 83 del BCRA, que es una serie de flujos (todo ceros), así que nunca se calculaban las tenencias de DEG ni el crédito del FMI en dólares; sin eso, «Líquidas» y «Metodología FMI» quedaban vacías.
