@@ -389,6 +389,11 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 - `public/reserves-components.json`: swap con China (CNY y tipo de cambio), BIS y otros pasivos de corto plazo, SEDESA, oro (toneladas y precio), con notas y fuentes. Actualizar `through` y los componentes cuando cambien (p. ej., pagos del BIS o el swap).
 - `/api/status` → `reserves`: cuántos meses del FMI ya se cargaron y el último error.
 
+## v165 — Diagnóstico del envío de mails
+
+- La clave de Resend se acepta como `RESEND_API_KEY` o con otro nombre que contenga "RESEND" (se limpian comillas, espacios y un "Bearer " pegado por error).
+- `/api/status` → `reminders.mail`: si está configurado, largo y prefijo de la clave (nunca el valor) y los nombres de variables relacionadas.
+
 ## v164 — Cuentas, contratos y avisos por mail (etapa 1)
 
 - Nueva pestaña **Mi cuenta** (`#cuenta`): ingreso con enlace por mail (sin contraseña; la cuenta se crea al primer ingreso). Sesión de 30 días en cookie HttpOnly/Secure/SameSite=Lax; los cambios sólo se aceptan con `Origin` del propio sitio.

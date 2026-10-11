@@ -43,14 +43,28 @@ async function rateLimit(env, kind, key, max) {
 }
 
 // ── Mail (Resend) ─────────────────────────────────────────────────────────────────────────────────────────────
-export const mailConfigured = env => !!env?.RESEND_API_KEY;
+// v165: la clave se busca por nombre exacto y, si no, por cualquier variable cuyo nombre contenga "RESEND" (por si
+// se cargó como RESEND_KEY, resend_api_key, con espacios, etc.). Se limpian comillas y espacios del valor.
+function resendKey(env) {
+  const pick = v => typeof v === 'string' ? v.trim().replace(/^["']+|["']+$/g, '').replace(/^Bearer\s+/i, '').trim() : '';
+  let k = pick(env?.RESEND_API_KEY);
+  if (!k) for (const n of Object.keys(env || {})) if (/RESEND/i.test(n) && pick(env[n]).startsWith('re_')) { k = pick(env[n]); break; }
+  return k || null;
+}
+export const mailConfigured = env => !!resendKey(env);
+// Diagnóstico (sólo nombres, nunca valores).
+export function mailDiag(env) {
+  const names = Object.keys(env || {}).filter(n => /resend|mail|api.?key/i.test(n)).map(n => JSON.stringify(n));
+  const k = resendKey(env);
+  return { configured: !!k, keyShape: k ? { length: k.length, prefix: k.slice(0, 3) } : null, varNames: names, from: env?.MAIL_FROM ? 'personalizado' : 'por defecto' };
+}
 async function sendMail(env, { to, subject, html, text, unsubscribe }) {
-  if (!env?.RESEND_API_KEY) throw new Error('El envío de mails no está configurado (falta RESEND_API_KEY).');
+  const key = resendKey(env); if (!key) throw new Error('El envío de mails no está configurado (falta RESEND_API_KEY).');
   const headers = {};
   if (unsubscribe) { headers['List-Unsubscribe'] = `<${unsubscribe.post}>`; headers['List-Unsubscribe-Post'] = 'List-Unsubscribe=One-Click'; }
   const r = await fetch('https://api.resend.com/emails', {
     method: 'POST',
-    headers: { authorization: `Bearer ${String(env.RESEND_API_KEY).trim()}`, 'content-type': 'application/json' },
+    headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
     body: JSON.stringify({ from: env.MAIL_FROM || 'Macrodatos <avisos@macrodatos.ar>', to: [to], subject, html, text, headers, ...(env.MAIL_REPLY_TO ? { reply_to: env.MAIL_REPLY_TO } : {}) }),
   });
   if (!r.ok) { let m = ''; try { m = (await r.json())?.message || ''; } catch { } throw new Error(`Resend ${r.status}${m ? `: ${m}` : ''}`); }
@@ -412,6 +426,6 @@ export async function remindersStatus(env) {
   try {
     const t = todayAR(), y = addDays(t, -1);
     const [a, b] = await Promise.all([kvGet(env, `acct:run:${t}`), kvGet(env, `acct:run:${y}`)]);
-    return { mailConfigured: mailConfigured(env), today: a, yesterday: b };
+    return { mailConfigured: mailConfigured(env), mail: mailDiag(env), today: a, yesterday: b };
   } catch { return null; }
 }
