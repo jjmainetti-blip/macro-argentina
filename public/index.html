@@ -14,16 +14,17 @@
   <meta name="theme-color" content="#071b35">
   <title>Macrodatos | Indicadores económicos de Argentina</title>
   <link rel="icon" type="image/svg+xml" href="favicon.svg?v=143">
-  <link rel="stylesheet" href="styles.css?v=163">
+  <link rel="stylesheet" href="styles.css?v=164">
   <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
   <script type="module" src="releases.js?v=156"></script>
   <script defer src="app.js?v=163"></script>
   <script defer src="uva-calc.js?v=139b"></script>
   <script defer src="update-schedule.js?v=152"></script>
-  <script defer src="tabs.js?v=163"></script>
+  <script defer src="tabs.js?v=164"></script>
+  <script defer src="account.js?v=164"></script>
   <script defer src="birth.js?v=155"></script>
   <script defer src="efemerides.js?v=135"></script>
-<script>(function(){var h=(location.hash||'').slice(1),m={'tipo-cambio':'dolar',dolar:'dolar',historicos:'historicos',reservas:'historicos',nacimiento:'naciste',calculadoras:'calculadoras',updateCalc:'calculadoras',uvaCalc:'calculadoras'};var t=m[h]||(/^nacimiento-/.test(h)?'naciste':'inicio');document.documentElement.setAttribute('data-tab',t);})();</script>
+<script>(function(){var h=(location.hash||'').slice(1),m={'tipo-cambio':'dolar',dolar:'dolar',historicos:'historicos',reservas:'historicos',nacimiento:'naciste',calculadoras:'calculadoras',updateCalc:'calculadoras',uvaCalc:'calculadoras'};var t=m[h]||(/^nacimiento-/.test(h)?'naciste':/^(cuenta|acceso=|confirmar=|baja=)/.test(h)?'cuenta':'inicio');document.documentElement.setAttribute('data-tab',t);})();</script>
 </head>
 <body>
 <a class="skip-link" href="#main">Saltar al contenido</a>
@@ -34,7 +35,7 @@
   </a>
   <button class="menu-btn" id="menuBtn" aria-expanded="false" aria-controls="nav">☰<span class="sr-only">Abrir menú</span></button>
   <nav id="nav" aria-label="Navegación principal">
-    <a href="#inicio" data-tab-link="inicio">Inicio</a><a href="#semaforo" data-tab-link="inicio" class="sub">Semáforo</a><a href="#expectativas" data-tab-link="inicio" class="sub">Expectativas</a><a href="#agenda" data-tab-link="inicio" class="sub">Agenda</a><span class="nav-sep" aria-hidden="true"></span><a href="#tipo-cambio" data-tab-link="dolar">Dólar</a><a href="#historicos" data-tab-link="historicos">Series históricas</a><a href="#nacimiento" data-tab-link="naciste">Cuando naciste</a><a href="#calculadoras" data-tab-link="calculadoras">Calculadoras</a>
+    <a href="#inicio" data-tab-link="inicio">Inicio</a><a href="#semaforo" data-tab-link="inicio" class="sub">Semáforo</a><a href="#expectativas" data-tab-link="inicio" class="sub">Expectativas</a><a href="#agenda" data-tab-link="inicio" class="sub">Agenda</a><span class="nav-sep" aria-hidden="true"></span><a href="#tipo-cambio" data-tab-link="dolar">Dólar</a><a href="#historicos" data-tab-link="historicos">Series históricas</a><a href="#nacimiento" data-tab-link="naciste">Cuando naciste</a><a href="#calculadoras" data-tab-link="calculadoras">Calculadoras</a><a href="#cuenta" data-tab-link="cuenta" class="nav-account" id="navAccount">Mi cuenta</a>
   </nav>
 </header>
 
@@ -171,6 +172,11 @@
       <small>Sistema francés: la cuota en UVAs es fija; en pesos se ajusta cada mes por la UVA (inflación). No incluye seguros, gastos ni impuestos. Tasa por banco: menor tasa informada para clientes en la línea UVA de vivienda única y permanente.</small></form>
   </div>
 </section>
+
+<section class="section" id="cuenta" data-tab="cuenta" aria-labelledby="acctTitle">
+  <div class="section-title"><div><span class="eyebrow">Mi cuenta</span><h2 id="acctTitle">Tus contratos y avisos</h2></div><p>Guardá tus contratos (alquileres u otros) con su monto y su fórmula de actualización, y recibí por mail el nuevo monto cada vez que se ajustan.</p></div>
+  <div id="acctApp" class="acct" aria-live="polite"><div class="acct-card acct-loading">Cargando…</div></div>
+</section>
 <section class="section" id="fuentes">
   <div class="section-title"><div><span class="eyebrow">Transparencia</span><h2>Fuentes y metodología</h2></div><p>Cada indicador debe conservar organismo, período y fecha de actualización.</p></div>
   <div class="sources-grid">
@@ -194,7 +200,7 @@
 </section>
 
 </main>
-<footer><div class="brand"><span class="brand-mark" aria-hidden="true"><img src="logo.svg?v=143" alt="" width="40" height="34"></span><span><strong>MACRODATOS</strong><small>ECONOMÍA ARGENTINA</small></span></div><p>Información económica para análisis. No constituye asesoramiento financiero.</p><a href="#inicio">Volver arriba ↑</a><span class="build-version">macrodatos.ar · v163</span></footer>
+<footer><div class="brand"><span class="brand-mark" aria-hidden="true"><img src="logo.svg?v=143" alt="" width="40" height="34"></span><span><strong>MACRODATOS</strong><small>ECONOMÍA ARGENTINA</small></span></div><p>Información económica para análisis. No constituye asesoramiento financiero.</p><a href="#inicio">Volver arriba ↑</a><span class="build-version">macrodatos.ar · v164</span></footer>
 
 <div id="kpiModal" class="kpi-modal" hidden aria-hidden="true">
   <div class="kpi-modal-backdrop" data-kpi-close></div>

@@ -158,7 +158,7 @@
 @media(max-width:620px){.sem-card{padding:12px 10px}.sem-table{min-width:0;table-layout:fixed}.sem-table thead th{font-size:9.5px;letter-spacing:.02em;padding:7px 2px}.sem-table thead th:first-child{width:34%}.sem-table th[scope=row]{white-space:normal;font-size:11.5px;line-height:1.25;padding:7px 4px}.sem-table td{padding:7px 2px}}
 /* v161 · Pestañas */
 html[data-tab="inicio"] main>section[data-tab]{display:none}
-html[data-tab="dolar"] main>section:not([data-tab="dolar"]),html[data-tab="historicos"] main>section:not([data-tab="historicos"]),html[data-tab="naciste"] main>section:not([data-tab="naciste"]),html[data-tab="calculadoras"] main>section:not([data-tab="calculadoras"]){display:none}
+html[data-tab="dolar"] main>section:not([data-tab="dolar"]),html[data-tab="historicos"] main>section:not([data-tab="historicos"]),html[data-tab="naciste"] main>section:not([data-tab="naciste"]),html[data-tab="calculadoras"] main>section:not([data-tab="calculadoras"]),html[data-tab="cuenta"] main>section:not([data-tab="cuenta"]){display:none}
 html:not([data-tab="inicio"]) main>section[data-tab]{min-height:calc(100vh - 72px)}
 .topbar nav a{position:relative}.topbar nav a.active{color:#fff;font-weight:700}.topbar nav a.active:after{content:"";position:absolute;left:0;right:0;bottom:-8px;height:2px;border-radius:2px;background:#75b6ff}
 .topbar nav .nav-sep{width:1px;align-self:stretch;background:rgba(255,255,255,.18);margin:0 2px}
@@ -167,3 +167,25 @@ html:not([data-tab="inicio"]) main>section[data-tab]{min-height:calc(100vh - 72p
 .chart-card[hidden]{display:none!important}
 /* v163 · Las tarjetas de Expectativas abren el gráfico: misma "manito" y realce que las del tablero. */
 .forecast[data-kpi]{cursor:pointer;transition:transform .16s ease,box-shadow .16s ease,border-color .16s ease}.forecast[data-kpi]:hover,.forecast[data-kpi]:focus-visible{transform:translateY(-2px);box-shadow:0 12px 30px rgba(20,55,95,.12);border-color:#8db7e8}.forecast[data-kpi]:focus-visible{outline:3px solid rgba(37,99,235,.22);outline-offset:2px}.forecast.featured[data-kpi]:hover{border-color:#2b7de9}
+/* v164 · Mi cuenta */
+.topbar nav a.nav-account{border:1px solid rgba(255,255,255,.28);border-radius:8px;padding:3px 10px;margin:-4px 0;color:#fff}.topbar nav a.nav-account.active:after{display:none}.topbar nav a.nav-account.active{background:rgba(117,182,255,.18);border-color:#75b6ff}
+.acct{display:grid;gap:16px}.acct-card{background:#fff;border:1px solid var(--line);border-radius:18px;padding:22px;box-shadow:0 10px 30px rgba(10,39,77,.04)}.acct-card h3{margin:0 0 6px;font-size:18px}.acct-card>p{color:var(--muted);font-size:13px;margin:0 0 12px}
+.acct-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}.acct-login label,.acct-form label{display:grid;gap:6px;font-size:11px;font-weight:800;color:#40556e;margin:12px 0}.acct-login input,.acct-form input,.acct-form select{width:100%;padding:11px 12px;border:1px solid #cfdbe8;border-radius:9px;background:#fff;font:inherit;font-size:14px;color:var(--ink)}.acct-login .btn{width:100%}
+.acct-features ul{margin:6px 0 0;padding-left:18px;color:#40556e;font-size:13px;display:grid;gap:9px}.acct-soon{margin-top:14px!important;font-size:12px!important;background:#f3f7fb;border-radius:9px;padding:10px 12px}
+.acct-msg{font-size:13px;color:#40556e;min-height:1em;margin:10px 0 0}.acct-warn{font-size:12px;color:#8a5a00;background:#fff7e6;border:1px solid #f4dfb0;border-radius:9px;padding:9px 12px;margin:8px 0}.acct-note{font-size:12px;color:var(--muted)}
+.acct-center{text-align:center;max-width:520px;margin:0 auto;width:100%}.acct-center .btn{min-width:180px}.acct-big{font-size:38px;line-height:1;margin-bottom:6px;color:var(--blue)}
+.link-btn{background:none;border:0;padding:0;color:var(--blue);font:inherit;font-weight:700;cursor:pointer;text-decoration:underline}
+.acct-bar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;font-size:13px;color:#40556e}.acct-bar-actions{display:flex;gap:14px;align-items:center}
+.acct-list{display:grid;gap:14px}.acct-contract-head{display:flex;justify-content:space-between;gap:16px;align-items:flex-start}.acct-contract-head p{margin:0;color:var(--muted);font-size:12px}
+.acct-now,.acct-next,.acct-preview-head>div{display:grid;text-align:right}.acct-now span,.acct-next span,.acct-preview-head span{font-size:10px;text-transform:uppercase;letter-spacing:.08em;font-weight:800;color:var(--muted)}.acct-now b{font-size:24px;letter-spacing:-.03em;color:var(--navy)}.acct-now small,.acct-next small,.acct-preview-head small{font-size:11px;color:var(--muted)}
+.acct-next{text-align:left;margin-top:12px;background:#f4f8fc;border-radius:11px;padding:11px 14px}.acct-next b{font-size:18px;color:var(--blue)}
+.acct-rem{font-size:12px;color:#40556e;margin:12px 0 0}.acct-rem i{color:#8a5a00;font-style:normal}
+.acct-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}.btn.small{padding:8px 12px;font-size:12px;background:#fff;border:1px solid #cfdbe8;color:var(--navy)}.btn.small:hover{border-color:#8fb3dd}.btn.small.danger,.btn.danger{color:#b4232f;border-color:#efc3c8}.btn.ghost-dark{background:#fff;border:1px solid #cfdbe8;color:var(--navy)}
+.acct-sched{margin-top:12px}.acct-table small{display:block;font-size:10px;color:var(--muted);font-weight:500}.acct-table tr.acct-future td{color:#0b5bd3;background:#f6faff}
+.acct-form h3{margin-bottom:4px}.acct-fields{display:grid;grid-template-columns:repeat(3,1fr);gap:0 14px}.acct-fields .wide,.acct-form>label.wide{grid-column:1/-1}.acct-fields label[hidden]{display:none}.acct-form small{font-weight:500;color:var(--muted)}
+.acct-fs{border:1px solid var(--line);border-radius:12px;padding:4px 14px 2px;margin:10px 0}.acct-fs legend{font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:.08em;color:var(--blue);padding:0 6px}
+.acct-form label.acct-check{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;align-self:end;margin-bottom:22px}.acct-form label.acct-check input{width:auto}
+.acct-preview{margin-top:8px;border-top:1px solid var(--line);padding-top:12px}.acct-preview-head{display:flex;gap:24px;flex-wrap:wrap;margin-bottom:10px}.acct-preview-head>div{text-align:left}.acct-preview-head b{font-size:20px;color:var(--navy)}
+.acct-empty{text-align:center}.acct-data{font-size:11px;color:var(--muted);margin:0}.acct-danger{font-size:12px;color:var(--muted)}.acct-danger summary{cursor:pointer}.acct-tag{display:inline-block;margin-top:10px;font-size:11px;font-weight:800;background:#eef2f6;border-radius:6px;padding:4px 8px}
+@media(max-width:900px){.acct-grid{grid-template-columns:1fr}.acct-fields{grid-template-columns:1fr 1fr}}
+@media(max-width:620px){.acct-fields{grid-template-columns:1fr}.acct-contract-head{flex-direction:column}.acct-now{text-align:left}.acct-card{padding:18px}.topbar nav a.nav-account{align-self:flex-start}}

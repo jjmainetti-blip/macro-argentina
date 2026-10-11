@@ -16,7 +16,7 @@
   ],
   // v125: revisión automática de las fuentes cada 10 minutos, priorizando las tarjetas cuyo dato ya debería estar publicado (ver scheduled() en src/worker.mjs)
   "triggers": {
-    "crons": ["*/10 * * * *", "5-55/10 * * * *"]
+    "crons": ["*/10 * * * *", "5-55/10 * * * *", "47 11 * * *"]
   },
   // v149: Workers AI para leer la placa #DataBCRA "Principales variables" que el BCRA publica en X (el dato viene en la imagen).
   "ai": { "binding": "AI" },

@@ -7,6 +7,7 @@ import reservesData, { imfBackfill } from './api/reserves.mjs';
 import tradeMonthly from './api/trade-monthly.mjs';
 import cementMonthly from './api/cement-monthly.mjs';
 import uvaLoans from './api/uva-loans.mjs';
+import { accountApi, runReminders, remindersStatus } from './api/account.mjs';
 
 const jsonHeaders = {
   'X-Content-Type-Options': 'nosniff',
@@ -58,7 +59,11 @@ export default {
       let xbcra = null; try { const x = await env?.MACRO_STORE?.get?.('x:bcra', 'json'); if (x) xbcra = { tokenConfigured: !!env?.X_BEARER_TOKEN, lastCheck: x.lastCheck ? new Date(x.lastCheck).toISOString() : null, lastError: x.lastError || null, backoffUntil: x.backoffUntil ? new Date(x.backoffUntil).toISOString() : null, days: x.days || {}, lastRead: x.lastRead ?? null, aiConfigured: !!env?.AI, aiError: x.aiError || null, recent: x.recent || [] }; else xbcra = { tokenConfigured: !!env?.X_BEARER_TOKEN, lastCheck: null }; } catch { }
       // Diagnóstico: nombres (nunca valores) de variables que parecen el token, por si quedó con otro nombre.
       try { xbcra = { ...(xbcra || {}), tokenShape: env?.X_BEARER_TOKEN ? xTokenShape(env.X_BEARER_TOKEN) : null, similarVarNames: Object.keys(env || {}).filter(k => /x_|bearer|token|twitter/i.test(k) && typeof env[k] === 'string').map(k => JSON.stringify(k)) }; } catch { }
-      return withHeaders(new Response(JSON.stringify({ generatedAt: new Date().toISOString(), kv: !!env?.MACRO_STORE, xBcra: xbcra, reserves: await (async () => { try { const p = await env?.MACRO_STORE?.get?.('imfpos:v1', 'json'); return p ? { imfMonths: Object.keys(p).filter(k => /^\d{4}-\d{2}$/.test(k)).length, imfError: p._err || null, current: p._cur || null } : null; } catch { return null; } })(), ipcCaba: await (async () => { try { const c = (await env?.MACRO_STORE?.get?.('macro:snapshot:v131:core', 'json'))?.sources?.ipcCaba; return c ? { source: c.source, last: Object.keys(c.history || {}).sort().at(-1), latest: c.latest || null, idecbaError: c.idecbaError || null, baseError: c.baseError || null, refreshError: c.refreshError || null } : null; } catch { return null; } })(), cards }, null, 1), { headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', 'access-control-allow-origin': '*' } }));
+      return withHeaders(new Response(JSON.stringify({ generatedAt: new Date().toISOString(), kv: !!env?.MACRO_STORE, xBcra: xbcra, reminders: await remindersStatus(env), reserves: await (async () => { try { const p = await env?.MACRO_STORE?.get?.('imfpos:v1', 'json'); return p ? { imfMonths: Object.keys(p).filter(k => /^\d{4}-\d{2}$/.test(k)).length, imfError: p._err || null, current: p._cur || null } : null; } catch { return null; } })(), ipcCaba: await (async () => { try { const c = (await env?.MACRO_STORE?.get?.('macro:snapshot:v131:core', 'json'))?.sources?.ipcCaba; return c ? { source: c.source, last: Object.keys(c.history || {}).sort().at(-1), latest: c.latest || null, idecbaError: c.idecbaError || null, baseError: c.baseError || null, refreshError: c.refreshError || null } : null; } catch { return null; } })(), cards }, null, 1), { headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', 'access-control-allow-origin': '*' } }));
+    }
+    // v164: cuentas, contratos y recordatorios por mail.
+    if (url.pathname.startsWith('/api/account')) {
+      const r = await accountApi(request, env, ctx, url); if (r) return r;
     }
     if (request.method === 'GET' && url.pathname === '/api/calendar-data') {
       return withHeaders(await calendarData());
@@ -81,6 +86,10 @@ export default {
   // (límite de 50 pedidos externos por invocación del plan gratuito). Prioriza los grupos con tarjetas cuyo
   // próximo dato ya debería estar publicado según el calendario: así se capturan ni bien salen.
   async scheduled(event, env, ctx) {
+    // v164: recordatorios de contratos — una vez por día (08:47 hora argentina). Si esa ejecución se perdió, la
+    // revisión de cada 5 minutos la hace más tarde ese mismo día (runReminders no repite si ya corrió).
+    if (event.cron === '47 11 * * *') { ctx.waitUntil(runReminders(env).then(r => console.log(`recordatorios: ${JSON.stringify({ ...r, mails: undefined })}`)).catch(e => console.log(`recordatorios: error ${e?.message || e}`))); return; }
+    { const h = new Date(event.scheduledTime || Date.now()).getUTCHours(); if (h >= 12 && h < 23 && Math.floor((event.scheduledTime || Date.now()) / 300000) % 6 === 0) ctx.waitUntil(runReminders(env).catch(() => { })); }
     const groups = Object.keys(GROUPS), tick = Math.floor((event.scheduledTime || Date.now()) / 300000);
     let statuses = [];
     try { statuses = await freshnessReport(env); } catch { }

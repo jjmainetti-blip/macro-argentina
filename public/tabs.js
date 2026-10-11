@@ -4,8 +4,8 @@
 (() => {
   const root = document.documentElement;
   const MAP = { 'tipo-cambio': 'dolar', dolar: 'dolar', historicos: 'historicos', reservas: 'historicos', nacimiento: 'naciste', calculadoras: 'calculadoras', updateCalc: 'calculadoras', uvaCalc: 'calculadoras' };
-  const FIRST = { dolar: 'tipo-cambio', historicos: 'historicos', naciste: 'nacimiento', calculadoras: 'calculadoras', inicio: 'inicio' };
-  const tabFor = h => MAP[h] || (/^nacimiento-/.test(h) ? 'naciste' : 'inicio');
+  const FIRST = { dolar: 'tipo-cambio', historicos: 'historicos', naciste: 'nacimiento', calculadoras: 'calculadoras', cuenta: 'cuenta', inicio: 'inicio' };
+  const tabFor = h => MAP[h] || (/^nacimiento-/.test(h) ? 'naciste' : /^(cuenta|acceso=|confirmar=|baja=)/.test(h) ? 'cuenta' : 'inicio');
   // v163: en "Inicio" se marca también la sección que se está viendo (Semáforo, Expectativas o Agenda).
   const SUBS = ['semaforo', 'expectativas', 'agenda'];
   let curSub = null;
@@ -45,7 +45,7 @@
     const a = e.target.closest?.('a[href^="#"]'); if (!a) return;
     const h = a.getAttribute('href'); if (h === '#' || h === '#main') return;
     const id = h.slice(1), el = document.getElementById(id);
-    if (!el && !MAP[id] && !/^nacimiento-/.test(id)) return;
+    if (!el && !MAP[id] && !/^(nacimiento-|acceso=|confirmar=|baja=)/.test(id)) return;
     e.preventDefault();
     if (location.hash !== h) history.pushState(null, '', h);
     show(h);

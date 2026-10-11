@@ -389,6 +389,20 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 - `public/reserves-components.json`: swap con China (CNY y tipo de cambio), BIS y otros pasivos de corto plazo, SEDESA, oro (toneladas y precio), con notas y fuentes. Actualizar `through` y los componentes cuando cambien (p. ej., pagos del BIS o el swap).
 - `/api/status` → `reserves`: cuántos meses del FMI ya se cargaron y el último error.
 
+## v164 — Cuentas, contratos y avisos por mail (etapa 1)
+
+- Nueva pestaña **Mi cuenta** (`#cuenta`): ingreso con enlace por mail (sin contraseña; la cuenta se crea al primer ingreso). Sesión de 30 días en cookie HttpOnly/Secure/SameSite=Lax; los cambios sólo se aceptan con `Origin` del propio sitio.
+- **Contratos**: monto inicial, fecha de inicio (y fin opcional), índice (IPC con rezago 0–3, ICL, CER, UVA o porcentaje fijo) y frecuencia (mensual… anual u "otra"). Vista previa del cronograma mientras se completa el formulario; monto vigente, próximo ajuste y todos los ajustes. Cálculo en `src/api/contracts-core.mjs` (lo usan la página y los mails).
+- **Avisos por mail** (Resend): sólo cuando hay un ajuste (con 0–15 días de anticipación) o todos los meses (día elegido). Si el índice del ajuste todavía no se publicó, avisa que está pendiente y vuelve a escribir apenas se puede calcular. Hasta 3 direcciones además de la propia; cada una confirma antes de recibir nada. Todos los mails llevan baja de un clic (List-Unsubscribe).
+- Corrida diaria a las 08:47 (cron `47 11 * * *`; si se pierde, la revisión de cada 5 minutos la hace más tarde ese día). Estado en `/api/status` → `reminders`.
+- Datos en KV con prefijo `acct:` (ver encabezado de `src/api/account.mjs`).
+
+### Configuración necesaria (una sola vez)
+1. Crear cuenta en resend.com → *Domains* → agregar `macrodatos.ar` y cargar en Cloudflare DNS los registros que indica (DKIM/SPF y, opcional, DMARC). Esperar a que figure *Verified*.
+2. *API Keys* → crear una con permiso *Sending access*.
+3. Cloudflare → Workers → macro-argentina → Settings → Variables and Secrets: agregar el secreto `RESEND_API_KEY`. Opcionales: `MAIL_FROM` (por defecto `Macrodatos <avisos@macrodatos.ar>`), `MAIL_REPLY_TO`.
+4. Plan gratuito de Resend: 100 mails por día / 3.000 por mes.
+
 ## v163 — Menú, Expectativas y cierres de fin de semana
 
 - Menú: Semáforo, Expectativas y Agenda se subrayan al visitarlas (por clic o al desplazarse por Inicio).
