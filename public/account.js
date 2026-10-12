@@ -107,48 +107,105 @@
       ${rows.map(r => `<tr class="${r.past ? '' : 'acct-future'}"><td>${r.k}</td><td>${esc(day(r.date))}${r.window ? `<small>${esc(r.window)}</small>` : ''}</td><td>${r.pending ? '<i>pendiente</i>' : `<strong>${money(r.amount)}</strong>`}</td><td>${r.pending ? '—' : pct(r.stepPct)}</td><td>${r.pending ? `<small>${esc(r.hint)}</small>` : pct(r.totalPct)}</td></tr>`).join('')}
     </tbody></table></div>`;
   }
+  // ── v168 · Ventana emergente (mismo estilo que las tarjetas de Pulso económico) ──────────────────────────────
+  let modalEl = null, lastFocus = null;
+  function openModal(cls = '') {
+    if (!modalEl) {
+      modalEl = document.createElement('div'); modalEl.className = 'kpi-modal acct-modal'; modalEl.hidden = true;
+      modalEl.innerHTML = '<div class="kpi-modal-backdrop" data-close></div><section class="kpi-modal-panel" role="dialog" aria-modal="true"><button class="kpi-modal-close" type="button" data-close aria-label="Cerrar">×</button><div class="acct-modal-body"></div></section>';
+      document.body.appendChild(modalEl);
+      modalEl.querySelectorAll('[data-close]').forEach(x => x.addEventListener('click', closeModal));
+      document.addEventListener('keydown', e => { if (e.key === 'Escape' && !modalEl.hidden) closeModal(); });
+    }
+    lastFocus = document.activeElement;
+    modalEl.querySelector('.kpi-modal-panel').className = `kpi-modal-panel ${cls}`;
+    modalEl.hidden = false; modalEl.setAttribute('aria-hidden', 'false'); document.body.classList.add('modal-open');
+    const body = modalEl.querySelector('.acct-modal-body'); body.innerHTML = '';
+    requestAnimationFrame(() => modalEl.querySelector('.kpi-modal-close').focus());
+    return body;
+  }
+  function closeModal() { if (!modalEl) return; modalEl.hidden = true; modalEl.setAttribute('aria-hidden', 'true'); document.body.classList.remove('modal-open'); state.editing = null; lastFocus?.focus?.(); }
+
+  // Tarjeta de contrato con el formato de Pulso económico.
+  function contractCard(c) {
+    const n = c.next, badge = c.index === 'fixed' ? `${String(c.fixedPct).replace('.', ',')}%` : c.index.toUpperCase();
+    let em = '', cls = '';
+    if (c.ended) { em = 'Contrato finalizado'; cls = 'neutral'; }
+    else if (c.baseError) { em = 'Sin datos del índice al inicio'; cls = 'down'; }
+    else if (n?.pending) { em = `Próximo: ${day(n.date)} · pendiente`; cls = 'neutral'; }
+    else if (n) { em = `Próximo: ${day(n.date)} · ${pct(n.stepPct)}`; cls = n.stepPct >= 0 ? '' : 'down'; }
+    const rem = c.reminders?.mode === 'off' ? 'Sin avisos por mail' : c.reminders?.mode === 'monthly' ? 'Aviso mensual por mail' : 'Aviso por mail en cada ajuste';
+    const pendingRcpt = (c.recipients || []).some(x => x.status === 'pending');
+    return `<article class="kpi acct-kpi" data-id="${esc(c.id)}" tabindex="0" role="button" aria-label="Ver detalle de ${esc(c.name)}">
+      <div class="kpi-top"><span>${esc(c.name)}</span><b>${esc(badge)}</b></div>
+      <strong>${money(c.current?.amount)}</strong>
+      <p>Vigente desde ${esc(day(c.current?.date))} · ${esc(freqText(c.freq))}</p>
+      <em class="${cls}">${esc(em)}</em>
+      <div class="data-health ${c.reminders?.mode === 'off' ? 'cached' : 'live'}">${rem}${pendingRcpt ? ' · falta una confirmación' : ''}</div>
+    </article>`;
+  }
+  function openContract(c) {
+    const body = openModal('acct-modal-wide');
+    body.innerHTML = `<div class="kpi-modal-head"><div><span class="kpi-modal-agency">${esc(indexText(c))} · ajuste ${esc(freqText(c.freq))}</span><h2>${esc(c.name)}</h2><p>Desde ${esc(day(c.start))}${c.end ? ` hasta ${esc(day(c.end))}` : ''} · monto inicial ${money(c.amount)}</p></div><strong>${money(c.current?.amount)}<small class="acct-modal-sub">vigente desde ${esc(day(c.current?.date))}</small></strong></div>
+      ${nextHtml(c)}
+      <p class="acct-rem">${remindersText(c)}</p>
+      ${c.notes ? `<p class="acct-note">Nota: ${esc(c.notes)}</p>` : ''}
+      <h3 class="acct-h3b">Ajustes</h3>${c.baseError ? '' : scheduleTable(c)}
+      <div class="acct-actions"><button class="btn primary" data-act="edit">Editar</button>${c.reminders?.mode !== 'off' && state.mail ? '<button class="btn small" data-act="test">Enviarme un mail de prueba</button>' : ''}<button class="btn small danger" data-act="del">Eliminar</button></div>
+      <p class="acct-msg" role="status"></p>`;
+    const msg = body.querySelector('.acct-msg');
+    body.querySelectorAll('[data-act]').forEach(b => b.onclick = async () => {
+      const act = b.dataset.act;
+      if (act === 'edit') openForm(c);
+      if (act === 'test') { b.disabled = true; msg.textContent = 'Enviando…'; try { await api(`/contracts/${c.id}/test`, { method: 'POST' }); msg.textContent = `Listo: revisá ${state.user.email}.`; } catch (err) { msg.textContent = err.message; } b.disabled = false; }
+      if (act === 'del') { if (!confirm(`¿Eliminar "${c.name}"?`)) return; try { await api(`/contracts/${c.id}`, { method: 'DELETE' }); closeModal(); await loadContracts(); } catch (err) { msg.textContent = err.message; } }
+    });
+  }
   function viewAccount() {
     const d = state.data || {};
     const dataNote = [d.ipc ? `IPC hasta ${day(d.ipc)}` : null, d.icl ? `ICL hasta ${day(d.icl)}` : null, d.cer ? `CER hasta ${day(d.cer)}` : null, d.uva ? `UVA hasta ${day(d.uva)}` : null].filter(Boolean).join(' · ');
-    app.innerHTML = `<div class="acct-bar"><span>Sesión iniciada como <b>${esc(state.user.email)}</b></span><span class="acct-bar-actions"><button class="btn primary" id="acctAdd">+ Agregar contrato</button><button class="link-btn" id="acctLogout">Cerrar sesión</button></span></div>
+    app.innerHTML = `<div class="acct-bar"><span>Sesión iniciada como <b>${esc(state.user.email)}</b></span><span class="acct-bar-actions"><button class="link-btn" id="acctLogout">Cerrar sesión</button></span></div>
       ${state.mail ? '' : '<p class="acct-warn">El envío de mails todavía no está configurado en el sitio: los contratos se guardan, pero los avisos no van a salir.</p>'}
-      <div id="acctForm"></div>
-      <div class="acct-list">${state.contracts.length ? state.contracts.map(c => `
-        <article class="acct-card acct-contract" data-id="${esc(c.id)}">
-          <div class="acct-contract-head"><div><h3>${esc(c.name)}</h3><p>${esc(indexText(c))} · ajuste ${esc(freqText(c.freq))} · desde ${esc(day(c.start))}${c.end ? ` hasta ${esc(day(c.end))}` : ''}</p></div>
-            <div class="acct-now"><span>Monto vigente</span><b>${money(c.current?.amount)}</b><small>desde ${esc(day(c.current?.date))}</small></div></div>
-          ${nextHtml(c)}
-          ${c.pendingNote || ''}
-          <p class="acct-rem">${remindersText(c)}</p>
-          <div class="acct-actions"><button class="btn small" data-act="sched">Ver ajustes</button><button class="btn small" data-act="edit">Editar</button>${c.reminders?.mode !== 'off' && state.mail ? '<button class="btn small" data-act="test">Enviarme un mail de prueba</button>' : ''}<button class="btn small danger" data-act="del">Eliminar</button></div>
-          <div class="acct-sched" hidden></div><p class="acct-msg" role="status"></p>
-        </article>`).join('') : '<div class="acct-card acct-empty"><h3>Todavía no cargaste contratos</h3><p>Agregá el primero con su monto inicial, la fecha de inicio y el índice de actualización.</p></div>'}</div>
+      <div class="acct-section-head"><h3>Tus contratos</h3><span class="acct-note">Tocá una tarjeta para ver todos los ajustes.</span></div>
+      <div class="kpi-grid acct-kpis">${state.contracts.map(contractCard).join('')}
+        <button type="button" class="kpi acct-kpi-add" id="acctAdd"><span>+</span><b>Agregar contrato</b><small>Monto, fecha, índice y frecuencia de ajuste</small></button></div>
       <p class="acct-data">${esc(dataNote)}</p>
-      <div id="acctPrefs"></div>
+      <div class="acct-card acct-prefs-bar"><div><h3>Resúmenes, alertas y seguimiento</h3><p id="acctPrefsSummary" class="acct-note">Cargando…</p></div><button class="btn primary" id="acctPrefsBtn" type="button">Configurar resúmenes y alertas</button></div>
       <details class="acct-danger"><summary>Eliminar mi cuenta</summary><p>Se borran tus contratos y dejás de recibir avisos. No se puede deshacer.</p><button class="btn small danger" id="acctDelete">Eliminar mi cuenta</button></details>`;
     document.getElementById('acctAdd').onclick = () => openForm(null);
+    document.getElementById('acctPrefsBtn').onclick = () => openPrefs();
     loadPrefs();
     document.getElementById('acctLogout').onclick = async () => { try { await api('/logout', { method: 'POST' }); } catch { } state.user = null; setNav(); viewLogin(); };
     document.getElementById('acctDelete').onclick = async () => { if (!confirm('¿Eliminar tu cuenta y todos tus contratos?')) return; try { await api('', { method: 'DELETE' }); } catch { } state.user = null; setNav(); viewLogin('Tu cuenta fue eliminada.'); };
-    app.querySelectorAll('.acct-contract').forEach(card => {
-      const c = state.contracts.find(x => x.id === card.dataset.id), msg = card.querySelector('.acct-msg');
-      card.querySelectorAll('[data-act]').forEach(b => b.onclick = async () => {
-        const act = b.dataset.act;
-        if (act === 'sched') { const s = card.querySelector('.acct-sched'); s.hidden = !s.hidden; if (!s.hidden) s.innerHTML = scheduleTable(c); b.textContent = s.hidden ? 'Ver ajustes' : 'Ocultar ajustes'; }
-        if (act === 'edit') openForm(c);
-        if (act === 'test') { b.disabled = true; msg.textContent = 'Enviando…'; try { await api(`/contracts/${c.id}/test`, { method: 'POST' }); msg.textContent = `Listo: revisá ${state.user.email}.`; } catch (err) { msg.textContent = err.message; } b.disabled = false; }
-        if (act === 'del') { if (!confirm(`¿Eliminar "${c.name}"?`)) return; try { await api(`/contracts/${c.id}`, { method: 'DELETE' }); await loadContracts(); } catch (err) { msg.textContent = err.message; } }
-      });
+    app.querySelectorAll('.acct-kpi').forEach(card => {
+      const c = state.contracts.find(x => x.id === card.dataset.id);
+      card.addEventListener('click', () => openContract(c));
+      card.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openContract(c); } });
     });
   }
 
-
   // ── v166 · Resúmenes y alertas ─────────────────────────────────────────────────────────────────────────────
   const DIAS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+  let prefsData = null;
+  function prefsSummary(P) {
+    if (!P) return '';
+    const D = P.digest, bits = [];
+    if (D.daily.on) bits.push(`resumen diario (${D.daily.slot === 'am' ? '8:30' : '18:30'})`);
+    if (D.weekly.on) bits.push(`resumen semanal (${DIAS[D.weekly.day].toLowerCase()})`);
+    const al = P.alerts.filter(a => a.on).length; if (al) bits.push(`${al} ${al === 1 ? 'alerta' : 'alertas'} de mercado`);
+    const w = (D.watch || []).length; if (w) bits.push(`${w} ${w === 1 ? 'instrumento' : 'instrumentos'} en seguimiento`);
+    return bits.length ? `Activo: ${bits.join(' · ')}.` : 'No tenés resúmenes ni alertas activos.';
+  }
   async function loadPrefs() {
-    const box = document.getElementById('acctPrefs'); if (!box) return;
-    try { const j = await api('/prefs'); renderPrefs(box, j); }
-    catch (err) { box.innerHTML = `<div class="acct-card">No se pudieron cargar tus resúmenes y alertas: ${esc(err.message)}</div>`; }
+    const el = document.getElementById('acctPrefsSummary');
+    try { prefsData = await api('/prefs'); if (el) el.textContent = prefsSummary(prefsData.prefs); }
+    catch (err) { if (el) el.textContent = `No se pudieron cargar: ${err.message}`; }
+  }
+  async function openPrefs() {
+    const box = openModal('acct-modal-wide');
+    box.innerHTML = '<p class="acct-note">Cargando…</p>';
+    if (!prefsData) { try { prefsData = await api('/prefs'); } catch (err) { box.innerHTML = `<p class="acct-warn">${esc(err.message)}</p>`; return; } }
+    renderPrefs(box, prefsData);
   }
   function renderPrefs(box, j) {
     const P = j.prefs, D = P.digest, slotOpts = v => Object.entries(j.slots).map(([k, l]) => `<option value="${k}"${v === k ? ' selected' : ''}>${esc(l)}</option>`).join('');
@@ -207,7 +264,7 @@
     });
     f.addEventListener('submit', async e => {
       e.preventDefault(); const b = f.querySelector('[type=submit]'); b.disabled = true; msg.textContent = 'Guardando…';
-      try { const r = await api('/prefs', { method: 'POST', body: read() }); renderPrefs(box, { ...j, prefs: r.prefs }); document.getElementById('acctPrefsMsg').textContent = 'Guardado.'; }
+      try { const r = await api('/prefs', { method: 'POST', body: read() }); prefsData = { ...j, prefs: r.prefs }; const sm = document.getElementById('acctPrefsSummary'); if (sm) sm.textContent = prefsSummary(r.prefs); renderPrefs(box, prefsData); document.getElementById('acctPrefsMsg').textContent = 'Guardado.'; }
       catch (err) { msg.textContent = err.message; b.disabled = false; }
     });
     f.querySelectorAll('[data-test]').forEach(b => b.onclick = async () => {
@@ -221,7 +278,7 @@
   // ── Formulario de contrato con vista previa ────────────────────────────────────────────────────────────────
   function openForm(c) {
     state.editing = c;
-    const box = document.getElementById('acctForm'), r = c?.reminders || { mode: 'adjust', day: 1, daysBefore: 0, self: true };
+    const box = openModal('acct-modal-wide'), r = c?.reminders || { mode: 'adjust', day: 1, daysBefore: 0, self: true };
     const freqVal = c ? (FREQ[c.freq] ? String(c.freq) : 'other') : '3';
     const amountTxt = c ? String(c.amount).replace('.', ',') : '';
     box.innerHTML = `<form class="acct-card acct-form" id="acctContractForm" novalidate>
@@ -280,14 +337,13 @@
     };
     f.addEventListener('input', () => { sync(); preview(); }); f.addEventListener('change', () => { sync(); preview(); });
     sync(); preview();
-    document.getElementById('acctCancel').onclick = () => { box.innerHTML = ''; state.editing = null; };
+    document.getElementById('acctCancel').onclick = () => { if (c) openContract(c); else closeModal(); };
     f.addEventListener('submit', async e => {
       e.preventDefault(); const m = document.getElementById('acctFormMsg'), b = f.querySelector('[type=submit]');
       b.disabled = true; m.textContent = 'Guardando…';
-      try { await api(c ? `/contracts/${c.id}` : '/contracts', { method: c ? 'PUT' : 'POST', body: read() }); state.editing = null; await loadContracts(); }
+      try { await api(c ? `/contracts/${c.id}` : '/contracts', { method: c ? 'PUT' : 'POST', body: read() }); closeModal(); await loadContracts(); }
       catch (err) { m.textContent = err.message; b.disabled = false; }
     });
-    f.scrollIntoView({ block: 'start', behavior: 'smooth' });
   }
 
   // ── Arranque ───────────────────────────────────────────────────────────────────────────────────────────────

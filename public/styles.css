@@ -201,3 +201,12 @@ html:not([data-tab="inicio"]) main>section[data-tab]{min-height:calc(100vh - 72p
 .acct-chips{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 4px}.acct-chip{display:inline-grid;grid-template-columns:auto auto;align-items:center;gap:0 10px;border:1px solid #cfdbe8;border-radius:10px;padding:6px 6px 6px 11px;background:#fff;font-size:12px}
 .acct-chip>b{font-size:13px}.acct-chip small{grid-column:1;color:var(--muted);font-size:10px}.acct-chip-q{grid-column:1;font-size:11px;color:#40556e}.acct-chip-q b.up{color:var(--green)}.acct-chip-q b.down{color:var(--red)}
 .acct-chip button{grid-column:2;grid-row:1/4;border:0;background:#f1f5f9;border-radius:7px;width:26px;height:26px;cursor:pointer;font-size:16px;color:#64748b}.acct-chip button:hover{background:#fde8ea;color:var(--red)}
+/* v168 · Contratos como tarjetas (formato Pulso económico) y detalles en ventana emergente */
+.acct-section-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:6px}.acct-section-head h3{margin:0;font-size:18px}
+.acct-kpis{margin-top:-4px}.acct-kpi .kpi-top span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:75%}.acct-kpi>strong{font-size:26px}.acct-kpi em.neutral{color:var(--muted)}.acct-kpi::after{content:'Ver detalle'}
+.acct-kpi-add{display:grid;place-content:center;justify-items:center;gap:4px;text-align:center;border:1.5px dashed #b9cde4;background:#f8fbff;color:var(--blue);font:inherit;min-height:170px}.acct-kpi-add::after{content:none}.acct-kpi-add>span{font-size:30px;line-height:1;font-weight:300}.acct-kpi-add b{font-size:14px}.acct-kpi-add small{font-size:11px;color:var(--muted);max-width:180px}
+.acct-prefs-bar{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}.acct-prefs-bar h3{margin:0 0 2px}.acct-prefs-bar p{margin:0}
+.acct-modal .kpi-modal-panel{max-width:920px}.acct-modal .acct-card{border:0;box-shadow:none;padding:0;background:transparent}.acct-modal .acct-form h3,.acct-modal .acct-prefs>h3:first-child{font-size:22px;margin-top:2px;padding-right:40px}
+.acct-modal .kpi-modal-head>strong{display:grid;text-align:right}.acct-modal-sub{font-size:12px;font-weight:500;color:var(--muted)}.acct-modal .upd-table-wrap{max-height:none}
+body.modal-open{overflow:hidden}
+@media(max-width:620px){.acct-modal .kpi-modal-head>strong{text-align:left}.acct-prefs-bar .btn{width:100%}}

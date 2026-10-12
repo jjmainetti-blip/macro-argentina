@@ -389,6 +389,11 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 - `public/reserves-components.json`: swap con China (CNY y tipo de cambio), BIS y otros pasivos de corto plazo, SEDESA, oro (toneladas y precio), con notas y fuentes. Actualizar `through` y los componentes cuando cambien (p. ej., pagos del BIS o el swap).
 - `/api/status` → `reserves`: cuántos meses del FMI ya se cargaron y el último error.
 
+## v168 — Mi cuenta más ordenada
+
+- Los contratos se muestran como tarjetas con el formato de Pulso económico (nombre, índice, monto vigente, próximo ajuste y estado de los avisos) más una tarjeta "Agregar contrato". Al tocar una tarjeta se abre una ventana con todos los detalles y el cronograma de ajustes, con Editar, Enviarme un mail de prueba y Eliminar; el formulario también se abre en esa ventana.
+- Debajo, el recuadro "Resúmenes, alertas y seguimiento" resume lo que está activo y el botón "Configurar resúmenes y alertas" abre la configuración en la misma ventana.
+
 ## v167 — Acciones, bonos y ADRs en los resúmenes (etapa 3)
 
 - **Mi cuenta → Resúmenes → Tu seguimiento**: buscador con todos los instrumentos de BYMA (acciones, bonos, letras, ON, CEDEARs) y las empresas argentinas que cotizan en Wall Street (ADRs de GGAL, YPF, PAM, BMA, BBAR, SUPV, CEPU, EDN, TEO, TGS, CRESY, IRS, LOMA, TX, TS y acciones de MELI, GLOB, VIST, BIOX, CAAP, DESP). Hasta 20 por usuario, con precio y variación en el momento.
