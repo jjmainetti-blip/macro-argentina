@@ -38,7 +38,9 @@
         <li><b>Contratos</b> — cargá el monto inicial, la fecha, el índice (IPC, ICL, CER, UVA o un porcentaje fijo) y cada cuánto se actualiza.</li>
         <li><b>Cronograma</b> — mirá el monto vigente, todos los ajustes y el próximo, con el porcentaje de cada uno.</li>
         <li><b>Avisos por mail</b> — a vos y a otra persona (por ejemplo, el inquilino o el propietario), todos los meses o sólo cuando hay un ajuste.</li>
-      </ul><p class="acct-soon">Próximamente: resúmenes diarios y semanales, alertas de dólar, riesgo país y Merval, y seguimiento de acciones, bonos y ADRs.</p></div></div>`;
+        <li><b>Resúmenes por mail</b> — diario y/o semanal, con lo que elijas: dólar, riesgo país, Merval, compras del BCRA, datos publicados, REM y agenda.</li>
+        <li><b>Alertas</b> — un mail cuando el dólar, el riesgo país o el Merval se mueven más que el porcentaje que fijes.</li>
+      </ul><p class="acct-soon">Próximamente: seguimiento de acciones, bonos y ADRs en los resúmenes.</p></div></div>`;
     const f = document.getElementById('acctLoginForm');
     f.addEventListener('submit', async e => {
       e.preventDefault();
@@ -68,12 +70,12 @@
     catch (err) { app.innerHTML = `<div class="acct-card acct-center"><h3>Enlace no válido</h3><p>${esc(err.message)}</p></div>`; return; }
     const confirm = kind === 'confirmar';
     app.innerHTML = `<div class="acct-card acct-center"><h3>${confirm ? 'Avisos de un contrato' : 'Dejar de recibir avisos'}</h3>
-      <p>${confirm ? `<b>${esc(info.owner)}</b> te agregó como destinatario de los avisos de actualización del contrato <b>${esc(info.contract)}</b>.` : `Vas a dejar de recibir los avisos del contrato <b>${esc(info.contract)}</b>.`}</p>
+      <p>${confirm ? `<b>${esc(info.owner)}</b> te agregó como destinatario de los avisos de actualización del contrato <b>${esc(info.contract)}</b>.` : (info.kind === 'digest' ? 'Vas a dejar de recibir los resúmenes y las alertas por mail. Podés volver a activarlos desde tu cuenta.' : `Vas a dejar de recibir los avisos del contrato <b>${esc(info.contract)}</b>.`)}</p>
       <div class="acct-actions">${confirm ? '<button class="btn primary" data-a="confirm">Sí, quiero recibirlos</button><button class="btn ghost-dark" data-a="unsubscribe">No, gracias</button>' : '<button class="btn primary" data-a="unsubscribe">Darme de baja</button>'}</div>
       <p class="acct-msg" id="acctMsg" role="status"></p></div>`;
     app.querySelectorAll('[data-a]').forEach(b => b.onclick = async () => {
       app.querySelectorAll('[data-a]').forEach(x => x.disabled = true);
-      try { const j = await api('/recipient', { method: 'POST', body: { token, action: b.dataset.a } }); document.getElementById('acctMsg').textContent = j.status === 'ok' ? 'Listo: vas a recibir los avisos de este contrato.' : 'Listo: no vas a recibir más avisos de este contrato.'; clearHash(); }
+      try { const j = await api('/recipient', { method: 'POST', body: { token, action: b.dataset.a } }); document.getElementById('acctMsg').textContent = j.status === 'ok' ? 'Listo: vas a recibir los avisos de este contrato.' : (info.kind === 'digest' ? 'Listo: no vas a recibir más resúmenes ni alertas.' : 'Listo: no vas a recibir más avisos de este contrato.'); clearHash(); }
       catch (err) { document.getElementById('acctMsg').textContent = err.message; }
     });
   }
@@ -121,8 +123,10 @@
           <div class="acct-sched" hidden></div><p class="acct-msg" role="status"></p>
         </article>`).join('') : '<div class="acct-card acct-empty"><h3>Todavía no cargaste contratos</h3><p>Agregá el primero con su monto inicial, la fecha de inicio y el índice de actualización.</p></div>'}</div>
       <p class="acct-data">${esc(dataNote)}</p>
+      <div id="acctPrefs"></div>
       <details class="acct-danger"><summary>Eliminar mi cuenta</summary><p>Se borran tus contratos y dejás de recibir avisos. No se puede deshacer.</p><button class="btn small danger" id="acctDelete">Eliminar mi cuenta</button></details>`;
     document.getElementById('acctAdd').onclick = () => openForm(null);
+    loadPrefs();
     document.getElementById('acctLogout').onclick = async () => { try { await api('/logout', { method: 'POST' }); } catch { } state.user = null; setNav(); viewLogin(); };
     document.getElementById('acctDelete').onclick = async () => { if (!confirm('¿Eliminar tu cuenta y todos tus contratos?')) return; try { await api('', { method: 'DELETE' }); } catch { } state.user = null; setNav(); viewLogin('Tu cuenta fue eliminada.'); };
     app.querySelectorAll('.acct-contract').forEach(card => {
@@ -134,6 +138,50 @@
         if (act === 'test') { b.disabled = true; msg.textContent = 'Enviando…'; try { await api(`/contracts/${c.id}/test`, { method: 'POST' }); msg.textContent = `Listo: revisá ${state.user.email}.`; } catch (err) { msg.textContent = err.message; } b.disabled = false; }
         if (act === 'del') { if (!confirm(`¿Eliminar "${c.name}"?`)) return; try { await api(`/contracts/${c.id}`, { method: 'DELETE' }); await loadContracts(); } catch (err) { msg.textContent = err.message; } }
       });
+    });
+  }
+
+
+  // ── v166 · Resúmenes y alertas ─────────────────────────────────────────────────────────────────────────────
+  const DIAS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+  async function loadPrefs() {
+    const box = document.getElementById('acctPrefs'); if (!box) return;
+    try { const j = await api('/prefs'); renderPrefs(box, j); }
+    catch (err) { box.innerHTML = `<div class="acct-card">No se pudieron cargar tus resúmenes y alertas: ${esc(err.message)}</div>`; }
+  }
+  function renderPrefs(box, j) {
+    const P = j.prefs, D = P.digest, slotOpts = v => Object.entries(j.slots).map(([k, l]) => `<option value="${k}"${v === k ? ' selected' : ''}>${esc(l)}</option>`).join('');
+    box.innerHTML = `<form class="acct-card acct-prefs" id="acctPrefsForm" novalidate>
+      <h3>Resúmenes por mail</h3><p>Llegan a ${esc(state.user.email)}. El diario sale sólo en días hábiles.</p>
+      <div class="acct-prefs-grid">
+        <div class="acct-pref"><label class="acct-check"><input type="checkbox" name="dailyOn"${D.daily.on ? ' checked' : ''}> <b>Resumen diario</b></label>
+          <label>Horario<select name="dailySlot">${slotOpts(D.daily.slot)}</select></label></div>
+        <div class="acct-pref"><label class="acct-check"><input type="checkbox" name="weeklyOn"${D.weekly.on ? ' checked' : ''}> <b>Resumen semanal</b></label>
+          <div class="acct-row2"><label>Día<select name="weeklyDay">${DIAS.map((d, i) => `<option value="${i}"${D.weekly.day === i ? ' selected' : ''}>${d}</option>`).join('')}</select></label>
+          <label>Horario<select name="weeklySlot">${slotOpts(D.weekly.slot)}</select></label></div></div>
+      </div>
+      <fieldset class="acct-fs"><legend>Qué incluir</legend><div class="acct-items">${Object.entries(j.items).map(([k, l]) => `<label class="acct-check"><input type="checkbox" name="item" value="${k}"${D.items.includes(k) ? ' checked' : ''}> ${esc(l)}</label>`).join('')}</div></fieldset>
+      <h3 class="acct-h3b">Alertas de mercado</h3><p>Te avisamos cuando la variación del día supera tu umbral. Se revisa cada 5 minutos en días hábiles (10:30 a 18 h); llega un mail por activo y dirección, y otro si el movimiento llega al doble, al triple…</p>
+      <div class="acct-alerts">${P.alerts.map(a => `<div class="acct-alert" data-asset="${a.asset}"><label class="acct-check"><input type="checkbox" name="on"${a.on ? ' checked' : ''}> <b>${esc(j.assets[a.asset])}</b></label>
+        <label>Umbral (%)<input name="pct" inputmode="decimal" value="${String(a.pct).replace('.', ',')}"></label>
+        <label>Dirección<select name="dir"><option value="both"${a.dir === 'both' ? ' selected' : ''}>Sube o baja</option><option value="up"${a.dir === 'up' ? ' selected' : ''}>Sólo si sube</option><option value="down"${a.dir === 'down' ? ' selected' : ''}>Sólo si baja</option></select></label></div>`).join('')}</div>
+      <div class="acct-actions"><button class="btn primary" type="submit">Guardar</button><button class="btn small" type="button" data-test="daily">Probar resumen diario</button><button class="btn small" type="button" data-test="weekly">Probar resumen semanal</button></div>
+      <p class="acct-msg" id="acctPrefsMsg" role="status"></p></form>`;
+    const f = document.getElementById('acctPrefsForm'), msg = document.getElementById('acctPrefsMsg');
+    const read = () => ({
+      digest: { daily: { on: f.dailyOn.checked, slot: f.dailySlot.value }, weekly: { on: f.weeklyOn.checked, day: Number(f.weeklyDay.value), slot: f.weeklySlot.value }, items: [...f.querySelectorAll('[name=item]:checked')].map(x => x.value) },
+      alerts: [...f.querySelectorAll('.acct-alert')].map(el => ({ asset: el.dataset.asset, on: el.querySelector('[name=on]').checked, pct: el.querySelector('[name=pct]').value, dir: el.querySelector('[name=dir]').value })),
+    });
+    f.addEventListener('submit', async e => {
+      e.preventDefault(); const b = f.querySelector('[type=submit]'); b.disabled = true; msg.textContent = 'Guardando…';
+      try { const r = await api('/prefs', { method: 'POST', body: read() }); renderPrefs(box, { ...j, prefs: r.prefs }); document.getElementById('acctPrefsMsg').textContent = 'Guardado.'; }
+      catch (err) { msg.textContent = err.message; b.disabled = false; }
+    });
+    f.querySelectorAll('[data-test]').forEach(b => b.onclick = async () => {
+      b.disabled = true; msg.textContent = 'Enviando…';
+      try { await api('/prefs/test', { method: 'POST', body: { kind: b.dataset.test, prefs: read() } }); msg.textContent = `Listo: revisá ${state.user.email}.`; }
+      catch (err) { msg.textContent = err.message; }
+      b.disabled = false;
     });
   }
 

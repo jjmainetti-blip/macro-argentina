@@ -17,24 +17,24 @@ const COOKIE = 'md_sess';
 const TZ = 'America/Argentina/Buenos_Aires';
 
 // ── Utilidades ────────────────────────────────────────────────────────────────────────────────────────────────
-const json = (body, status = 200, headers = {}) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', ...headers } });
-const todayAR = () => new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(new Date());
-const site = env => String(env?.SITE_URL || 'https://macrodatos.ar').replace(/\/+$/, '');
+export const json = (body, status = 200, headers = {}) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', ...headers } });
+export const todayAR = () => new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(new Date());
+export const site = env => String(env?.SITE_URL || 'https://macrodatos.ar').replace(/\/+$/, '');
 const validEmail = e => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e) && e.length <= 120;
 const normEmail = e => String(e || '').trim().toLowerCase();
-const userKey = email => `acct:user:${email}`;
-function randomToken(bytes = 32) { const a = new Uint8Array(bytes); crypto.getRandomValues(a); return btoa(String.fromCharCode(...a)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
+export const userKey = email => `acct:user:${email}`;
+export function randomToken(bytes = 32) { const a = new Uint8Array(bytes); crypto.getRandomValues(a); return btoa(String.fromCharCode(...a)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
 async function sha256(s) { const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s)); return [...new Uint8Array(d)].map(b => b.toString(16).padStart(2, '0')).join(''); }
-const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const money = n => new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
+export const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+export const money = n => new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
 const pct = n => `${n >= 0 ? '+' : '−'}${new Intl.NumberFormat('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Math.abs(n))}%`;
 const idxNum = n => new Intl.NumberFormat('es-AR', { maximumFractionDigits: 4 }).format(n);
 function cookie(request, name) { const m = (request.headers.get('cookie') || '').match(new RegExp(`(?:^|;\\s*)${name}=([^;]+)`)); return m ? decodeURIComponent(m[1]) : null; }
-async function readJson(request) { try { return await request.json(); } catch { return null; } }
-const kvGet = async (env, k) => { try { return await env.MACRO_STORE.get(k, 'json'); } catch { return null; } };
-const kvPut = (env, k, v, opts) => env.MACRO_STORE.put(k, JSON.stringify(v), opts);
+export async function readJson(request) { try { return await request.json(); } catch { return null; } }
+export const kvGet = async (env, k) => { try { return await env.MACRO_STORE.get(k, 'json'); } catch { return null; } };
+export const kvPut = (env, k, v, opts) => env.MACRO_STORE.put(k, JSON.stringify(v), opts);
 
-async function rateLimit(env, kind, key, max) {
+export async function rateLimit(env, kind, key, max) {
   const k = `acct:rl:${kind}:${key}:${Math.floor(Date.now() / 3600000)}`;
   let n = 0; try { n = Number(await env.MACRO_STORE.get(k)) || 0; } catch { }
   if (n >= max) return false;
@@ -58,7 +58,7 @@ export function mailDiag(env) {
   const k = resendKey(env);
   return { configured: !!k, keyShape: k ? { length: k.length, prefix: k.slice(0, 3) } : null, varNames: names, from: env?.MAIL_FROM ? 'personalizado' : 'por defecto' };
 }
-async function sendMail(env, { to, subject, html, text, unsubscribe }) {
+export async function sendMail(env, { to, subject, html, text, unsubscribe }) {
   const key = resendKey(env); if (!key) throw new Error('El envío de mails no está configurado (falta RESEND_API_KEY).');
   const headers = {};
   if (unsubscribe) { headers['List-Unsubscribe'] = `<${unsubscribe.post}>`; headers['List-Unsubscribe-Post'] = 'List-Unsubscribe=One-Click'; }
@@ -70,7 +70,7 @@ async function sendMail(env, { to, subject, html, text, unsubscribe }) {
   if (!r.ok) { let m = ''; try { m = (await r.json())?.message || ''; } catch { } throw new Error(`Resend ${r.status}${m ? `: ${m}` : ''}`); }
   return true;
 }
-function layout(env, { title, intro = '', body = '', button = null, footer = '' }) {
+export function layout(env, { title, intro = '', body = '', button = null, footer = '' }) {
   const s = site(env);
   const html = `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>${esc(title)}</title></head>
 <body style="margin:0;background:#f6f9fc;font-family:Inter,-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#12233a">
@@ -83,8 +83,8 @@ ${button ? `<p style="margin:22px 0 6px"><a href="${esc(button.href)}" style="di
 </table></td></tr></table></body></html>`;
   return html;
 }
-const row = (k, v, strong = false) => `<tr><td style="padding:7px 0;color:#63758b;font-size:13px;border-bottom:1px solid #edf2f7">${esc(k)}</td><td align="right" style="padding:7px 0;font-size:${strong ? 17 : 13}px;font-weight:${strong ? 800 : 600};border-bottom:1px solid #edf2f7">${v}</td></tr>`;
-const table = rows => `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:6px 0 4px">${rows.join('')}</table>`;
+export const row = (k, v, strong = false) => `<tr><td style="padding:7px 0;color:#63758b;font-size:13px;border-bottom:1px solid #edf2f7">${esc(k)}</td><td align="right" style="padding:7px 0;font-size:${strong ? 17 : 13}px;font-weight:${strong ? 800 : 600};border-bottom:1px solid #edf2f7">${v}</td></tr>`;
+export const table = rows => `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:6px 0 4px">${rows.join('')}</table>`;
 
 // ── Sesión ────────────────────────────────────────────────────────────────────────────────────────────────────
 async function currentUser(request, env) {
@@ -93,7 +93,7 @@ async function currentUser(request, env) {
   const u = await kvGet(env, userKey(s.email)); return u ? { user: u, token: t } : null;
 }
 const sessionCookie = (t, maxAge) => `${COOKIE}=${t ? encodeURIComponent(t) : ''}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${maxAge}`;
-const saveUser = (env, u) => kvPut(env, userKey(u.email), u);
+export const saveUser = (env, u) => kvPut(env, userKey(u.email), u);
 
 // ── Datos de índices para el cálculo ──────────────────────────────────────────────────────────────────────────
 let IDX_MEMO = null;
@@ -340,6 +340,12 @@ export async function accountApi(request, env, ctx, url) {
     const token = String(b?.token || url.searchParams.get('t') || ''), action = p === '/api/account/unsubscribe' ? 'unsubscribe' : b?.action;
     if (!token || !['confirm', 'unsubscribe', 'info'].includes(action)) return json({ error: 'Pedido inválido.' }, 400);
     const ref = await kvGet(env, `acct:rcpt:${token}`); if (!ref) return json({ error: 'El enlace ya no es válido.' }, 404);
+    if (ref.kind === 'digest') {
+      const D = await import('./digest.mjs');
+      if (action === 'info') return json({ ok: true, contract: 'resúmenes y alertas', self: true, kind: 'digest' });
+      if (action === 'unsubscribe') await D.unsubscribeDigest(env, ref.owner);
+      return json({ ok: true, contract: 'resúmenes y alertas', status: action === 'confirm' ? 'ok' : 'off' });
+    }
     const u = await kvGet(env, userKey(ref.owner)), c = u?.contracts?.find(x => x.id === ref.cid);
     if (!c) return json({ error: 'El contrato ya no existe.' }, 404);
     if (action === 'info') return json({ ok: true, contract: c.name, owner: ref.self ? null : ref.owner, self: !!ref.self });
@@ -360,7 +366,10 @@ export async function accountApi(request, env, ctx, url) {
     u.sessions = (u.sessions || []).filter(s => s.h !== h); await saveUser(env, u);
     return json({ ok: true }, 200, { 'set-cookie': sessionCookie('', 0) });
   }
+  // v166: resúmenes y alertas.
+  if (p.startsWith('/api/account/prefs')) { const r = await (await import('./digest.mjs')).prefsApi(request, env, url, u); if (r) return r; }
   if (p === '/api/account' && method === 'DELETE') {
+    try { await (await import('./digest.mjs')).removeSubscriber(env, u.email); } catch { }
     for (const s of u.sessions || []) { try { await env.MACRO_STORE.delete(`acct:sess:${s.h}`); } catch { } }
     for (const c of u.contracts || []) for (const t of [c.selfToken, ...(c.recipients || []).map(r => r.token)]) { if (t) try { await env.MACRO_STORE.delete(`acct:rcpt:${t}`); } catch { } }
     await env.MACRO_STORE.delete(userKey(u.email));

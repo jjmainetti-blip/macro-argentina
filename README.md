@@ -389,6 +389,13 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 - `public/reserves-components.json`: swap con China (CNY y tipo de cambio), BIS y otros pasivos de corto plazo, SEDESA, oro (toneladas y precio), con notas y fuentes. Actualizar `through` y los componentes cuando cambien (p. ej., pagos del BIS o el swap).
 - `/api/status` → `reserves`: cuántos meses del FMI ya se cargaron y el último error.
 
+## v166 — Resúmenes por mail y alertas de mercado (etapa 2)
+
+- **Mi cuenta → Resúmenes por mail**: diario (sólo días hábiles) y/o semanal (día a elección), a las 8:30 o a las 18:30. Contenido a elección: dólar MEP, dólar oficial BNA, riesgo país, Merval (variación del día; en el semanal también de la semana), compras del BCRA y reservas, datos publicados desde el último resumen, panorama con el último dato de cada indicador, REM, próximos datos a publicarse y próximos ajustes de los contratos. Botones para recibir un resumen de prueba.
+- **Alertas**: dólar MEP, dólar oficial, riesgo país y Merval; umbral en % de variación diaria y dirección (sube, baja o ambas). Se revisa después de cada actualización de mercados (cada 5 minutos, días hábiles de 10:30 a 18:00); un mail por activo y dirección, y otro cada vez que el movimiento llega a otro múltiplo del umbral.
+- Baja de un clic en cada mail (apaga resúmenes y alertas). Preferencias en KV `acct:subs`; cierres diarios propios en `mkt:closes` (para la variación semanal del dólar). Estado en `/api/status` → `digests`.
+- Código: `src/api/digest.mjs` (se engancha en la revisión programada de `src/worker.mjs`).
+
 ## v165 — Diagnóstico del envío de mails
 
 - La clave de Resend se acepta como `RESEND_API_KEY` o con otro nombre que contenga "RESEND" (se limpian comillas, espacios y un "Bearer " pegado por error).

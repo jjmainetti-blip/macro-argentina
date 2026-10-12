@@ -8,6 +8,7 @@ import tradeMonthly from './api/trade-monthly.mjs';
 import cementMonthly from './api/cement-monthly.mjs';
 import uvaLoans from './api/uva-loans.mjs';
 import { accountApi, runReminders, remindersStatus } from './api/account.mjs';
+import { digestTick, checkAlerts, digestStatus } from './api/digest.mjs';
 
 const jsonHeaders = {
   'X-Content-Type-Options': 'nosniff',
@@ -59,7 +60,7 @@ export default {
       let xbcra = null; try { const x = await env?.MACRO_STORE?.get?.('x:bcra', 'json'); if (x) xbcra = { tokenConfigured: !!env?.X_BEARER_TOKEN, lastCheck: x.lastCheck ? new Date(x.lastCheck).toISOString() : null, lastError: x.lastError || null, backoffUntil: x.backoffUntil ? new Date(x.backoffUntil).toISOString() : null, days: x.days || {}, lastRead: x.lastRead ?? null, aiConfigured: !!env?.AI, aiError: x.aiError || null, recent: x.recent || [] }; else xbcra = { tokenConfigured: !!env?.X_BEARER_TOKEN, lastCheck: null }; } catch { }
       // Diagnóstico: nombres (nunca valores) de variables que parecen el token, por si quedó con otro nombre.
       try { xbcra = { ...(xbcra || {}), tokenShape: env?.X_BEARER_TOKEN ? xTokenShape(env.X_BEARER_TOKEN) : null, similarVarNames: Object.keys(env || {}).filter(k => /x_|bearer|token|twitter/i.test(k) && typeof env[k] === 'string').map(k => JSON.stringify(k)) }; } catch { }
-      return withHeaders(new Response(JSON.stringify({ generatedAt: new Date().toISOString(), kv: !!env?.MACRO_STORE, xBcra: xbcra, reminders: await remindersStatus(env), reserves: await (async () => { try { const p = await env?.MACRO_STORE?.get?.('imfpos:v1', 'json'); return p ? { imfMonths: Object.keys(p).filter(k => /^\d{4}-\d{2}$/.test(k)).length, imfError: p._err || null, current: p._cur || null } : null; } catch { return null; } })(), ipcCaba: await (async () => { try { const c = (await env?.MACRO_STORE?.get?.('macro:snapshot:v131:core', 'json'))?.sources?.ipcCaba; return c ? { source: c.source, last: Object.keys(c.history || {}).sort().at(-1), latest: c.latest || null, idecbaError: c.idecbaError || null, baseError: c.baseError || null, refreshError: c.refreshError || null } : null; } catch { return null; } })(), cards }, null, 1), { headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', 'access-control-allow-origin': '*' } }));
+      return withHeaders(new Response(JSON.stringify({ generatedAt: new Date().toISOString(), kv: !!env?.MACRO_STORE, xBcra: xbcra, reminders: await remindersStatus(env), digests: await digestStatus(env).catch(() => null), reserves: await (async () => { try { const p = await env?.MACRO_STORE?.get?.('imfpos:v1', 'json'); return p ? { imfMonths: Object.keys(p).filter(k => /^\d{4}-\d{2}$/.test(k)).length, imfError: p._err || null, current: p._cur || null } : null; } catch { return null; } })(), ipcCaba: await (async () => { try { const c = (await env?.MACRO_STORE?.get?.('macro:snapshot:v131:core', 'json'))?.sources?.ipcCaba; return c ? { source: c.source, last: Object.keys(c.history || {}).sort().at(-1), latest: c.latest || null, idecbaError: c.idecbaError || null, baseError: c.baseError || null, refreshError: c.refreshError || null } : null; } catch { return null; } })(), cards }, null, 1), { headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', 'access-control-allow-origin': '*' } }));
     }
     // v164: cuentas, contratos y recordatorios por mail.
     if (url.pathname.startsWith('/api/account')) {
@@ -97,7 +98,11 @@ export default {
     // v133: en cada ejecución se renueva también el último dato de mercados (KV), aunque nadie esté mirando el sitio.
     // v160: completa de a poco la posición mensual de Argentina en el FMI (DEG y crédito) para las reservas netas.
     ctx.waitUntil(imfBackfill(env, 8).catch(e => console.log(`cron imf: ${e?.message || e}`)));
-    ctx.waitUntil(marketsData(null, ctx, env, { force: true }).catch(e => console.log(`cron markets: error ${e?.message || e}`)));
+    // v166: después de actualizar los mercados se revisan las alertas de los usuarios; y si es la hora, los resúmenes.
+    ctx.waitUntil(marketsData(null, ctx, env, { force: true }).catch(e => console.log(`cron markets: error ${e?.message || e}`))
+      .then(() => checkAlerts(env)).then(r => { if (r?.sent || r?.errors?.length) console.log(`alertas: ${JSON.stringify(r)}`); })
+      .then(() => digestTick(env)).then(r => { if (r?.length) console.log(`resúmenes: ${JSON.stringify(r)}`); })
+      .catch(e => console.log(`cron alertas/resúmenes: error ${e?.message || e}`)));
     ctx.waitUntil(macroData(env, ctx, new Request(`https://cron.invalid/api/macro-data?group=${group}`), { force: true })
       .then(r => r.json()).then(async j => { try { await latestReleaseFor(env, null, { force: true }); } catch { } return j; }).then(j => console.log(`cron ${group} (${reason}): guardado=${j.stored} esperando=${statuses.filter(s => s.state === 'esperando').map(s => s.key).join(',') || '—'}`))
       .catch(e => console.log(`cron ${group}: error ${e?.message || e}`)));
