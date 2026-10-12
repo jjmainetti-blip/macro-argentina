@@ -40,7 +40,8 @@
         <li><b>Avisos por mail</b> — a vos y a otra persona (por ejemplo, el inquilino o el propietario), todos los meses o sólo cuando hay un ajuste.</li>
         <li><b>Resúmenes por mail</b> — diario y/o semanal, con lo que elijas: dólar, riesgo país, Merval, compras del BCRA, datos publicados, REM y agenda.</li>
         <li><b>Alertas</b> — un mail cuando el dólar, el riesgo país o el Merval se mueven más que el porcentaje que fijes.</li>
-      </ul><p class="acct-soon">Próximamente: seguimiento de acciones, bonos y ADRs en los resúmenes.</p></div></div>`;
+        <li><b>Tu seguimiento</b> — acciones, bonos, letras, ON y CEDEARs de BYMA, y empresas argentinas en Wall Street, con su variación en cada resumen.</li>
+      </ul></div></div>`;
     const f = document.getElementById('acctLoginForm');
     f.addEventListener('submit', async e => {
       e.preventDefault();
@@ -161,6 +162,10 @@
           <label>Horario<select name="weeklySlot">${slotOpts(D.weekly.slot)}</select></label></div></div>
       </div>
       <fieldset class="acct-fs"><legend>Qué incluir</legend><div class="acct-items">${Object.entries(j.items).map(([k, l]) => `<label class="acct-check"><input type="checkbox" name="item" value="${k}"${D.items.includes(k) ? ' checked' : ''}> ${esc(l)}</label>`).join('')}</div></fieldset>
+      <fieldset class="acct-fs acct-watch"><legend>Tu seguimiento: acciones, bonos y ADRs</legend>
+        <p class="acct-note">Elegí hasta 20 instrumentos de BYMA (acciones, bonos, letras, ON, CEDEARs) o empresas argentinas en Wall Street. Aparecen en tus resúmenes con su precio y su variación (diaria; en el semanal, también de la semana).</p>
+        <div class="acct-watch-add"><input id="watchInput" list="watchList" placeholder="Buscá un ticker: GGAL, AL30, GD30D, YPF…" autocomplete="off" aria-label="Agregar instrumento"><datalist id="watchList"></datalist><button class="btn small" type="button" id="watchAdd">Agregar</button></div>
+        <div class="acct-chips" id="watchChips"></div><p class="acct-note" id="watchInfo"></p></fieldset>
       <h3 class="acct-h3b">Alertas de mercado</h3><p>Te avisamos cuando la variación del día supera tu umbral. Se revisa cada 5 minutos en días hábiles (10:30 a 18 h); llega un mail por activo y dirección, y otro si el movimiento llega al doble, al triple…</p>
       <div class="acct-alerts">${P.alerts.map(a => `<div class="acct-alert" data-asset="${a.asset}"><label class="acct-check"><input type="checkbox" name="on"${a.on ? ' checked' : ''}> <b>${esc(j.assets[a.asset])}</b></label>
         <label>Umbral (%)<input name="pct" inputmode="decimal" value="${String(a.pct).replace('.', ',')}"></label>
@@ -168,8 +173,36 @@
       <div class="acct-actions"><button class="btn primary" type="submit">Guardar</button><button class="btn small" type="button" data-test="daily">Probar resumen diario</button><button class="btn small" type="button" data-test="weekly">Probar resumen semanal</button></div>
       <p class="acct-msg" id="acctPrefsMsg" role="status"></p></form>`;
     const f = document.getElementById('acctPrefsForm'), msg = document.getElementById('acctPrefsMsg');
+    // v167 · Lista de seguimiento.
+    const watch = [...(D.watch || [])], quotes = {};
+    const MK = { ar: 'Acción BYMA', bono: 'Bono', letra: 'Letra', on: 'ON', cedear: 'CEDEAR', us: 'Wall Street' };
+    const chips = document.getElementById('watchChips'), info = document.getElementById('watchInfo'), inp = document.getElementById('watchInput');
+    const fmtQ = q => q?.price == null ? 'sin cotización' : `${q.currency === 'ARS' ? '$' : 'US$'} ${new Intl.NumberFormat('es-AR', { maximumFractionDigits: q.price < 1000 ? 2 : 0 }).format(q.price)}${q.pct == null ? '' : ` <b class="${q.pct >= 0 ? 'up' : 'down'}">${q.pct >= 0 ? '+' : '−'}${new Intl.NumberFormat('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Math.abs(q.pct))}%</b>`}`;
+    const paintChips = () => {
+      chips.innerHTML = watch.length ? watch.map(id => { const [m, sym] = id.split(':'), q = quotes[id]; return `<span class="acct-chip"><b>${esc(sym)}</b><small>${esc(q?.name ? `${q.name} · ` : '')}${esc(MK[m] || m)}</small><span class="acct-chip-q">${q ? fmtQ(q) : '…'}</span><button type="button" data-rm="${esc(id)}" aria-label="Quitar ${esc(sym)}">×</button></span>`; }).join('') : '<span class="acct-note">Todavía no agregaste instrumentos.</span>';
+      chips.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => { watch.splice(watch.indexOf(b.dataset.rm), 1); paintChips(); });
+    };
+    const refreshQuotes = async () => { if (!watch.length) return paintChips(); try { const r = await api('/prefs/watch', { method: 'POST', body: { ids: watch } }); for (const q of r.quotes || []) quotes[q.id] = q; } catch { } paintChips(); };
+    let catalog = null, catLoading = null;
+    const loadCatalog = () => catLoading ||= api('/prefs/instruments').then(c => { catalog = c.rows || []; document.getElementById('watchList').innerHTML = catalog.map(r => `<option value="${esc(r[1])} · ${esc(r[2])}${r[3] ? ` · ${esc(r[3])}` : ''}"></option>`).join(''); info.textContent = `${catalog.length} instrumentos disponibles · ${c.source}.`; }).catch(err => { info.textContent = `No se pudo cargar la lista de instrumentos: ${err.message}`; catLoading = null; });
+    inp.addEventListener('focus', loadCatalog, { once: true });
+    const add = async () => {
+      await loadCatalog(); const v = inp.value.trim(); if (!v) return;
+      const [sym, lab] = v.split(' · ').map(x => x.trim()), S = sym.toUpperCase();
+      const cands = (catalog || []).filter(r => r[1] === S && (!lab || r[2] === lab));
+      const pick = cands.find(r => r[0].startsWith('us:')) && !lab ? (cands.find(r => r[0].startsWith('ar:')) || cands[0]) : cands[0];
+      if (!pick) { info.textContent = `No encontré "${v}". Elegilo de la lista que aparece al escribir.`; return; }
+      if (watch.includes(pick[0])) { inp.value = ''; return; }
+      if (watch.length >= 20) { info.textContent = 'Podés seguir hasta 20 instrumentos.'; return; }
+      watch.push(pick[0]); quotes[pick[0]] = { id: pick[0], price: pick[4], pct: pick[5], name: pick[3], currency: pick[0].startsWith('us:') ? 'USD' : (S.length > 3 && /D$/.test(S) ? 'USD' : S.length > 3 && /C$/.test(S) ? 'USD cable' : 'ARS') };
+      const it = f.querySelector('[name=item][value=watch]'); if (it) it.checked = true;
+      inp.value = ''; paintChips(); info.textContent = 'Agregado. Acordate de guardar.';
+    };
+    document.getElementById('watchAdd').onclick = add;
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); add(); } });
+    paintChips(); refreshQuotes();
     const read = () => ({
-      digest: { daily: { on: f.dailyOn.checked, slot: f.dailySlot.value }, weekly: { on: f.weeklyOn.checked, day: Number(f.weeklyDay.value), slot: f.weeklySlot.value }, items: [...f.querySelectorAll('[name=item]:checked')].map(x => x.value) },
+      digest: { daily: { on: f.dailyOn.checked, slot: f.dailySlot.value }, weekly: { on: f.weeklyOn.checked, day: Number(f.weeklyDay.value), slot: f.weeklySlot.value }, items: [...f.querySelectorAll('[name=item]:checked')].map(x => x.value), watch: [...watch] },
       alerts: [...f.querySelectorAll('.acct-alert')].map(el => ({ asset: el.dataset.asset, on: el.querySelector('[name=on]').checked, pct: el.querySelector('[name=pct]').value, dir: el.querySelector('[name=dir]').value })),
     });
     f.addEventListener('submit', async e => {

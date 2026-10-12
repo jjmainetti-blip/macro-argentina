@@ -12,6 +12,7 @@ import { EVENTS } from './calendar-data.mjs';
 import { BUNDLED_SOURCES } from './bundled-history.mjs';
 import { isBusinessDay, closeDay } from './market-days.mjs';
 import { computeContract } from './contracts-core.mjs';
+import { watchQuotes, catalog, MARKETS as Q_MARKETS } from './quotes.mjs';
 import { json, todayAR, site, esc, kvGet, kvPut, sendMail, layout, row, table, money, randomToken, readJson, rateLimit, userKey, indexData } from './account.mjs';
 
 const TZ = 'America/Argentina/Buenos_Aires';
@@ -22,7 +23,7 @@ export const SLOTS = { am: { h: 8, m: 30, label: '8:30 (antes de la apertura)' }
 export const ITEMS = {
   dollar: 'Dólar MEP', bna: 'Dólar oficial (BNA)', risk: 'Riesgo país', merval: 'Merval', bcra: 'Compras del BCRA y reservas',
   published: 'Datos publicados en el período', economy: 'Panorama: último dato de cada indicador', rem: 'Expectativas (REM)',
-  agenda: 'Próximos datos a publicarse', contracts: 'Tus contratos: próximos ajustes',
+  agenda: 'Próximos datos a publicarse', contracts: 'Tus contratos: próximos ajustes', watch: 'Tus acciones, bonos y ADRs',
 };
 export const ASSETS = { dollar: 'Dólar MEP', bna: 'Dólar oficial (BNA)', risk: 'Riesgo país', merval: 'Merval' };
 // Último dato de mercados leído directo de KV (lo escribe la actualización de cada revisión), sin la memoria de 2 minutos.
@@ -45,7 +46,7 @@ const rawValue = (k, x) => Number(k === 'bna' ? (x?.sell ?? x?.value) : x?.value
 // ── Preferencias ─────────────────────────────────────────────────────────────────────────────────────────────
 export function defaultPrefs() {
   return {
-    digest: { daily: { on: false, slot: 'pm' }, weekly: { on: false, day: 5, slot: 'pm' }, items: ['dollar', 'bna', 'risk', 'merval', 'bcra', 'published', 'rem', 'agenda'], last: {} },
+    digest: { daily: { on: false, slot: 'pm' }, weekly: { on: false, day: 5, slot: 'pm' }, items: ['dollar', 'bna', 'risk', 'merval', 'watch', 'bcra', 'published', 'rem', 'agenda'], last: {}, watch: [] },
     alerts: Object.keys(ASSETS).map(asset => ({ asset, on: false, pct: DEFAULT_ALERT_PCT[asset], dir: 'both' })),
   };
 }
@@ -58,6 +59,8 @@ function normalizePrefs(x, prev) {
       weekly: { on: !!D.weekly?.on, day: [0, 1, 2, 3, 4, 5, 6].includes(Number(D.weekly?.day)) ? Number(D.weekly.day) : 5, slot: slot(D.weekly?.slot) },
       items: Array.isArray(D.items) ? [...new Set(D.items.filter(k => ITEMS[k]))] : d.digest.items,
       last: prev?.digest?.last || {},
+      // v167: lista de seguimiento (hasta 20 instrumentos: 'ar:GGAL', 'bono:AL30', 'us:YPF', …).
+      watch: [...new Set((Array.isArray(D.watch) ? D.watch : prev?.digest?.watch || []).map(x => String(x || '').trim().toUpperCase().replace(/^([A-Z]+):/, (m, a) => a.toLowerCase() + ':')).filter(x => /^[a-z]+:[A-Z0-9.]{1,12}$/.test(x) && Q_MARKETS[x.split(':')[0]]))].slice(0, 20),
     },
     alerts: Object.keys(ASSETS).map(asset => {
       const a = (Array.isArray(x?.alerts) ? x.alerts : []).find(r => r?.asset === asset) || {};
@@ -125,6 +128,13 @@ export function buildDigest(env, kind, prefs, data, today, extra = {}) {
     }
     if (rows.length) { parts.push(h2('Mercados') + table(rows)); text.push('MERCADOS', ...tl, ''); }
   }
+  if (items.has('watch') && extra.watch?.length) {
+    const fmtP = (v, cur) => v == null ? '—' : `${cur === 'ARS' ? '$' : 'US$'} ${new Intl.NumberFormat('es-AR', { minimumFractionDigits: v < 1000 ? 2 : 0, maximumFractionDigits: v < 1000 ? 2 : 0 }).format(v)}`;
+    const col = n => n == null ? '#63758b' : n >= 0 ? '#0d8a67' : '#c43d4b';
+    const rows = extra.watch.map(w => row(`${w.symbol}${w.name ? ` · ${w.name}` : ''} · ${w.label}${w.currency === 'USD cable' ? ' (cable)' : ''}`, w.price == null ? '<span style="color:#63758b;font-weight:400">sin cotización</span>' : `${fmtP(w.price, w.currency)} <span style="font-weight:600;color:${col(weekly ? w.week : w.pct)}">${weekly ? `${pctS(w.week)} semana · ${pctS(w.pct)} día` : pctS(w.pct)}</span>`));
+    parts.push(h2('Tu seguimiento') + table(rows) + small('Precios de BYMA y Wall Street vía data912.com, con demora. Bonos: precio cada 100 nominales.'));
+    text.push('TU SEGUIMIENTO', ...extra.watch.map(w => `${w.symbol}${w.name ? ` (${w.name})` : ''}: ${w.price == null ? 'sin cotización' : fmtP(w.price, w.currency)} ${weekly ? `${pctS(w.week)} semana · ${pctS(w.pct)} día` : pctS(w.pct)}`), '');
+  }
   if (items.has('bcra') && data.markets.bcra) {
     const b = data.markets.bcra, rows = [];
     if (Number.isFinite(Number(b.value))) rows.push(row(`Compras del BCRA · ${dayLabel(b.date)}${b.preliminary ? ' (preliminar)' : ''}`, `USD ${fmt0.format(b.value)} M`));
@@ -171,6 +181,10 @@ export function buildDigest(env, kind, prefs, data, today, extra = {}) {
   return { subject, html: layout(env, { title, body: parts.join('') || small('No elegiste contenido para el resumen.'), button: { href: `${site(env)}/`, label: 'Ver el tablero' }, footer }), text: `${title}\n\n${text.join('\n')}\nCambiar el contenido: ${site(env)}/#cuenta\nDejar de recibir: ${unsub}` };
 }
 
+async function watchFor(p, kind, today) {
+  const ids = p.digest?.items?.includes('watch') ? (p.digest.watch || []) : []; if (!ids.length) return [];
+  try { return await watchQuotes(ids, { weekly: kind === 'weekly', since: addDays(today, -7) }); } catch { return []; }
+}
 async function contractsFor(env, email, today) {
   const u = await kvGet(env, userKey(email)); if (!u?.contracts?.length) return [];
   const idx = await indexData(env);
@@ -211,7 +225,8 @@ export async function runDigests(env, slot, { today = todayAR(), only = null, ki
     for (const kind of kinds2) {
       try {
         const contracts = p.digest.items?.includes('contracts') ? await contractsFor(env, email, today) : [];
-        const m = buildDigest(env, kind, p, data, today, { contracts, token: p.token });
+        const watch = await watchFor(p, kind, today);
+        const m = buildDigest(env, kind, p, data, today, { contracts, watch, token: p.token });
         await sendMail(env, { to: email, subject: test ? `[Prueba] ${m.subject}` : m.subject, html: m.html, text: m.text, unsubscribe: unsubHeaders(env, p.token) });
         log.sent++;
         if (!test) { p.digest.last = { ...(p.digest.last || {}), [kind]: today }; }
@@ -281,6 +296,13 @@ export async function prefsApi(request, env, url, user) {
     await kvPut(env, SUBS, subs);
     return json({ ok: true, prefs: { digest: subs[email].digest, alerts: subs[email].alerts } });
   }
+  if (p === '/api/account/prefs/instruments' && method === 'GET') {
+    try { return json(await catalog()); } catch (e) { return json({ error: `No se pudieron obtener las cotizaciones (${String(e?.message || e).slice(0, 100)}).` }, 502); }
+  }
+  if (p === '/api/account/prefs/watch' && method === 'POST') {
+    const b = await readJson(request), ids = (Array.isArray(b?.ids) ? b.ids : []).slice(0, 20).map(String);
+    try { return json({ quotes: await watchQuotes(ids) }); } catch (e) { return json({ error: String(e?.message || e).slice(0, 120) }, 502); }
+  }
   if (p === '/api/account/prefs/test' && method === 'POST') {
     if (!(await rateLimit(env, 'test', email, 5))) return json({ error: 'Llegaste al límite de mails de prueba por hora.' }, 429);
     const b = await readJson(request), kind = b?.kind === 'weekly' ? 'weekly' : 'daily';
@@ -289,7 +311,8 @@ export async function prefsApi(request, env, url, user) {
     if (!cur?.token) { const token = randomToken(24); await kvPut(env, `acct:rcpt:${token}`, { owner: email, kind: 'digest', self: true }); cur = subs[email] = { ...draft, token }; await kvPut(env, SUBS, subs); }
     const today = todayAR(), data = await digestData(env);
     const contracts = draft.digest.items.includes('contracts') ? await contractsFor(env, email, today) : [];
-    const m = buildDigest(env, kind, { ...draft, digest: { ...draft.digest, last: {} } }, data, today, { contracts, token: cur.token });
+    const watch = await watchFor(draft, kind, today);
+    const m = buildDigest(env, kind, { ...draft, digest: { ...draft.digest, last: {} } }, data, today, { contracts, watch, token: cur.token });
     try { await sendMail(env, { to: email, subject: `[Prueba] ${m.subject}`, html: m.html, text: m.text, unsubscribe: unsubHeaders(env, cur.token) }); }
     catch (e) { return json({ error: `No se pudo enviar (${String(e?.message || e).slice(0, 120)}).` }, 502); }
     return json({ ok: true });

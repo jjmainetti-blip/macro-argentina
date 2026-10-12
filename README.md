@@ -389,6 +389,12 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 - `public/reserves-components.json`: swap con China (CNY y tipo de cambio), BIS y otros pasivos de corto plazo, SEDESA, oro (toneladas y precio), con notas y fuentes. Actualizar `through` y los componentes cuando cambien (p. ej., pagos del BIS o el swap).
 - `/api/status` → `reserves`: cuántos meses del FMI ya se cargaron y el último error.
 
+## v167 — Acciones, bonos y ADRs en los resúmenes (etapa 3)
+
+- **Mi cuenta → Resúmenes → Tu seguimiento**: buscador con todos los instrumentos de BYMA (acciones, bonos, letras, ON, CEDEARs) y las empresas argentinas que cotizan en Wall Street (ADRs de GGAL, YPF, PAM, BMA, BBAR, SUPV, CEPU, EDN, TEO, TGS, CRESY, IRS, LOMA, TX, TS y acciones de MELI, GLOB, VIST, BIOX, CAAP, DESP). Hasta 20 por usuario, con precio y variación en el momento.
+- En los resúmenes: precio y variación del día; en el semanal, también la variación contra el cierre de hace una semana. Moneda según el ticker (D = dólar MEP, C = cable; Wall Street en dólares). Bonos: precio cada 100 nominales.
+- Fuente: data912.com (API pública y gratuita, datos con demora). Código: `src/api/quotes.mjs`.
+
 ## v166 — Resúmenes por mail y alertas de mercado (etapa 2)
 
 - **Mi cuenta → Resúmenes por mail**: diario (sólo días hábiles) y/o semanal (día a elección), a las 8:30 o a las 18:30. Contenido a elección: dólar MEP, dólar oficial BNA, riesgo país, Merval (variación del día; en el semanal también de la semana), compras del BCRA y reservas, datos publicados desde el último resumen, panorama con el último dato de cada indicador, REM, próximos datos a publicarse y próximos ajustes de los contratos. Botones para recibir un resumen de prueba.
