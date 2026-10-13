@@ -69,8 +69,14 @@ export async function ipcCabaLive() {
   try {
     lv = await seriesMap('193.2_NIVEL_GENERAL_2021_0_13_2', '2020-12-01');
     const ks = Object.keys(lv).sort();
-    for (let i = 1; i < ks.length; i++) history[ks[i]] = Math.round((lv[ks[i]] / lv[ks[i - 1]] - 1) * 1000) / 10;
+    // v170 · Datos Argentina a veces devuelve la serie con meses salteados: la variación sólo se calcula entre meses
+    // consecutivos (antes, un hueco hacía que un mes mostrara la suba de dos, p. ej. 3,6% en vez de 1,8%).
+    const nextYm = k => { const [y, m] = k.split('-').map(Number); return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`; };
+    for (let i = 1; i < ks.length; i++) if (nextYm(ks[i - 1]) === ks[i]) history[ks[i]] = Math.round((lv[ks[i]] / lv[ks[i - 1]] - 1) * 1000) / 10;
     if (Object.keys(history).length < 24) throw new Error('IPCBA: serie incompleta');
+    // Los meses del respaldo local (verificados contra los informes de IDECBA) tienen prioridad.
+    const { BUNDLED_SOURCES } = await import('./bundled-history.mjs');
+    for (const [k, v] of Object.entries(BUNDLED_SOURCES?.ipcCaba?.history || {})) if (Number.isFinite(Number(v))) history[k] = Number(v);
   } catch (e) {
     baseError = String(e?.message || e).slice(0, 120); base = 'respaldo local';
     const { BUNDLED_SOURCES } = await import('./bundled-history.mjs');
@@ -88,7 +94,8 @@ export async function ipcCabaLive() {
     for (let k = shift(cur, -2) < last ? last : shift(cur, -2); k < cur; k = shift(k, 1)) {
       const r = await ipcbaReport(k); if (!r) { if (!history[k]) break; continue; }
       const prev = shift(k, -1);
-      if (!Number.isFinite(history[k])) { history[k] = r.mom; if (lv[prev]) lv[k] = Math.round(lv[prev] * (1 + r.mom / 100) * 1e4) / 1e4; }
+      // El informe oficial de IDECBA manda sobre cualquier otro cálculo del mes.
+      if (history[k] !== r.mom) { history[k] = r.mom; if (lv[prev]) lv[k] = Math.round(lv[prev] * (1 + r.mom / 100) * 1e4) / 1e4; }
       out.latest = { ym: k, mom: r.mom, yoy: r.yoy, ytd: r.ytd, published: r.published, sourceUrl: r.pdf };
       out.source = `IDECBA — IPCBA Nivel General (informe de resultados; serie histórica vía ${base})`;
     }

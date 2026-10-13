@@ -2,7 +2,7 @@ import { latestRelease } from '../../public/releases.js';
 import * as XLSX from 'xlsx';
 import { BUNDLED_SOURCES } from './bundled-history.mjs';
 import { autosLive, ipcCabaLive, povertyLive, cementLive, cameLive, scentiaLive } from './live-sources.mjs';
-import { cardStatus, CARDS, periodEndYm, todayAR } from './freshness.mjs';
+import { cardStatus, CARDS, periodEndYm, todayAR, ymShift } from './freshness.mjs';
 import { EVENTS } from './calendar-data.mjs';
 /* Macrodatos (antes Macro Argentina) v8 — stable server-side data contract.
    Each adapter fails independently. The browser keeps its bundled last-known value
@@ -157,7 +157,7 @@ function annualColumn(text, valueMatchers, reducer='last'){
   const out={}; for(const [y,a] of Object.entries(vals)){out[y]=round(reducer==='avg'?a.reduce((x,z)=>x+z,0)/a.length:reducer==='sum'?a.reduce((x,z)=>x+z,0):a.at(-1),1);} return out;
 }
 // v115: variación mensual (%) de una serie desestacionalizada en niveles.
-async function saMomFromLevels(id,start='2020-06-01'){const x=await seriesRows(id,{start});const lv={};for(const r of x.rows){const k=String(r.date).slice(0,7);if(/^\d{4}-\d{2}$/.test(k)&&Number.isFinite(r.value))lv[k]=r.value;}const ks=Object.keys(lv).sort(),out={};for(let i=1;i<ks.length;i++)out[ks[i]]=round((lv[ks[i]]/lv[ks[i-1]]-1)*100,1)+0;if(Object.keys(out).length<12)throw new Error(`serie s.e. corta: ${id}`);return out;}
+async function saMomFromLevels(id,start='2020-06-01'){const x=await seriesRows(id,{start});const lv={};for(const r of x.rows){const k=String(r.date).slice(0,7);if(/^\d{4}-\d{2}$/.test(k)&&Number.isFinite(r.value))lv[k]=r.value;}const ks=Object.keys(lv).sort(),out={};for(let i=1;i<ks.length;i++)if(ymShift(ks[i-1],1)===ks[i])out[ks[i]]=round((lv[ks[i]]/lv[ks[i-1]]-1)*100,1)+0;/* v170: sólo meses consecutivos */if(Object.keys(out).length<12)throw new Error(`serie s.e. corta: ${id}`);return out;}
 // v142 · INDEC publica el informe técnico a las 16 h, pero Datos Argentina recién incorpora el mes días después.
 // La portada de INDEC (indec.gob.ar/indec/Portada) trae el resumen de cada informe del día ("En agosto de 2026, el
 // índice ... cayó 3,2% respecto a igual mes de 2025 ... la serie desestacionalizada subió 1,9% ..."). Se usa para
@@ -1161,7 +1161,7 @@ export default async(env={},ctx=null,request=null,opts={})=>{
   const results=await Promise.allSettled(names.map(n=>Promise.resolve().then(JOBS[n])));
   results.forEach((j,i)=>{
     const name=names[i],old=previous?.sources?.[name];
-    if(j.status==='fulfilled'){const m=mergeSnapshot(old,j.value);if(m&&typeof m==='object'){delete m.refreshError;delete m.snapshotFallback;if(j.value&&!('idecbaError' in j.value))delete m.idecbaError;}out.sources[name]=m;}
+    if(j.status==='fulfilled'){const m=mergeSnapshot(old,j.value);if(m&&typeof m==='object'){delete m.refreshError;delete m.snapshotFallback;if(j.value&&!('idecbaError' in j.value))delete m.idecbaError;if(name==='ipcCaba'&&j.value){if(!('baseError' in j.value))delete m.baseError;if(j.value.latest)m.latest=j.value.latest;}}out.sources[name]=m;}
     else if(old){out.sources[name]={...old,status:old.status==='error'?'snapshot':'ok',snapshotFallback:true,refreshError:String(j.reason?.message||j.reason)};}
     else out.sources[name]={status:'error',error:String(j.reason?.message||j.reason)};
   });

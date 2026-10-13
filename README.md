@@ -389,6 +389,12 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 - `public/reserves-components.json`: swap con China (CNY y tipo de cambio), BIS y otros pasivos de corto plazo, SEDESA, oro (toneladas y precio), con notas y fuentes. Actualizar `through` y los componentes cuando cambien (p. ej., pagos del BIS o el swap).
 - `/api/status` → `reserves`: cuántos meses del FMI ya se cargaron y el último error.
 
+## v170 — Corrección de la inflación CABA
+
+- Datos Argentina empezó a devolver series con meses salteados; la variación mensual se calculaba contra el último mes disponible y un hueco hacía que un mes mostrara la suba de dos (septiembre figuraba 3,6% en vez de 1,8%, y el interanual 46,3% en vez de 32,9%). Ahora la variación sólo se calcula entre meses consecutivos, los meses del respaldo verificado tienen prioridad y el valor del informe oficial de IDECBA siempre manda sobre cualquier cálculo.
+- Mismo arreglo para las variaciones mensuales desestacionalizadas del IPI y el ISAC calculadas desde Datos Argentina.
+- El "latest" de IPC CABA se reemplaza en cada actualización (antes se mezclaba con el anterior y arrastraba campos viejos).
+
 ## v169 — Consumo en Pulso económico y agenda completa
 
 - **Consumo en supermercados (INDEC)**: índice de ventas a precios constantes de la Encuesta de supermercados (`serie_supermercados.xlsx`, Cuadro 1): variación interanual, mensual desestacionalizada y acumulada del año; historia desde 2017. Grupo `activity`, fuente `supermarkets`.
