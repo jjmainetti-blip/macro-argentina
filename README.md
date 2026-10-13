@@ -389,6 +389,11 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 - `public/reserves-components.json`: swap con China (CNY y tipo de cambio), BIS y otros pasivos de corto plazo, SEDESA, oro (toneladas y precio), con notas y fuentes. Actualizar `through` y los componentes cuando cambien (p. ej., pagos del BIS o el swap).
 - `/api/status` → `reserves`: cuántos meses del FMI ya se cargaron y el último error.
 
+## v172 — IPC nacional directo de INDEC
+
+- El IPC dependía sólo de Datos Argentina, que se actualiza días después de la publicación (y últimamente con huecos). Ahora la fuente principal es el CSV oficial de INDEC (`serie_ipc_divisiones.csv`, nivel general nacional), que se actualiza el mismo día; Datos Argentina y la línea de base local quedan de respaldo y se combinan por mes. Variaciones mensual, interanual y acumulada calculadas del índice, sólo entre meses consecutivos. Fecha de publicación: la del archivo de INDEC o la del calendario oficial.
+- Línea de base: septiembre 2026 (1,9% mensual, 33,4% interanual, 23,6% acumulado) para que el dato aparezca aunque INDEC esté saturado.
+
 ## v171 — Créditos en Mi cuenta
 
 - Además de los contratos, se pueden cargar **créditos**: tipo de ajuste (UVA o tradicional en pesos a tasa fija), monto (en pesos o en UVAs), fecha de otorgamiento, primer vencimiento opcional, plazo en meses, TNA y sistema de amortización (francés, alemán o americano).

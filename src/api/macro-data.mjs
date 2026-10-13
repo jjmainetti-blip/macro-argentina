@@ -448,14 +448,50 @@ async function exchangeHistorical(){
   for(const side of [out.free,out.official])for(const k of ['nominal','real','tcr'])trim(side?.daily?.[k]);trim(out.dailyGap);}
   out.errors=errors;return out;
 }
+// v172 · IPC: fuente principal el CSV oficial de INDEC (serie_ipc_divisiones.csv, se actualiza el día de la
+// publicación a las 16 h); respaldo Datos Argentina (que suele tardar días y a veces viene con huecos) y la línea de
+// base local. Se combinan por mes (INDEC > Datos Argentina > respaldo) y las variaciones salen siempre del índice.
+export function parseIndecIpcCsv(text){
+  const lines=String(text||'').replace(/^﻿/,'').split(/\r?\n/).filter(l=>l.trim());if(lines.length<3)return [];
+  const delim=(lines[0].match(/;/g)||[]).length>=(lines[0].match(/,/g)||[]).length?';':',';
+  const split=l=>l.split(delim).map(x=>x.trim().replace(/^"|"$/g,''));
+  const H=split(lines[0]).map(h=>h.toLowerCase());
+  const ci=n=>H.findIndex(h=>n.test(h));
+  const cCod=ci(/^c[oó]digo/),cDesc=ci(/^descripci/),cPer=ci(/^periodo/),cIdx=ci(/^indice/),cReg=ci(/^regi[oó]n/);
+  if(cPer<0||cIdx<0)return [];
+  const num=v=>{const x=String(v||'').replace(/\./g,(m,o,str)=>/,/.test(str)?'':'.').replace(',','.');const n=Number(x);return Number.isFinite(n)?n:null;};
+  const out={};
+  for(const l of lines.slice(1)){const c=split(l);
+    const reg=cReg>=0?c[cReg]:'Nacional';if(!/nacional/i.test(reg))continue;
+    const general=(cCod>=0&&c[cCod]==='0')||(cDesc>=0&&/nivel general/i.test(c[cDesc]));if(!general)continue;
+    const per=String(c[cPer]||'').replace(/\D/g,'');if(!/^\d{6}$/.test(per))continue;
+    const v=num(c[cIdx]);if(v&&v>0)out[`${per.slice(0,4)}-${per.slice(4,6)}`]=v;}
+  return Object.keys(out).sort().map(date=>({date,index:out[date]}));
+}
 async function ipc(){
-  const raw=await get(`${SERIES_API}?ids=${encodeURIComponent(IPC_ID)}&limit=1000&format=json`,'json');
-  const rows=(raw.data||[]).filter(r=>r[1]!=null).map(r=>({date:String(r[0]).slice(0,7),index:Number(r[1])}));
+  const byDate=new Map(),errors=[];let source=[],publishedAt=null;
+  for(const r of BUNDLED_SOURCES.ipc?.monthly||[])if(Number(r.index)>0)byDate.set(String(r.date).slice(0,7),{date:String(r.date).slice(0,7),index:Number(r.index)});
+  try{const raw=await get(`${SERIES_API}?ids=${encodeURIComponent(IPC_ID)}&limit=1000&format=json`,'json');
+    for(const r of raw.data||[])if(r[1]!=null&&Number(r[1])>0){const d=String(r[0]).slice(0,7);byDate.set(d,{date:d,index:Number(r[1])});}source.push('Datos Argentina');}
+  catch(e){errors.push(`Datos Argentina: ${String(e?.message||e).slice(0,80)}`);}
+  try{const c=new AbortController(),tm=setTimeout(()=>c.abort(),25000);
+    try{const r=await fetch('https://www.indec.gob.ar/ftp/cuadros/economia/serie_ipc_divisiones.csv',{signal:c.signal,headers:{'user-agent':'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36'}});
+      if(!r.ok)throw new Error(`HTTP ${r.status}`);
+      const buf=await r.arrayBuffer();let text=new TextDecoder('utf-8').decode(buf);if(text.includes('�'))text=new TextDecoder('latin1').decode(buf);
+      const rows=parseIndecIpcCsv(text);if(rows.length<24)throw new Error('CSV sin la serie nacional');
+      for(const x of rows)byDate.set(x.date,x);source.push('INDEC (CSV oficial)');
+      const lm=r.headers.get('last-modified');if(lm&&!Number.isNaN(Date.parse(lm)))publishedAt=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Argentina/Buenos_Aires'}).format(new Date(lm));
+    }finally{clearTimeout(tm);}}
+  catch(e){errors.push(`INDEC: ${String(e?.message||e).slice(0,80)}`);}
+  const rows=[...byDate.values()].sort((a,b)=>a.date.localeCompare(b.date));
   if(rows.length<14)throw new Error('observaciones insuficientes');
-  const monthly=rows.slice(1).map((r,i)=>({...r,value:round(pct(r.index,rows[i].index),1)}));
-  const last=rows.at(-1), prevYear=rows.at(-13);
-  const year=last.date.slice(0,4), decPrev=rows.find(r=>r.date===`${Number(year)-1}-12`);
-  return {status:'ok',source:'Datos Argentina / INDEC',sourceUrl:'https://www.datos.gob.ar/series/api',updated:last.date,latest:{value:monthly.at(-1).value,yoy:round(pct(last.index,prevYear.index),1),ytd:decPrev?round(pct(last.index,decPrev.index),1):null},monthly,displayMonthly:monthly.slice(-72)};
+  // Sólo meses consecutivos para la variación mensual.
+  const monthly=[];for(let i=1;i<rows.length;i++)if(ymShift(rows[i-1].date,1)===rows[i].date)monthly.push({...rows[i],value:round(pct(rows[i].index,rows[i-1].index),1)});
+  const last=rows.at(-1),byD=Object.fromEntries(rows.map(r=>[r.date,r.index])),prevYear=byD[ymShift(last.date,-12)];
+  const year=last.date.slice(0,4),decPrev=byD[`${Number(year)-1}-12`];
+  // Fecha de publicación: la del calendario oficial del período si el CSV no la informa.
+  if(!publishedAt||publishedAt.slice(0,7)<=last.date){const lbl=`${['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'][Number(last.date.slice(5))-1]} ${year}`;const ev=EVENTS.find(e=>/precios al consumidor/i.test(e.title)&&String(e.period).toLowerCase()===lbl);if(ev)publishedAt=ev.date;}
+  return {status:'ok',source:`INDEC — IPC Nacional (${source.join(' + ')||'respaldo local'})`,sourceUrl:'https://www.indec.gob.ar/indec/web/Nivel4-Tema-3-5-31',updated:last.date,publishedAt,latest:{date:last.date,value:monthly.at(-1).value,yoy:prevYear?round(pct(last.index,prevYear),1):null,ytd:decPrev?round(pct(last.index,decPrev),1):null},monthly,displayMonthly:monthly.slice(-7),...(errors.length?{fetchErrors:errors}:{})};
 }
 const ARCA_MONTHS={enero:1,febrero:2,marzo:3,abril:4,mayo:5,junio:6,julio:7,agosto:8,septiembre:9,setiembre:9,octubre:10,noviembre:11,diciembre:12};
 export function parseArcaRelease(text,now=new Date()){
