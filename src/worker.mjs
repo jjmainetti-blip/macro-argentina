@@ -1,6 +1,6 @@
 import macroData, { GROUPS, freshnessReport, latestReleaseFor, cardsSeen } from './api/macro-data.mjs';
 import { pickCronGroup } from './api/freshness.mjs';
-import calendarData from './api/calendar-data.mjs';
+import calendarData, { saveCardStatus } from './api/calendar-data.mjs';
 import marketsData, { latestMarketsBody, xTokenShape } from './api/markets.mjs';
 import { homeWithMarkets } from './api/markets-html.mjs';
 import reservesData, { imfBackfill } from './api/reserves.mjs';
@@ -67,7 +67,7 @@ export default {
       const r = await accountApi(request, env, ctx, url); if (r) return r;
     }
     if (request.method === 'GET' && url.pathname === '/api/calendar-data') {
-      return withHeaders(await calendarData());
+      return withHeaders(await calendarData(env));
     }
     if (url.pathname.startsWith('/api/')) {
       return new Response(JSON.stringify({ error: 'Not found' }), {
@@ -93,7 +93,7 @@ export default {
     { const h = new Date(event.scheduledTime || Date.now()).getUTCHours(); if (h >= 12 && h < 23 && Math.floor((event.scheduledTime || Date.now()) / 300000) % 6 === 0) ctx.waitUntil(runReminders(env).catch(() => { })); }
     const groups = Object.keys(GROUPS), tick = Math.floor((event.scheduledTime || Date.now()) / 300000);
     let statuses = [];
-    try { statuses = await freshnessReport(env); } catch { }
+    try { statuses = await freshnessReport(env); ctx.waitUntil(saveCardStatus(env, statuses)); } catch { }
     const { group, reason } = pickCronGroup(statuses, groups, tick);
     // v133: en cada ejecución se renueva también el último dato de mercados (KV), aunque nadie esté mirando el sitio.
     // v160: completa de a poco la posición mensual de Argentina en el FMI (DEG y crédito) para las reservas netas.

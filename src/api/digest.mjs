@@ -8,7 +8,7 @@
 //   mkt:closes         { 'YYYY-MM-DD': { dollar, bna, risk, merval } } — cierres propios para las variaciones semanales
 import { buildReleases } from '../../public/releases.js';
 import { latestMarketsBody } from './markets.mjs';
-import { EVENTS } from './calendar-data.mjs';
+import { agendaEvents } from './calendar-data.mjs';
 import { BUNDLED_SOURCES } from './bundled-history.mjs';
 import { isBusinessDay, closeDay } from './market-days.mjs';
 import { computeContract } from './contracts-core.mjs';
@@ -84,7 +84,8 @@ export async function digestData(env) {
   // Una sola entrada por indicador (la más reciente).
   const byTitle = new Map(); for (const r of releases) { const k = r.title, prev = byTitle.get(k); if (!prev || String(r.releaseDate) >= String(prev.releaseDate)) byTitle.set(k, r); }
   const ipcLast = (Array.isArray(R.ipc?.monthly) ? R.ipc.monthly : []).filter(r => Number.isFinite(Number(r.value))).map(r => String(r.date).slice(0, 7)).sort().at(-1) || null;
-  return { ipcLast, markets, closes, fin, releases: [...byTitle.values()].sort((a, b) => String(b.releaseDate).localeCompare(String(a.releaseDate))), rem: R.rem || null };
+  const agenda = await agendaEvents(env, { limit: 40 }).catch(() => []);
+  return { agenda, ipcLast, markets, closes, fin, releases: [...byTitle.values()].sort((a, b) => String(b.releaseDate).localeCompare(String(a.releaseDate))), rem: R.rem || null };
 }
 // Valor de cierre de un activo en la fecha d o la anterior más cercana (hasta 6 días antes).
 function closeAt(data, k, d) {
@@ -162,7 +163,7 @@ export function buildDigest(env, kind, prefs, data, today, extra = {}) {
     if (rows.length) { const sv = L.survey ? `${MES[+L.survey.slice(5) - 1]} ${L.survey.slice(0, 4)}` : ''; parts.push(h2(`Expectativas · REM ${sv}`) + table(rows)); text.push(`REM ${sv}`, ...rows.map(r => r.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()), ''); }
   }
   if (items.has('agenda')) {
-    const until = addDays(today, weekly ? 8 : 3), ev = EVENTS.filter(e => e.date > (kind === 'daily' && prefs.digest.daily.slot === 'am' ? addDays(today, -1) : today) && e.date <= until).sort((a, b) => a.date.localeCompare(b.date)).slice(0, 12);
+    const until = addDays(today, weekly ? 8 : 3), ev = (data.agenda || []).filter(e => e.status !== 'pendiente' && e.date > (kind === 'daily' && prefs.digest.daily.slot === 'am' ? addDays(today, -1) : today) && e.date <= until).sort((a, b) => a.date.localeCompare(b.date)).slice(0, 12);
     parts.push(h2(weekly ? 'Agenda de la semana próxima' : 'Próximos datos') + (ev.length ? table(ev.map(e => row(`${DIAS[weekday(e.date)]} ${dayLabel(e.date)}`, `${esc(e.title)}<br><span style="font-weight:400;color:#63758b;font-size:11px">${esc(e.agency)}${e.period ? ` · ${esc(e.period)}` : ''}</span>`))) : small('Sin publicaciones confirmadas en los próximos días.')));
     text.push('AGENDA', ...(ev.length ? ev.map(e => `${dayLabel(e.date)}: ${e.title} (${e.agency})`) : ['Sin publicaciones confirmadas.']), '');
   }

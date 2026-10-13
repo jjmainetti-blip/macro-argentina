@@ -61,6 +61,11 @@ export function buildReleases(R = {}) {
   { const h = autosHistory(R), L = lastEntry(h); if (L) { const p = numOrNull(h[ymShift(L[0], -12)]), pubd = R.autos?.latest?.ym === L[0] ? R.autos.latest.published : null; releases.push({ releaseDate: pubd || `${ymShift(L[0], 1)}-01`, title: 'Patentamientos · ACARA', value: `${new Intl.NumberFormat('es-AR').format(L[1])} unidades${p ? ` · ${kpiPct((L[1] / p - 1) * 100)} interanual` : ''}`, displayDate: pubd ? `Publicado ${displayDay(pubd)} · período ${displayMonth(L[0])}` : `Período ${displayMonth(L[0])}` }); } }
   { const L = lastEntry(R.came?.monthlyYoy); if (L) { const lt = R.came?.latest?.ym === L[0] ? R.came.latest : null, mom = numOrNull(R.came?.monthlySaMom?.[L[0]]); const rd = lt?.published || `${ymShift(L[0], 1)}-05`;
     releases.push({ releaseDate: rd, title: 'Ventas minoristas pyme · CAME', value: `${kpiPct(L[1])} interanual real${mom !== null ? ` · ${kpiPct(mom)} mensual` : ''}`, displayDate: lt?.published ? `Publicado ${displayDay(lt.published)} · período ${displayMonth(L[0])}` : `Período ${displayMonth(L[0])}` }); } }
+  // v169: consumo — supermercados (INDEC) y consumo masivo (Scentia).
+  { const S = R.supermarkets, L = lastEntry(S?.monthlyYoy); if (L) { const mom = numOrNull(S?.monthlySaMom?.[L[0]]), pd = S?.latest?.ym === L[0] && S.latest.published ? S.latest.published : null;
+    releases.push({ releaseDate: pd || `${ymShift(L[0], 2)}-22`, title: 'Supermercados · INDEC', value: `${kpiPct(L[1])} interanual real${mom !== null ? ` · ${kpiPct(mom)} mensual s.e.` : ''}`, displayDate: pd ? `Publicado ${displayDay(pd)} · período ${displayMonth(L[0])}` : `Período ${displayMonth(L[0])}` }); } }
+  { const S = R.scentia, L = lastEntry(S?.monthlyYoy); if (L) { const ytd = numOrNull(S?.ytd?.[L[0]]), pd = S?.published?.[L[0]] || (S?.latest?.ym === L[0] ? S.latest.published : null);
+    releases.push({ releaseDate: pd || `${ymShift(L[0], 1)}-22`, title: 'Consumo masivo · Scentia', value: `${kpiPct(L[1])} interanual${ytd !== null ? ` · ${kpiPct(ytd)} acumulado del año` : ''}`, displayDate: pd ? `Publicado ${displayDay(pd)} · período ${displayMonth(L[0])}` : `Período ${displayMonth(L[0])}` }); } }
   // v142: IPI manufacturero e ISAC (INDEC): interanual y mensual desestacionalizada del último mes.
   for (const [k, title] of [['industryHistorical', 'IPI manufacturero · INDEC'], ['isacHistorical', 'Construcción (ISAC) · INDEC']]) {
     const H = R[k], L = lastEntry(H?.monthlyYoy); if (!L) continue;
@@ -77,7 +82,7 @@ export function pickLatest(releases) {
   const l = valid.at(-1); if (!l) return null;
   const same = []; for (const x of valid) if (x.sortKey === l.sortKey && !same.some(y => y.title === x.title)) same.push(x);
   // v151 · En la portada se muestra sólo el nombre corto del índice (IPI, ISAC, IPC…), sin el valor.
-  const SHORT = { 'IPI manufacturero': 'IPI', 'Construcción (ISAC)': 'ISAC', 'IPC Nacional': 'IPC' };
+  const SHORT = { 'IPI manufacturero': 'IPI', 'Construcción (ISAC)': 'ISAC', 'IPC Nacional': 'IPC', 'Supermercados': 'Supermercados', 'Consumo masivo': 'Consumo masivo' };
   const abbr = t => { const [n, ...rest] = String(t).split(' · '); return [SHORT[n] || n, ...rest].join(' · '); };
   if (same.length === 1) return { title: abbr(l.title), value: l.value, date: l.displayDate || l.date || l.releaseDate || '', sortKey: l.sortKey };
   const short = t => abbr(t).split(' · ')[0], agencies = [...new Set(same.map(x => x.title.split(' · ')[1]).filter(Boolean))];
@@ -89,7 +94,7 @@ export function pickLatest(releases) {
 // Prioridad: (1) fecha exacta informada por la fuente; (2) fecha en que el sitio detectó el período nuevo
 // (window.__CARD_PUB__, registrada por el Worker); (3) calendario habitual del organismo (rezago en meses desde el
 // último mes del período + día habitual). ym = último mes del período (trimestre/semestre: su mes final).
-export const PUB_RULES = { ipc: [1, 13], ipcCaba: [1, 8], arca: [1, 2], icg: [0, 26], autos: [1, 2], came: [1, 5], emae: [2, 22], isac: [2, 7], fiscal: [1, 17],
+export const PUB_RULES = { super: [2, 22], scentia: [1, 22], ipc: [1, 13], ipcCaba: [1, 8], arca: [1, 2], icg: [0, 26], autos: [1, 2], came: [1, 5], emae: [2, 22], isac: [2, 7], fiscal: [1, 17],
   cement: [1, 6], credit: [1, 20], arrears: [2, 20], ipi: [2, 7], trade: [1, 19], ila: [1, 28], iga: [1, 22], bop: [3, 23], poverty: [3, 26] };
 export function cardPublication(key, ymEnd, S = {}, seen = {}) {
   if (!/^\d{4}-\d{2}$/.test(String(ymEnd || ''))) return null;
@@ -100,6 +105,8 @@ export function cardPublication(key, ymEnd, S = {}, seen = {}) {
   if (key === 'autos' && S.autos?.latest?.ym === ymEnd) exact = ok(S.autos.latest.published);
   if (key === 'came' && S.came?.latest?.ym === ymEnd) exact = ok(S.came.latest.published);
   if (key === 'cement' && S.cement?.latest?.ym === ymEnd) exact = ok(S.cement.latest.published);
+  if (key === 'super' && S.supermarkets?.latest?.ym === ymEnd) exact = ok(S.supermarkets.latest.published);
+  if (key === 'scentia') exact = ok(S.scentia?.published?.[ymEnd]) || (S.scentia?.latest?.ym === ymEnd ? ok(S.scentia.latest.published) : null);
   if (key === 'ipi' && S.industryHistorical?.latest?.ym === ymEnd) exact = ok(S.industryHistorical.latest.published);
   if (key === 'isac' && S.isacHistorical?.latest?.ym === ymEnd) exact = ok(S.isacHistorical.latest.published);
   if (key === 'icg' && S.icg?.latest && ymFromSpanishPeriod(S.icg.latest.period || '') === ymEnd) exact = ok(S.icg.publicationDate);

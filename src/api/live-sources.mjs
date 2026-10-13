@@ -218,3 +218,50 @@ export async function cameLive() {
   const monthlyYoy = { [best.ym]: best.yoy }, monthlySaMom = Number.isFinite(best.mom) ? { [best.ym]: best.mom } : {};
   return { status: 'ok', source: 'CAME — Índice de Ventas Minoristas Pyme', sourceUrl: best.url, monthlyYoy, monthlySaMom, latest: best };
 }
+
+// v169 · Consumo masivo de Scentia. La consultora no publica sus resultados en una página fija: se difunden por la
+// prensa (≈ día 22 del mes siguiente). Se leen los títulos de Google Noticias y se toma la variación interanual del
+// mes más reciente sólo si al menos dos medios distintos coinciden (así se descartan títulos con la variación mensual).
+const MESES_SC = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+export function parseScentiaHeadlines(items) {
+  const cands = new Map();
+  for (const it of items) {
+    const t = String(it.title || '').replace(/\s+/g, ' ');
+    if (!/consumo masivo/i.test(t)) continue;
+    const m = t.match(/consumo masivo\b.*?\b(cay[óo]|cae|baj[óo]|retrocedi[óo]|se contrajo|se hundi[óo]|se desplom[óo]|creci[óo]|crece|subi[óo]|aument[óo]|repunt[óo]|avanz[óo]|se recuper[óo])\s+(?:un\s+|el\s+)?(\d{1,2}(?:[.,]\d{1,2})?)\s*%(?:\s+interanual)?\s+(?:en|durante)\s+(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)/i);
+    if (!m) continue;
+    if (/mensual|respecto (?:al|del) mes anterior|contra (?:el mes|julio|junio)/i.test(t) && !/interanual/i.test(t)) continue;
+    const neg = /cay|cae|baj|retroced|contrajo|hundi|desplom/i.test(m[1]);
+    const v = (neg ? -1 : 1) * Number(m[2].replace(',', '.'));
+    const mi = MESES_SC.indexOf(m[3].toLowerCase().replace('setiembre', 'septiembre'));
+    const pub = new Date(it.pubDate || Date.now()); if (Number.isNaN(pub.getTime())) continue;
+    let y = pub.getUTCFullYear(); if (mi > pub.getUTCMonth()) y--;
+    const ym = `${y}-${String(mi + 1).padStart(2, '0')}`;
+    const acc = t.match(/acumula(?:\s+una?)?\s+(baja|ca[íi]da|retroceso|contracci[óo]n|suba|alza|crecimiento|aumento)\s+(?:de(?:l)?\s+)?(\d{1,2}(?:[.,]\d{1,2})?)\s*%/i);
+    const ytd = acc ? (/baja|ca[íi]da|retroceso|contracci/i.test(acc[1]) ? -1 : 1) * Number(acc[2].replace(',', '.')) : null;
+    const key = `${ym}|${v}`, src = String(it.source || it.link || '').toLowerCase();
+    const c = cands.get(key) || { ym, yoy: v, ytd: null, sources: new Set(), published: null, interanual: false };
+    c.sources.add(src || t); if (ytd !== null) c.ytd = ytd; if (/interanual/i.test(t)) c.interanual = true;
+    const pd = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' }).format(pub);
+    if (!c.published || pd < c.published) c.published = pd;
+    cands.set(key, c);
+  }
+  const ok = [...cands.values()].filter(c => c.sources.size >= 2 || (c.interanual && c.sources.size >= 1 && c.ytd !== null));
+  ok.sort((a, b) => b.ym.localeCompare(a.ym) || b.sources.size - a.sources.size);
+  return ok;
+}
+export async function scentiaLive() {
+  const url = 'https://news.google.com/rss/search?q=%22consumo+masivo%22+Scentia+when:60d&hl=es-419&gl=AR&ceid=AR:es-419';
+  const xml = await (await fetchWithTimeout(url, { headers: { 'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36', accept: 'application/rss+xml,application/xml,text/xml' } }, 12000)).text();
+  const dec = s => String(s || '').replace(/<!\[CDATA\[|\]\]>/g, '').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').trim();
+  const items = [...xml.matchAll(/<item>([\s\S]*?)<\/item>/g)].map(m => ({
+    title: dec((m[1].match(/<title>([\s\S]*?)<\/title>/) || [])[1]).replace(/\s+-\s+[^-]+$/, ''),
+    pubDate: dec((m[1].match(/<pubDate>([\s\S]*?)<\/pubDate>/) || [])[1]),
+    source: dec((m[1].match(/<source[^>]*>([\s\S]*?)<\/source>/) || [])[1]),
+  }));
+  if (!items.length) throw new Error('Scentia: Google Noticias no devolvió notas');
+  const found = parseScentiaHeadlines(items);
+  if (!found.length) throw new Error('Scentia: no hay un dato confirmado por dos medios');
+  const best = found[0];
+  return { status: 'ok', source: 'Scentia — consumo masivo, total multicanal (unidades)', sourceUrl: 'https://news.google.com/search?q=Scentia%20consumo%20masivo&hl=es-419&gl=AR&ceid=AR:es-419', monthlyYoy: { [best.ym]: best.yoy }, ...(best.ytd !== null ? { ytd: { [best.ym]: best.ytd } } : {}), published: { [best.ym]: best.published }, latest: { ym: best.ym, published: best.published, sources: best.sources.size } };
+}

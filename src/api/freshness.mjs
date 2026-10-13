@@ -11,6 +11,8 @@ export function ymShift(ym, n) { let [y, m] = ym.split('-').map(Number); m += n;
 const dd = (ym, day) => `${ym}-${String(Math.min(day, 28)).padStart(2, '0')}`;
 
 // group = grupo de /api/macro-data que la actualiza. lag = meses entre el período y la publicación; day = día habitual.
+// v169 · Organismo de cada tarjeta (para la agenda de próximas publicaciones).
+export const AGENCY = { ipc: 'INDEC', ipcCaba: 'IDECBA', arca: 'ARCA', icg: 'UTDT', autos: 'ACARA', came: 'CAME', super: 'INDEC', scentia: 'Scentia', emae: 'INDEC', isac: 'INDEC', fiscal: 'Ministerio de Economía', cement: 'AFCP', credit: 'BCRA', arrears: 'BCRA', ipi: 'INDEC', trade: 'INDEC', ila: 'CICEc', iga: 'OJF', bop: 'INDEC', poverty: 'INDEC' };
 export const CARDS = [
   { key: 'ipc', title: 'Inflación nacional', group: 'core', freq: 'M', lag: 1, day: 15, cal: /precios al consumidor \(IPC\)/i, latest: S => lastKey(Object.fromEntries((S.ipc?.monthly || []).map(r => [String(r.date).slice(0, 7), r.value]))) },
   { key: 'ipcCaba', title: 'Inflación CABA', group: 'core', freq: 'M', lag: 1, day: 8, latest: S => lastKey(S.ipcCaba?.history) },
@@ -18,6 +20,9 @@ export const CARDS = [
   { key: 'icg', title: 'Confianza en el gobierno', group: 'core', freq: 'M', lag: 0, day: 28, latest: S => lastKey(S.icg?.history) },
   { key: 'autos', title: 'Patentamientos 0 km', group: 'core', freq: 'M', lag: 1, day: 2, latest: S => maxKey(lastKey(S.autos?.history?.['Patentamientos (unidades)']), lastKey(S.activityPulse?.autos?.history?.['Patentamientos (unidades)'])) },
   { key: 'came', title: 'Ventas minoristas pyme', group: 'core', freq: 'M', lag: 1, day: 5, latest: S => maxKey(lastKey(S.came?.monthlyYoy), S.came?.latest?.ym) },
+  // v169 · Consumo: supermercados (INDEC) y consumo masivo (Scentia).
+  { key: 'super', title: 'Consumo en supermercados', group: 'activity', freq: 'M', lag: 2, day: 22, cal: /Encuesta de supermercados/i, latest: S => maxKey(lastKey(S.supermarkets?.monthlyYoy), S.supermarkets?.latest?.ym) },
+  { key: 'scentia', title: 'Consumo masivo', group: 'activity', freq: 'M', lag: 1, day: 22, latest: S => maxKey(lastKey(S.scentia?.monthlyYoy), S.scentia?.latest?.ym) },
   { key: 'emae', title: 'EMAE', group: 'activity', freq: 'M', lag: 2, day: 25, cal: /actividad econ[oó]mica \(EMAE\)/i, latest: S => maxKey(lastKey(S.emaeHistorical?.monthlySaMom), lastKey(S.emaeHistorical?.monthlyYoy)) },
   { key: 'isac', title: 'ISAC construcción', group: 'activity', freq: 'M', lag: 2, day: 7, cal: /actividad de la construcci[oó]n \(ISAC\)/i, latest: S => lastKey(S.isacHistorical?.monthlyYoy) },
   { key: 'fiscal', title: 'Resultado fiscal', group: 'activity', freq: 'M', lag: 1, day: 18, cal: /Resultado fiscal/i, latest: S => lastKey(S.activityPulse?.fiscal?.historyPctGDP?.primary) },

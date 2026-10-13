@@ -1,7 +1,7 @@
 import { latestRelease } from '../../public/releases.js';
 import * as XLSX from 'xlsx';
 import { BUNDLED_SOURCES } from './bundled-history.mjs';
-import { autosLive, ipcCabaLive, povertyLive, cementLive, cameLive } from './live-sources.mjs';
+import { autosLive, ipcCabaLive, povertyLive, cementLive, cameLive, scentiaLive } from './live-sources.mjs';
 import { cardStatus, CARDS, periodEndYm, todayAR } from './freshness.mjs';
 import { EVENTS } from './calendar-data.mjs';
 /* Macrodatos (antes Macro Argentina) v8 — stable server-side data contract.
@@ -1067,12 +1067,37 @@ async function bopHistorical(){
 // v117: el endpoint se divide en grupos. Cloudflare limita los pedidos externos por invocación
 // (50 en el plan gratuito); con todas las fuentes juntas se superaban (66+) y las últimas fallaban.
 // Cada grupo queda holgadamente por debajo del límite y tiene su propio snapshot.
-const JOBS={ipcHistorical:()=>ipcHistorical(),gdpHistorical:()=>gdpHistorical(),emaeHistorical:()=>emaeHistorical(),industryHistorical:()=>industryHistorical(),unemploymentHistorical:()=>unemploymentHistorical(),tradeHistorical:()=>tradeHistorical(),financialHistorical:()=>financialHistorical(),exchangeHistorical:()=>exchangeHistorical(),ipc:()=>ipc(),arca:()=>arca(),icg:()=>icg(),bcra:()=>bcra(),rem:()=>rem(),salary:()=>salaryRipte(),icl:()=>icl(),contractIndices:()=>contractIndices(),isacHistorical:()=>isacHistorical(),creditHistorical:()=>creditHistorical(),arrearsHistorical:()=>arrearsHistorical(),activityPulse:()=>activityPulse(),ilaHistorical:()=>ilaHistorical(),igaHistorical:()=>igaHistorical(),bopHistorical:()=>bopHistorical(),autos:()=>autosLive(),ipcCaba:()=>ipcCabaLive(),poverty:()=>povertyLive(),cement:()=>cementLive(),came:()=>cameLive()};
+
+// v169 · Consumo en supermercados (INDEC, Encuesta de supermercados): índice de ventas a precios constantes.
+// Cuadro 1 de serie_supermercados.xlsx: período | serie original | var. i.a. | var. acumulada | — | desestacionalizada | var. mensual | — | tendencia | var.
+async function supermarkets(){
+  const url='https://www.indec.gob.ar/ftp/cuadros/economia/serie_supermercados.xlsx';
+  const c=new AbortController(),tm=setTimeout(()=>c.abort(),25000);
+  try{
+    const r=await fetch(url,{signal:c.signal,headers:{'user-agent':'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36'}});
+    if(!r.ok)throw new Error(`Supermercados xlsx ${r.status}`);
+    const lm=r.headers.get('last-modified'),published=lm&&!Number.isNaN(Date.parse(lm))?new Intl.DateTimeFormat('en-CA',{timeZone:'America/Argentina/Buenos_Aires'}).format(new Date(lm)):null;
+    const wb=XLSX.read(await r.arrayBuffer(),{type:'array',cellDates:true,sheets:['Cuadro 1']});
+    const ws=wb.Sheets['Cuadro 1']||wb.Sheets[wb.SheetNames.find(n=>/cuadro\s*1\b/i.test(n))];if(!ws)throw new Error('Supermercados: no está el Cuadro 1');
+    const rows=XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:null});
+    const num=v=>typeof v==='number'&&Number.isFinite(v)?v:null,r2=v=>Math.round(v*100)/100;
+    const ymOf=v=>{if(v instanceof Date)return `${v.getUTCFullYear()}-${String(v.getUTCMonth()+1).padStart(2,'0')}`;if(typeof v==='number'&&v>20000){const d=new Date(Math.round((v-25569)*864e5));return `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}`;}return null;};
+    const monthlyYoy={},ytd={},monthlySaMom={},index={},saIndex={};
+    for(const row of rows){const ym=ymOf(row[0]);if(!ym)continue;
+      // Columnas numéricas en orden (se saltean las vacías de separación).
+      // Columnas fijas; si INDEC quita la columna vacía de separación, se corren una posición.
+      const P=(row[4]==null&&num(row[5])!==null)?[1,2,3,5,6]:[1,2,3,4,5];const [orig,yoy,acc,sa,mom]=P.map(i=>num(row[i]));
+      if(orig!==null&&orig!==undefined)index[ym]=Math.round(orig*1000)/1000;if(yoy!=null)monthlyYoy[ym]=r2(yoy);if(acc!=null)ytd[ym]=r2(acc);if(sa!=null)saIndex[ym]=Math.round(sa*1000)/1000;if(mom!=null)monthlySaMom[ym]=r2(mom);}
+    const last=Object.keys(monthlyYoy).sort().at(-1);if(!last)throw new Error('Supermercados: sin datos');
+    return {status:'ok',source:'INDEC — Encuesta de supermercados (ventas a precios constantes)',sourceUrl:'https://www.indec.gob.ar/indec/web/Nivel4-Tema-3-1-34',monthlyYoy,ytd,monthlySaMom,index,saIndex,latest:{ym:last,published}};
+  }finally{clearTimeout(tm);}
+}
+const JOBS={supermarkets:()=>supermarkets(),scentia:()=>scentiaLive(),ipcHistorical:()=>ipcHistorical(),gdpHistorical:()=>gdpHistorical(),emaeHistorical:()=>emaeHistorical(),industryHistorical:()=>industryHistorical(),unemploymentHistorical:()=>unemploymentHistorical(),tradeHistorical:()=>tradeHistorical(),financialHistorical:()=>financialHistorical(),exchangeHistorical:()=>exchangeHistorical(),ipc:()=>ipc(),arca:()=>arca(),icg:()=>icg(),bcra:()=>bcra(),rem:()=>rem(),salary:()=>salaryRipte(),icl:()=>icl(),contractIndices:()=>contractIndices(),isacHistorical:()=>isacHistorical(),creditHistorical:()=>creditHistorical(),arrearsHistorical:()=>arrearsHistorical(),activityPulse:()=>activityPulse(),ilaHistorical:()=>ilaHistorical(),igaHistorical:()=>igaHistorical(),bopHistorical:()=>bopHistorical(),autos:()=>autosLive(),ipcCaba:()=>ipcCabaLive(),poverty:()=>povertyLive(),cement:()=>cementLive(),came:()=>cameLive()};
 export const GROUPS={
   core:['ipc','arca','icg','bcra','rem','salary','icl','contractIndices','autos','ipcCaba','came'],
   history:['ipcHistorical','gdpHistorical','industryHistorical','unemploymentHistorical','tradeHistorical'],
   markets:['financialHistorical','exchangeHistorical'],
-  activity:['emaeHistorical','isacHistorical','creditHistorical','activityPulse','cement'],
+  activity:['emaeHistorical','isacHistorical','creditHistorical','activityPulse','cement','supermarkets','scentia'],
   banks:['arrearsHistorical'], // v131: grupo propio (anexo xlsx del BCRA, pesado en memoria)
   leading:['ilaHistorical','igaHistorical'],
   external:['bopHistorical','poverty'] // v122/v128: XML de INDEC y pobreza en un grupo propio
@@ -1089,8 +1114,8 @@ export async function latestReleaseFor(env,ctx=null,opts={}){
   let cached=null;
   if(!opts.force){try{const r=await env?.MACRO_STORE?.getWithMetadata?.(RELEASE_KEY,'json');if(r?.value){cached=r.value;if(Date.now()-(r.metadata?.savedAt||0)<10*60*1000){RELEASE_MEMO={at:Date.now(),value:cached};return cached;}}}catch{}}
   const compute=async()=>{
-    const R={};for(const n of ['ipc','ipcCaba','arca','salary','icg','autos','rem','bopHistorical','activityPulse','came','industryHistorical','isacHistorical'])if(BUNDLED_SOURCES[n])R[n]=BUNDLED_SOURCES[n];
-    for(const g of ['core','external','activity','history']){const snap=await readSnapshot(env,g);for(const n of ['ipc','ipcCaba','arca','salary','icg','autos','rem','bopHistorical','activityPulse','came','industryHistorical','isacHistorical'])if(snap?.sources?.[n])R[n]=snap.sources[n];}
+    const R={};for(const n of ['ipc','ipcCaba','arca','salary','icg','autos','rem','bopHistorical','activityPulse','came','industryHistorical','isacHistorical','supermarkets','scentia'])if(BUNDLED_SOURCES[n])R[n]=BUNDLED_SOURCES[n];
+    for(const g of ['core','external','activity','history']){const snap=await readSnapshot(env,g);for(const n of ['ipc','ipcCaba','arca','salary','icg','autos','rem','bopHistorical','activityPulse','came','industryHistorical','isacHistorical','supermarkets','scentia'])if(snap?.sources?.[n])R[n]=snap.sources[n];}
     const value=latestRelease(R);
     if(value){RELEASE_MEMO={at:Date.now(),value};if(env?.MACRO_STORE?.put&&(!cached||JSON.stringify(cached)!==JSON.stringify(value)||opts.force)){try{await env.MACRO_STORE.put(RELEASE_KEY,JSON.stringify(value),{metadata:{savedAt:Date.now()}});}catch{}}}
     return value;

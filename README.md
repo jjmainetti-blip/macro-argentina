@@ -389,6 +389,13 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 - `public/reserves-components.json`: swap con China (CNY y tipo de cambio), BIS y otros pasivos de corto plazo, SEDESA, oro (toneladas y precio), con notas y fuentes. Actualizar `through` y los componentes cuando cambien (p. ej., pagos del BIS o el swap).
 - `/api/status` → `reserves`: cuántos meses del FMI ya se cargaron y el último error.
 
+## v169 — Consumo en Pulso económico y agenda completa
+
+- **Consumo en supermercados (INDEC)**: índice de ventas a precios constantes de la Encuesta de supermercados (`serie_supermercados.xlsx`, Cuadro 1): variación interanual, mensual desestacionalizada y acumulada del año; historia desde 2017. Grupo `activity`, fuente `supermarkets`.
+- **Consumo masivo (Scentia)**: variación interanual en unidades del total multicanal. Scentia no publica una página fija: se leen los títulos de Google Noticias y se toma el dato sólo si dos medios coinciden (`scentiaLive` en `live-sources.mjs`). Historia desde mayo de 2025 (antes la prensa difundía sólo el canal self-service, no comparable). Fuente `scentia`.
+- Ambas tarjetas tienen gráfico en la ventana emergente, entran al Semáforo, a "Último dato publicado", a la agenda y a los resúmenes por mail.
+- **Agenda**: muestra la próxima publicación de cada tarjeta del tablero (fecha oficial cuando existe; si no, la habitual, marcada como estimada) más el REM y otras fechas oficiales, hasta 10. Si un dato ya debía salir y no salió, aparece primero como pendiente. La revisión programada guarda las fechas en KV (`cards:status`).
+
 ## v168 — Mi cuenta más ordenada
 
 - Los contratos se muestran como tarjetas con el formato de Pulso económico (nombre, índice, monto vigente, próximo ajuste y estado de los avisos) más una tarjeta "Agregar contrato". Al tocar una tarjeta se abre una ventana con todos los detalles y el cronograma de ajustes, con Editar, Enviarme un mail de prueba y Eliminar; el formulario también se abre en esa ventana.

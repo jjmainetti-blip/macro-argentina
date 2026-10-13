@@ -210,3 +210,5 @@ html:not([data-tab="inicio"]) main>section[data-tab]{min-height:calc(100vh - 72p
 .acct-modal .kpi-modal-head>strong{display:grid;text-align:right}.acct-modal-sub{font-size:12px;font-weight:500;color:var(--muted)}.acct-modal .upd-table-wrap{max-height:none}
 body.modal-open{overflow:hidden}
 @media(max-width:620px){.acct-modal .kpi-modal-head>strong{text-align:left}.acct-prefs-bar .btn{width:100%}}
+/* v169 · Agenda: fechas estimadas y pendientes */
+.agenda-list article.agenda-est time{color:#5b7fa8}.agenda-list article.agenda-est p{font-style:italic}.agenda-list article.agenda-pending time{color:#b7791f}.agenda-list article.agenda-pending p{color:#b7791f;font-weight:600}
