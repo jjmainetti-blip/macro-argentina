@@ -9,6 +9,7 @@
 //   acct:run:<fecha>         marca de la corrida diaria de recordatorios
 // Mails: Resend (secreto RESEND_API_KEY; remitente MAIL_FROM, por defecto "Macrodatos <avisos@macrodatos.ar>").
 import { BUNDLED_SOURCES } from './bundled-history.mjs';
+import { normalizeLoan, computeLoan, SYSTEMS, ADJUST } from './loans-core.mjs';
 import { normalizeContract, computeContract, INDEX_NAMES, freqText, dateLabel, monthLabel, ipcWindowText, pendingHint, addDays } from './contracts-core.mjs';
 
 const SNAP_CORE = 'macro:snapshot:v131:core';
@@ -187,6 +188,37 @@ export function monthlyMail(env, c, R, today, rcpt, owner) {
   return { subject: `${c.name}: ${money(cur.amount)} · ${monthLabel(ym)}`, text, html: layout(env, { title, intro: esc(contractFacts(c)), body: table(lines), button: { href: `${site(env)}/#cuenta`, label: 'Ver el contrato' }, footer: footerFor(env, rcpt, owner) }) };
 }
 
+// ── v171 · Créditos ──────────────────────────────────────────────────────────────────────────────────────────
+const uvaN = n => new Intl.NumberFormat('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
+function loanFacts(L) { return `${ADJUST[L.adjust]} · TNA ${new Intl.NumberFormat('es-AR', { maximumFractionDigits: 3 }).format(L.rate)}% · sistema ${SYSTEMS[L.system].split(' (')[0].toLowerCase()} · ${L.term} cuotas`; }
+const r2 = v => v == null ? null : Math.round(v * 100) / 100;
+function publicLoan(L, idx, today) {
+  const R = computeLoan(L, idx, today);
+  const base = { id: L.id, type: 'loan', name: L.name, adjust: L.adjust, principal: L.principal, principalUnit: L.principalUnit, start: L.start, firstDue: L.firstDue || '', term: L.term, rate: L.rate, system: L.system, notes: L.notes || '',
+    reminders: { ...L.reminders, others: (L.recipients || []).map(r => r.email) }, recipients: (L.recipients || []).map(r => ({ email: r.email, status: r.status })), createdAt: L.createdAt };
+  if (R.error) return { ...base, error: R.error };
+  const row = r => r && { k: r.k, date: r.date, past: r.past, quota: r2(r.quota), interest: r2(r.interest), capital: r2(r.capital), balance: r2(r.balance), uva: r.uva ?? null, uvaDate: r.uvaDate ?? null, estimated: !!r.estimated, quotaArs: r2(r.quotaArs), interestArs: r2(r.interestArs), capitalArs: r2(r.capitalArs), balanceArs: r2(r.balanceArs) };
+  return { ...base, unit: R.unit, principalUnits: r2(R.principalUnits), baseUva: R.baseUva, paidCount: R.paidCount, finished: R.finished, next: row(R.next), balanceUnits: r2(R.balanceUnits), balanceArs: r2(R.balanceArs), uvaToday: R.uvaToday, totalInterest: r2(R.totalInterest), lastDue: R.lastDue, rows: R.rows.map(row) };
+}
+export function dueMail(env, L, r, R, today, rcpt, owner) {
+  const uva = L.adjust === 'uva', future = r.date > today;
+  const title = `${L.name}: cuota ${r.k} de ${L.term} · vence el ${dateLabel(r.date)}`;
+  const lines = [row(`Cuota ${r.k} de ${L.term}`, money(r.quotaArs), true)];
+  if (uva) { lines.push(row('Cuota en UVA', `${uvaN(r.quota)} UVA`)); lines.push(row(r.estimated ? `Valor UVA (último publicado, ${dateLabel(r.uvaDate)})` : `Valor UVA del ${dateLabel(r.uvaDate)}`, `$ ${uvaN(r.uva)}`)); }
+  lines.push(row('Intereses', money(r.interestArs)), row('Amortización de capital', money(r.capitalArs)), row('Saldo de capital después de la cuota', money(r.balanceArs) + (uva ? ` (${uvaN(r.balance)} UVA)` : '')));
+  const nx = R.rows.find(x => x.k === r.k + 1); if (nx) lines.push(row('Próximo vencimiento', esc(dateLabel(nx.date))));
+  const note = uva && r.estimated ? `<p style="font-size:12px;color:#8a5a00;margin:10px 0 0">El valor de la UVA del ${esc(dateLabel(r.date))} todavía no se publicó: el monto en pesos está estimado con el último valor disponible y puede variar levemente.</p>` : '';
+  const subject = `${L.name}: cuota ${r.k}/${L.term} ${money(r.quotaArs)}${uva && r.estimated ? ' (estimada)' : ''} · vence ${dateLabel(r.date)}`;
+  const text = [title, '', `Cuota: ${money(r.quotaArs)}${uva ? ` (${uvaN(r.quota)} UVA × $ ${uvaN(r.uva)}${r.estimated ? ', valor estimado' : ''})` : ''}`, `Intereses: ${money(r.interestArs)}`, `Capital: ${money(r.capitalArs)}`, `Saldo: ${money(r.balanceArs)}`, '', loanFacts(L), '', `Ver en ${site(env)}/#cuenta`, `Darse de baja: ${unsubLinks(env, rcpt.token).page}`].join('\n');
+  return { subject, text, html: layout(env, { title: future ? title : `${L.name}: cuota ${r.k} de ${L.term} (venció el ${dateLabel(r.date)})`, intro: esc(loanFacts(L)) + (L.notes ? `. ${esc(L.notes)}` : ''), body: table(lines) + note + '<p style="font-size:11px;color:#63758b;margin:10px 0 0">Cálculo orientativo sin IVA sobre intereses, seguros ni otros cargos del banco.</p>', button: { href: `${site(env)}/#cuenta`, label: 'Ver el crédito' }, footer: footerFor(env, rcpt, owner).replace('de este contrato', 'de este crédito') }) };
+}
+function markPastLoan(L, idx, today) {
+  L.notified = {};
+  const R = computeLoan(L, idx, today); if (R.error) return;
+  for (const r of R.rows) if (r.date < today) L.notified[r.k] = 'past';
+}
+const findItem = (u, id) => (u?.contracts || []).find(x => x.id === id) || (u?.loans || []).find(x => x.id === id);
+
 // ── Destinatarios ─────────────────────────────────────────────────────────────────────────────────────────────
 function recipientsFor(u, c) {
   const out = [];
@@ -205,12 +237,12 @@ async function syncRecipients(env, u, c, prev, wanted) {
     const rec = { email, status: 'pending', token, invitedAt: new Date().toISOString() };
     list.push(rec);
     if (await rateLimit(env, 'invite', u.email, 10)) {
-      const s = site(env), title = `${u.email} quiere enviarte avisos de un contrato`;
+      const s = site(env), isLoan = c.type === 'loan', what = isLoan ? 'de las cuotas del crédito' : 'de actualización del contrato', title = `${u.email} quiere enviarte avisos ${isLoan ? 'de un crédito' : 'de un contrato'}`;
       try {
         await sendMail(env, {
           to: email, subject: title,
-          text: `${u.email} te agregó como destinatario de los avisos de actualización del contrato "${c.name}" en Macrodatos.\n\nPara recibirlos, confirmá en: ${s}/#confirmar=${token}\n\nSi no conocés a esta persona, ignorá este mail: no vas a recibir nada más.`,
-          html: layout(env, { title, intro: `${esc(u.email)} te agregó como destinatario de los avisos de actualización del contrato <strong>${esc(c.name)}</strong> (${esc(contractFacts(c))}).`, body: '<p style="font-size:14px;color:#40556e">Para empezar a recibirlos tenés que confirmarlo. Si no conocés a esta persona, ignorá este mail: no vas a recibir nada más.</p>', button: { href: `${s}/#confirmar=${token}`, label: 'Confirmar' } }),
+          text: `${u.email} te agregó como destinatario de los avisos ${what} "${c.name}" en Macrodatos.\n\nPara recibirlos, confirmá en: ${s}/#confirmar=${token}\n\nSi no conocés a esta persona, ignorá este mail: no vas a recibir nada más.`,
+          html: layout(env, { title, intro: `${esc(u.email)} te agregó como destinatario de los avisos ${what} <strong>${esc(c.name)}</strong> (${esc(isLoan ? loanFacts(c) : contractFacts(c))}).`, body: '<p style="font-size:14px;color:#40556e">Para empezar a recibirlos tenés que confirmarlo. Si no conocés a esta persona, ignorá este mail: no vas a recibir nada más.</p>', button: { href: `${s}/#confirmar=${token}`, label: 'Confirmar' } }),
         });
       } catch (e) { rec.inviteError = String(e?.message || e).slice(0, 160); }
     } else rec.inviteError = 'Se alcanzó el límite de invitaciones por hora.';
@@ -232,9 +264,30 @@ export async function runReminders(env, { force = false, today = todayAR(), only
     const page = only ? { keys: [{ name: userKey(only) }], list_complete: true } : await env.MACRO_STORE.list({ prefix: 'acct:user:', cursor });
     cursor = page.list_complete ? null : page.cursor;
     for (const { name } of page.keys) {
-      const u = await kvGet(env, name); if (!u?.contracts?.length) continue;
+      const u = await kvGet(env, name); if (!u?.contracts?.length && !u?.loans?.length) continue;
       log.users++; let changed = false;
-      for (const c of u.contracts) {
+      // v171 · Créditos: aviso antes de cada vencimiento.
+      for (const L of u.loans || []) {
+        if ((L.reminders?.mode || 'off') === 'off') continue;
+        const R = computeLoan(L, idx, today); if (R.error) continue;
+        const rcpts = recipientsFor(u, L); if (!rcpts.length) continue;
+        L.notified ||= {}; const queue = [];
+        for (const r of R.rows) {
+          if (L.notified[r.k]) continue;
+          if (today < addDays(r.date, -(L.reminders.daysBefore || 0))) break;
+          if (r.date < addDays(today, -3)) { L.notified[r.k] = 'past'; changed = true; continue; }
+          queue.push(rc => dueMail(env, L, r, R, today, rc, u.email)); L.notified[r.k] = 'sent';
+        }
+        if (!queue.length) continue;
+        changed = true;
+        for (const make of queue) for (const rc of rcpts) {
+          const m = make(rc);
+          if (dryRun) { log.mails.push({ to: rc.to, subject: m.subject }); continue; }
+          try { await sendMail(env, { to: rc.to, subject: m.subject, html: m.html, text: m.text, unsubscribe: unsubLinks(env, rc.token) }); log.sent++; }
+          catch (e) { log.errors.push(`${L.id}: ${String(e?.message || e).slice(0, 120)}`); }
+        }
+      }
+      for (const c of u.contracts || []) {
         const mode = c.reminders?.mode || 'off'; if (mode === 'off') continue;
         const R = computeContract(c, idx, today, { horizon: 2 });
         if (R.ended || R.baseError) continue;
@@ -346,8 +399,8 @@ export async function accountApi(request, env, ctx, url) {
       if (action === 'unsubscribe') await D.unsubscribeDigest(env, ref.owner);
       return json({ ok: true, contract: 'resúmenes y alertas', status: action === 'confirm' ? 'ok' : 'off' });
     }
-    const u = await kvGet(env, userKey(ref.owner)), c = u?.contracts?.find(x => x.id === ref.cid);
-    if (!c) return json({ error: 'El contrato ya no existe.' }, 404);
+    const u = await kvGet(env, userKey(ref.owner)), c = findItem(u, ref.cid);
+    if (!c) return json({ error: 'El contrato o crédito ya no existe.' }, 404);
     if (action === 'info') return json({ ok: true, contract: c.name, owner: ref.self ? null : ref.owner, self: !!ref.self });
     if (ref.self) { if (action === 'unsubscribe') c.reminders.self = false; }
     else { const r = (c.recipients || []).find(x => x.token === token); if (!r) return json({ error: 'El enlace ya no es válido.' }, 404); r.status = action === 'confirm' ? 'ok' : 'off'; r.changedAt = new Date().toISOString(); }
@@ -371,14 +424,59 @@ export async function accountApi(request, env, ctx, url) {
   if (p === '/api/account' && method === 'DELETE') {
     try { await (await import('./digest.mjs')).removeSubscriber(env, u.email); } catch { }
     for (const s of u.sessions || []) { try { await env.MACRO_STORE.delete(`acct:sess:${s.h}`); } catch { } }
-    for (const c of u.contracts || []) for (const t of [c.selfToken, ...(c.recipients || []).map(r => r.token)]) { if (t) try { await env.MACRO_STORE.delete(`acct:rcpt:${t}`); } catch { } }
+    for (const c of [...(u.contracts || []), ...(u.loans || [])]) for (const t of [c.selfToken, ...(c.recipients || []).map(r => r.token)]) { if (t) try { await env.MACRO_STORE.delete(`acct:rcpt:${t}`); } catch { } }
     await env.MACRO_STORE.delete(userKey(u.email));
     return json({ ok: true }, 200, { 'set-cookie': sessionCookie('', 0) });
   }
 
   const idx = await indexData(env);
   if (p === '/api/account/contracts' && method === 'GET') {
-    return json({ email: u.email, mail: mailConfigured(env), today, data: lastData(idx), contracts: (u.contracts || []).map(c => publicContract(c, idx, today)) });
+    return json({ email: u.email, mail: mailConfigured(env), today, data: lastData(idx), contracts: (u.contracts || []).map(c => publicContract(c, idx, today)), loans: (u.loans || []).map(L => publicLoan(L, idx, today)) });
+  }
+  // v171 · Créditos.
+  if (p === '/api/account/loans/preview' && method === 'POST') {
+    const { loan, errors } = normalizeLoan(await readJson(request), { maxRecipients: MAX_RECIPIENTS });
+    if (errors.length) return json({ errors }, 400);
+    return json({ loan: publicLoan({ ...loan, id: 'preview' }, idx, today) });
+  }
+  if (p === '/api/account/loans' && method === 'POST') {
+    if ((u.loans || []).length >= 10) return json({ errors: ['Podés guardar hasta 10 créditos.'] }, 400);
+    const { loan, errors } = normalizeLoan(await readJson(request), { maxRecipients: MAX_RECIPIENTS });
+    if (errors.length) return json({ errors }, 400);
+    const now = new Date().toISOString(), L = { ...loan, id: randomToken(9), createdAt: now, updatedAt: now, selfToken: randomToken(24) };
+    const others = L.reminders.others; delete L.reminders.others;
+    await kvPut(env, `acct:rcpt:${L.selfToken}`, { owner: u.email, cid: L.id, to: u.email, self: true });
+    L.recipients = await syncRecipients(env, u, L, null, others);
+    markPastLoan(L, idx, today);
+    u.loans = [...(u.loans || []), L]; await saveUser(env, u);
+    return json({ ok: true, loan: publicLoan(L, idx, today) });
+  }
+  const ml = p.match(/^\/api\/account\/loans\/([\w-]{6,20})(\/test)?$/);
+  if (ml) {
+    const i = (u.loans || []).findIndex(x => x.id === ml[1]); if (i < 0) return json({ error: 'No existe ese crédito.' }, 404);
+    const prev = u.loans[i];
+    if (ml[2] && method === 'POST') {
+      if (!(await rateLimit(env, 'test', u.email, 5))) return json({ error: 'Llegaste al límite de mails de prueba por hora.' }, 429);
+      const R = computeLoan(prev, idx, today); if (R.error) return json({ error: R.error }, 400);
+      const r = R.next || R.rows.at(-1), rc = { to: u.email, token: prev.selfToken, self: true }, mail = dueMail(env, prev, r, R, today, rc, u.email);
+      try { await sendMail(env, { to: u.email, subject: `[Prueba] ${mail.subject}`, html: mail.html, text: mail.text, unsubscribe: unsubLinks(env, rc.token) }); }
+      catch (e) { return json({ error: `No se pudo enviar (${String(e?.message || e).slice(0, 120)}).` }, 502); }
+      return json({ ok: true });
+    }
+    if (method === 'DELETE') {
+      for (const t of [prev.selfToken, ...(prev.recipients || []).map(r => r.token)]) { if (t) try { await env.MACRO_STORE.delete(`acct:rcpt:${t}`); } catch { } }
+      u.loans.splice(i, 1); await saveUser(env, u); return json({ ok: true });
+    }
+    if (method === 'PUT') {
+      const { loan, errors } = normalizeLoan(await readJson(request), { maxRecipients: MAX_RECIPIENTS });
+      if (errors.length) return json({ errors }, 400);
+      const L = { ...prev, ...loan, id: prev.id, updatedAt: new Date().toISOString() };
+      const others = L.reminders.others; delete L.reminders.others;
+      L.recipients = await syncRecipients(env, u, L, prev, others);
+      if (['principal', 'principalUnit', 'adjust', 'start', 'firstDue', 'term', 'rate', 'system'].some(k => prev[k] !== L[k]) || prev.reminders?.mode !== L.reminders.mode) markPastLoan(L, idx, today);
+      u.loans[i] = L; await saveUser(env, u);
+      return json({ ok: true, loan: publicLoan(L, idx, today) });
+    }
   }
   if (p === '/api/account/preview' && method === 'POST') {
     const { contract, errors } = normalizeContract(await readJson(request), { maxRecipients: MAX_RECIPIENTS });

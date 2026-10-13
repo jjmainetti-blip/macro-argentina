@@ -212,3 +212,7 @@ body.modal-open{overflow:hidden}
 @media(max-width:620px){.acct-modal .kpi-modal-head>strong{text-align:left}.acct-prefs-bar .btn{width:100%}}
 /* v169 · Agenda: fechas estimadas y pendientes */
 .agenda-list article.agenda-est time{color:#5b7fa8}.agenda-list article.agenda-est p{font-style:italic}.agenda-list article.agenda-pending time{color:#b7791f}.agenda-list article.agenda-pending p{color:#b7791f;font-weight:600}
+/* v171 · Créditos */
+.acct-loan-sum{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:14px 0 4px}.acct-loan-sum>div{background:#f4f8fc;border-radius:11px;padding:10px 12px;display:grid}.acct-loan-sum span{font-size:10px;text-transform:uppercase;letter-spacing:.07em;font-weight:800;color:var(--muted)}.acct-loan-sum b{font-size:17px;color:var(--navy)}.acct-loan-sum small{font-size:11px;color:var(--muted)}
+.acct-loan-table{max-height:420px!important}.acct-table tr.acct-next-row td{background:#fff7e0!important;font-weight:700}
+@media(max-width:760px){.acct-loan-sum{grid-template-columns:1fr 1fr}}

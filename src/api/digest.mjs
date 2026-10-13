@@ -12,6 +12,7 @@ import { agendaEvents } from './calendar-data.mjs';
 import { BUNDLED_SOURCES } from './bundled-history.mjs';
 import { isBusinessDay, closeDay } from './market-days.mjs';
 import { computeContract } from './contracts-core.mjs';
+import { computeLoan } from './loans-core.mjs';
 import { watchQuotes, catalog, MARKETS as Q_MARKETS } from './quotes.mjs';
 import { json, todayAR, site, esc, kvGet, kvPut, sendMail, layout, row, table, money, randomToken, readJson, rateLimit, userKey, indexData } from './account.mjs';
 
@@ -23,7 +24,7 @@ export const SLOTS = { am: { h: 8, m: 30, label: '8:30 (antes de la apertura)' }
 export const ITEMS = {
   dollar: 'Dólar MEP', bna: 'Dólar oficial (BNA)', risk: 'Riesgo país', merval: 'Merval', bcra: 'Compras del BCRA y reservas',
   published: 'Datos publicados en el período', economy: 'Panorama: último dato de cada indicador', rem: 'Expectativas (REM)',
-  agenda: 'Próximos datos a publicarse', contracts: 'Tus contratos: próximos ajustes', watch: 'Tus acciones, bonos y ADRs',
+  agenda: 'Próximos datos a publicarse', contracts: 'Tus contratos y créditos: próximos ajustes y cuotas', watch: 'Tus acciones, bonos y ADRs',
 };
 export const ASSETS = { dollar: 'Dólar MEP', bna: 'Dólar oficial (BNA)', risk: 'Riesgo país', merval: 'Merval' };
 // Último dato de mercados leído directo de KV (lo escribe la actualización de cada revisión), sin la memoria de 2 minutos.
@@ -171,9 +172,10 @@ export function buildDigest(env, kind, prefs, data, today, extra = {}) {
     const rows = [];
     for (const c of extra.contracts) {
       const n = c.R.next; if (!n) continue;
+      if (c.loan) { rows.push(row(`${c.name} · cuota ${n.k}/${c.term} · ${dayLabel(n.date)}`, `${money(n.quotaArs)}${n.estimated ? ' (estimada)' : ''}`)); continue; }
       rows.push(row(`${c.name} · ${dayLabel(n.date)}`, n.pending ? 'ajuste pendiente de publicación del índice' : `${money(n.amount)} (${pctS(n.stepPct)})`));
     }
-    if (rows.length) { parts.push(h2('Tus contratos') + table(rows)); text.push('TUS CONTRATOS', ...rows.map(r => r.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()), ''); }
+    if (rows.length) { parts.push(h2('Tus contratos y créditos') + table(rows)); text.push('TUS CONTRATOS Y CRÉDITOS', ...rows.map(r => r.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()), ''); }
   }
   const title = weekly ? `Resumen semanal · ${dayLabel(today)}` : `Resumen diario · ${DIAS[weekday(today)]} ${dayLabel(today)}`;
   const subject = `${weekly ? 'Semana' : 'Macrodatos'} ${dayLabel(today)}${subjectBits.length ? ': ' + subjectBits.filter(Boolean).slice(0, 3).join(' · ') : ''}`;
@@ -187,9 +189,11 @@ async function watchFor(p, kind, today) {
   try { return await watchQuotes(ids, { weekly: kind === 'weekly', since: addDays(today, -7) }); } catch { return []; }
 }
 async function contractsFor(env, email, today) {
-  const u = await kvGet(env, userKey(email)); if (!u?.contracts?.length) return [];
+  const u = await kvGet(env, userKey(email)); if (!u?.contracts?.length && !u?.loans?.length) return [];
   const idx = await indexData(env);
-  return u.contracts.map(c => ({ name: c.name, R: computeContract(c, idx, today, { horizon: 1 }) })).filter(c => !c.R.ended && !c.R.baseError);
+  const cs = (u.contracts || []).map(c => ({ name: c.name, R: computeContract(c, idx, today, { horizon: 1 }) })).filter(c => !c.R.ended && !c.R.baseError);
+  const ls = (u.loans || []).map(L => ({ name: L.name, loan: true, term: L.term, R: computeLoan(L, idx, today) })).filter(c => !c.R.error && c.R.next);
+  return [...cs, ...ls];
 }
 const unsubHeaders = (env, token) => ({ page: `${site(env)}/#baja=${token}`, post: `${site(env)}/api/account/unsubscribe?t=${token}` });
 

@@ -389,6 +389,13 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 - `public/reserves-components.json`: swap con China (CNY y tipo de cambio), BIS y otros pasivos de corto plazo, SEDESA, oro (toneladas y precio), con notas y fuentes. Actualizar `through` y los componentes cuando cambien (p. ej., pagos del BIS o el swap).
 - `/api/status` → `reserves`: cuántos meses del FMI ya se cargaron y el último error.
 
+## v171 — Créditos en Mi cuenta
+
+- Además de los contratos, se pueden cargar **créditos**: tipo de ajuste (UVA o tradicional en pesos a tasa fija), monto (en pesos o en UVAs), fecha de otorgamiento, primer vencimiento opcional, plazo en meses, TNA y sistema de amortización (francés, alemán o americano).
+- Tarjeta con la próxima cuota y el saldo; al tocarla, ventana con cuotas pagadas, saldo de capital (en UVA y en pesos), intereses totales y el cronograma completo (cuota en UVA, valor UVA del vencimiento, cuota en pesos, interés, capital y saldo). En los UVA, si el valor del día del vencimiento todavía no se publicó, la cuota se estima con el último valor y se marca.
+- Avisos por mail antes de cada vencimiento (0 a 15 días), a vos y a otras direcciones confirmadas; mail de prueba. Los próximos vencimientos también aparecen en los resúmenes (ítem "Tus contratos y créditos").
+- Cálculo en `src/api/loans-core.mjs`. Sin IVA sobre intereses, seguros ni otros cargos.
+
 ## v170 — Corrección de la inflación CABA
 
 - Datos Argentina empezó a devolver series con meses salteados; la variación mensual se calculaba contra el último mes disponible y un hueco hacía que un mes mostrara la suba de dos (septiembre figuraba 3,6% en vez de 1,8%, y el interanual 46,3% en vez de 32,9%). Ahora la variación sólo se calcula entre meses consecutivos, los meses del respaldo verificado tienen prioridad y el valor del informe oficial de IDECBA siempre manda sobre cualquier cálculo.

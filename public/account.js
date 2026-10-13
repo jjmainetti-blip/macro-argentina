@@ -83,7 +83,7 @@
 
   // ── Con sesión: contratos ──────────────────────────────────────────────────────────────────────────────────
   async function loadContracts() {
-    try { const j = await api('/contracts'); Object.assign(state, { user: { email: j.email }, mail: j.mail, contracts: j.contracts, data: j.data, today: j.today, loaded: true }); setNav(); viewAccount(); }
+    try { const j = await api('/contracts'); Object.assign(state, { user: { email: j.email }, mail: j.mail, contracts: j.contracts, loans: j.loans || [], data: j.data, today: j.today, loaded: true }); setNav(); viewAccount(); }
     catch (err) { if (err.status === 401) { state.user = null; setNav(); viewLogin(); } else app.innerHTML = `<div class="acct-card">No se pudo cargar tu cuenta: ${esc(err.message)}</div>`; }
   }
   function remindersText(c) {
@@ -161,6 +161,102 @@
       if (act === 'del') { if (!confirm(`¿Eliminar "${c.name}"?`)) return; try { await api(`/contracts/${c.id}`, { method: 'DELETE' }); closeModal(); await loadContracts(); } catch (err) { msg.textContent = err.message; } }
     });
   }
+
+  // ── v171 · Créditos ───────────────────────────────────────────────────────────────────────────────────────
+  const SYS = { frances: 'Francés (cuota constante)', aleman: 'Alemán (amortización constante)', americano: 'Americano (capital al final)' };
+  const uvaFmt = n => n == null ? '—' : new Intl.NumberFormat('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
+  const loanFactsTxt = L => `${L.adjust === 'uva' ? 'UVA' : 'Pesos, tasa fija'} · TNA ${String(L.rate).replace('.', ',')}% · ${SYS[L.system].split(' (')[0]} · ${L.term} cuotas`;
+  function loanCard(L) {
+    const n = L.next, badge = L.adjust === 'uva' ? 'UVA' : '$';
+    let strong = '—', p = '', em = '', cls = '';
+    if (L.error) { em = L.error; cls = 'down'; }
+    else if (L.finished) { strong = 'Cancelado'; p = `Última cuota: ${day(L.lastDue)}`; cls = 'neutral'; }
+    else { strong = money(n.quotaArs); p = `Cuota ${n.k} de ${L.term} · vence ${day(n.date)}${n.estimated ? ' · estimada' : ''}`; em = `Saldo ${money(L.balanceArs)}${L.adjust === 'uva' ? ` · ${uvaFmt(L.balanceUnits)} UVA` : ''}`; cls = 'neutral'; }
+    const rem = L.reminders?.mode === 'off' ? 'Sin avisos por mail' : `Aviso por mail ${L.reminders?.daysBefore ? `${L.reminders.daysBefore} días antes de` : 'el día de'} cada vencimiento`;
+    return `<article class="kpi acct-kpi" data-loan="1" data-id="${esc(L.id)}" tabindex="0" role="button" aria-label="Ver detalle de ${esc(L.name)}">
+      <div class="kpi-top"><span>${esc(L.name)}</span><b>${badge}</b></div>
+      <strong>${strong}</strong><p>${esc(p)}</p><em class="${cls}">${esc(em)}</em>
+      <div class="data-health ${L.reminders?.mode === 'off' ? 'cached' : 'live'}">${rem}</div></article>`;
+  }
+  function loanTable(L) {
+    const uva = L.adjust === 'uva';
+    return `<div class="upd-table-wrap acct-loan-table"><table class="upd-table acct-table"><thead><tr><th>#</th><th>Vencimiento</th>${uva ? '<th>Cuota UVA</th><th>Valor UVA</th>' : ''}<th>Cuota $</th><th>Interés $</th><th>Capital $</th><th>Saldo ${uva ? 'UVA' : '$'}</th></tr></thead><tbody>
+      ${L.rows.map(r => `<tr class="${r.past ? '' : 'acct-future'}${L.next && r.k === L.next.k ? ' acct-next-row' : ''}"><td>${r.k}</td><td>${esc(day(r.date))}</td>${uva ? `<td>${uvaFmt(r.quota)}</td><td>${r.uva ? `$ ${uvaFmt(r.uva)}${r.estimated ? '<small>estimado</small>' : ''}` : '—'}</td>` : ''}<td><strong>${money(r.quotaArs)}</strong></td><td>${money(r.interestArs)}</td><td>${money(r.capitalArs)}</td><td>${uva ? uvaFmt(r.balance) : money(r.balanceArs)}</td></tr>`).join('')}
+    </tbody></table></div>`;
+  }
+  function openLoan(L) {
+    const body = openModal('acct-modal-wide'), n = L.next, uva = L.adjust === 'uva';
+    body.innerHTML = `<div class="kpi-modal-head"><div><span class="kpi-modal-agency">${esc(loanFactsTxt(L))}</span><h2>${esc(L.name)}</h2><p>Otorgado el ${esc(day(L.start))} por ${L.principalUnit === 'uva' ? `${uvaFmt(L.principal)} UVA` : money(L.principal)}${uva && L.baseUva ? ` (${uvaFmt(L.principalUnits)} UVA a $ ${uvaFmt(L.baseUva.value)})` : ''}</p></div>
+      <strong>${L.error ? '—' : L.finished ? 'Cancelado' : money(n.quotaArs)}<small class="acct-modal-sub">${L.finished || L.error ? '' : `cuota ${n.k} · vence ${esc(day(n.date))}`}</small></strong></div>
+      ${L.error ? `<p class="acct-warn">${esc(L.error)}</p>` : `<div class="acct-loan-sum">
+        <div><span>Cuotas pagadas</span><b>${L.paidCount} de ${L.term}</b></div>
+        <div><span>Saldo de capital</span><b>${money(L.balanceArs)}</b>${uva ? `<small>${uvaFmt(L.balanceUnits)} UVA${L.uvaToday ? ` × $ ${uvaFmt(L.uvaToday.value)}` : ''}</small>` : ''}</div>
+        <div><span>Intereses totales</span><b>${uva ? `${uvaFmt(L.totalInterest)} UVA` : money(L.totalInterest)}</b></div>
+        <div><span>Última cuota</span><b>${esc(day(L.lastDue))}</b></div></div>
+      ${n && uva && n.estimated ? `<p class="acct-note">La UVA del ${esc(day(n.date))} todavía no se publicó: la cuota en pesos está estimada con el último valor (${esc(day(n.uvaDate))}).</p>` : ''}`}
+      <p class="acct-rem">${remindersText({ ...L, reminders: { ...L.reminders, mode: L.reminders.mode === 'due' ? 'adjust' : L.reminders.mode } }).replace('cuando hay un ajuste', 'antes de cada vencimiento')}</p>
+      ${L.notes ? `<p class="acct-note">Nota: ${esc(L.notes)}</p>` : ''}
+      <h3 class="acct-h3b">Cronograma de cuotas</h3>${L.error ? '' : loanTable(L)}
+      <p class="acct-note">Cálculo orientativo sin IVA sobre intereses, seguros ni otros cargos del banco.</p>
+      <div class="acct-actions"><button class="btn primary" data-act="edit">Editar</button>${L.reminders?.mode !== 'off' && state.mail && !L.error ? '<button class="btn small" data-act="test">Enviarme un mail de prueba</button>' : ''}<button class="btn small danger" data-act="del">Eliminar</button></div>
+      <p class="acct-msg" role="status"></p>`;
+    const msg = body.querySelector('.acct-msg');
+    requestAnimationFrame(() => { const row = body.querySelector('.acct-next-row'), wrap = body.querySelector('.acct-loan-table'); if (row && wrap) wrap.scrollTop = Math.max(0, row.offsetTop - wrap.clientHeight / 2); });
+    body.querySelectorAll('[data-act]').forEach(b => b.onclick = async () => {
+      const act = b.dataset.act;
+      if (act === 'edit') openLoanForm(L);
+      if (act === 'test') { b.disabled = true; msg.textContent = 'Enviando…'; try { await api(`/loans/${L.id}/test`, { method: 'POST' }); msg.textContent = `Listo: revisá ${state.user.email}.`; } catch (err) { msg.textContent = err.message; } b.disabled = false; }
+      if (act === 'del') { if (!confirm(`¿Eliminar "${L.name}"?`)) return; try { await api(`/loans/${L.id}`, { method: 'DELETE' }); closeModal(); await loadContracts(); } catch (err) { msg.textContent = err.message; } }
+    });
+  }
+  function openLoanForm(L) {
+    const box = openModal('acct-modal-wide'), r = L?.reminders || { mode: 'due', daysBefore: 3, self: true };
+    const num = v => v == null ? '' : String(v).replace('.', ',');
+    box.innerHTML = `<form class="acct-card acct-form" id="loanForm" novalidate>
+      <h3>${L ? 'Editar crédito' : 'Nuevo crédito'}</h3>
+      <div class="acct-fields">
+        <label class="wide">Nombre<input name="name" maxlength="80" placeholder="Ej.: Hipotecario Banco Nación" value="${esc(L?.name || '')}"></label>
+        <label>Tipo de ajuste<select name="adjust"><option value="uva"${(L?.adjust || 'uva') === 'uva' ? ' selected' : ''}>UVA (capital ajustable por inflación)</option><option value="fijo"${L?.adjust === 'fijo' ? ' selected' : ''}>Tradicional en pesos (tasa fija)</option></select></label>
+        <label>Monto del crédito<input name="principal" inputmode="decimal" placeholder="50.000.000" value="${esc(num(L?.principal))}"></label>
+        <label data-uva>Monto expresado en<select name="principalUnit"><option value="ars"${(L?.principalUnit || 'ars') === 'ars' ? ' selected' : ''}>Pesos (al valor UVA del otorgamiento)</option><option value="uva"${L?.principalUnit === 'uva' ? ' selected' : ''}>UVAs</option></select></label>
+        <label>Fecha de otorgamiento<input name="start" type="date" value="${esc(L?.start || '')}"></label>
+        <label>Primer vencimiento (opcional)<input name="firstDue" type="date" value="${esc(L?.firstDue || '')}"><small>Si lo dejás vacío, un mes después del otorgamiento.</small></label>
+        <label>Plazo (meses)<input name="term" inputmode="numeric" placeholder="240" value="${esc(L?.term ?? '')}"></label>
+        <label>Tasa nominal anual (TNA, %)<input name="rate" inputmode="decimal" placeholder="4,5" value="${esc(num(L?.rate))}"></label>
+        <label>Sistema de amortización<select name="system">${Object.entries(SYS).map(([k, v]) => `<option value="${k}"${(L?.system || 'frances') === k ? ' selected' : ''}>${v}</option>`).join('')}</select></label>
+      </div>
+      <fieldset class="acct-fs"><legend>Avisos por mail</legend><div class="acct-fields">
+        <label>Cuándo<select name="mode"><option value="due"${r.mode === 'due' ? ' selected' : ''}>Antes de cada vencimiento</option><option value="off"${r.mode === 'off' ? ' selected' : ''}>No enviar</option></select></label>
+        <label data-due>Anticipación<select name="daysBefore">${[0, 1, 2, 3, 5, 7, 10, 15].map(k => `<option value="${k}"${(r.daysBefore || 0) === k ? ' selected' : ''}>${k ? `${k} ${k === 1 ? 'día' : 'días'} antes` : 'El día del vencimiento'}</option>`).join('')}</select></label>
+        <label class="acct-check" data-due><input type="checkbox" name="self"${r.self !== false ? ' checked' : ''}> Enviarme a mí (${esc(state.user.email)})</label>
+        <label class="wide" data-due>Otras direcciones (hasta 3, separadas por coma)<input name="others" value="${esc((L?.recipients || []).map(x => x.email).join(', '))}"><small>Cada dirección nueva recibe un mail para confirmar antes de empezar a recibir avisos.</small></label>
+      </div></fieldset>
+      <label class="wide">Notas (opcional, se incluyen en los mails)<input name="notes" maxlength="300" value="${esc(L?.notes || '')}"></label>
+      <div class="acct-preview" id="loanPreview"><p class="acct-note">Completá monto, fecha, plazo y tasa para ver el cronograma.</p></div>
+      <div class="acct-actions"><button class="btn primary" type="submit">${L ? 'Guardar cambios' : 'Guardar crédito'}</button><button class="btn ghost-dark" type="button" id="loanCancel">Cancelar</button></div>
+      <p class="acct-msg" id="loanFormMsg" role="status"></p></form>`;
+    const f = document.getElementById('loanForm');
+    const sync = () => { f.querySelectorAll('[data-uva]').forEach(el => el.hidden = f.adjust.value !== 'uva'); f.querySelectorAll('[data-due]').forEach(el => el.hidden = f.mode.value === 'off'); };
+    const read = () => ({ name: f.name.value, adjust: f.adjust.value, principal: f.principal.value, principalUnit: f.principalUnit.value, start: f.start.value, firstDue: f.firstDue.value, term: Number(f.term.value), rate: f.rate.value, system: f.system.value, notes: f.notes.value, reminders: { mode: f.mode.value, daysBefore: Number(f.daysBefore.value), self: f.self.checked, others: f.others.value } });
+    let t = null, seq = 0;
+    const preview = () => { clearTimeout(t); t = setTimeout(async () => {
+      const pv = document.getElementById('loanPreview'); if (!pv || !f.isConnected) return;
+      const b = read(), my = ++seq; if (!b.principal || !b.start || !b.term || b.rate === '') return;
+      try { const j = await api('/loans/preview', { method: 'POST', body: b }); if (my !== seq || !pv.isConnected) return; const P = j.loan;
+        if (P.error) { pv.innerHTML = `<p class="acct-warn">${esc(P.error)}</p>`; return; }
+        const first = P.rows[0];
+        pv.innerHTML = `<div class="acct-preview-head"><div><span>Primera cuota · ${esc(day(first.date))}</span><b>${money(first.quotaArs)}</b><small>${P.adjust === 'uva' ? `${uvaFmt(first.quota)} UVA${first.estimated ? ' · UVA estimada' : ''}` : 'capital + interés'}</small></div>${P.next && P.next.k !== 1 ? `<div><span>Próxima cuota · ${esc(day(P.next.date))}</span><b>${money(P.next.quotaArs)}</b><small>cuota ${P.next.k} de ${P.term}</small></div>` : ''}<div><span>Saldo hoy</span><b>${money(P.balanceArs)}</b><small>${P.paidCount} cuotas pagadas</small></div></div>${loanTable(P)}`;
+      } catch (err) { if (my === seq && pv.isConnected) pv.innerHTML = `<p class="acct-warn">${esc(err.message)}</p>`; }
+    }, 350); };
+    f.addEventListener('input', () => { sync(); preview(); }); f.addEventListener('change', () => { sync(); preview(); });
+    sync(); preview();
+    document.getElementById('loanCancel').onclick = () => { if (L) openLoan(L); else closeModal(); };
+    f.addEventListener('submit', async e => {
+      e.preventDefault(); const m = document.getElementById('loanFormMsg'), b = f.querySelector('[type=submit]'); b.disabled = true; m.textContent = 'Guardando…';
+      try { await api(L ? `/loans/${L.id}` : '/loans', { method: L ? 'PUT' : 'POST', body: read() }); closeModal(); await loadContracts(); }
+      catch (err) { m.textContent = err.message; b.disabled = false; }
+    });
+  }
   function viewAccount() {
     const d = state.data || {};
     const dataNote = [d.ipc ? `IPC hasta ${day(d.ipc)}` : null, d.icl ? `ICL hasta ${day(d.icl)}` : null, d.cer ? `CER hasta ${day(d.cer)}` : null, d.uva ? `UVA hasta ${day(d.uva)}` : null].filter(Boolean).join(' · ');
@@ -169,6 +265,9 @@
       <div class="acct-section-head"><h3>Tus contratos</h3><span class="acct-note">Tocá una tarjeta para ver todos los ajustes.</span></div>
       <div class="kpi-grid acct-kpis">${state.contracts.map(contractCard).join('')}
         <button type="button" class="kpi acct-kpi-add" id="acctAdd"><span>+</span><b>Agregar contrato</b><small>Monto, fecha, índice y frecuencia de ajuste</small></button></div>
+      <div class="acct-section-head"><h3>Tus créditos</h3><span class="acct-note">Hipotecarios, prendarios o personales, en UVA o en pesos.</span></div>
+      <div class="kpi-grid acct-kpis">${(state.loans || []).map(loanCard).join('')}
+        <button type="button" class="kpi acct-kpi-add" id="loanAdd"><span>+</span><b>Agregar crédito</b><small>Monto, tasa, plazo, sistema de amortización y ajuste</small></button></div>
       <p class="acct-data">${esc(dataNote)}</p>
       <div class="acct-card acct-prefs-bar"><div><h3>Resúmenes, alertas y seguimiento</h3><p id="acctPrefsSummary" class="acct-note">Cargando…</p></div><button class="btn primary" id="acctPrefsBtn" type="button">Configurar resúmenes y alertas</button></div>
       <details class="acct-danger"><summary>Eliminar mi cuenta</summary><p>Se borran tus contratos y dejás de recibir avisos. No se puede deshacer.</p><button class="btn small danger" id="acctDelete">Eliminar mi cuenta</button></details>`;
@@ -177,7 +276,13 @@
     loadPrefs();
     document.getElementById('acctLogout').onclick = async () => { try { await api('/logout', { method: 'POST' }); } catch { } state.user = null; setNav(); viewLogin(); };
     document.getElementById('acctDelete').onclick = async () => { if (!confirm('¿Eliminar tu cuenta y todos tus contratos?')) return; try { await api('', { method: 'DELETE' }); } catch { } state.user = null; setNav(); viewLogin('Tu cuenta fue eliminada.'); };
-    app.querySelectorAll('.acct-kpi').forEach(card => {
+    document.getElementById('loanAdd').onclick = () => openLoanForm(null);
+    app.querySelectorAll('.acct-kpi[data-loan]').forEach(card => {
+      const L = state.loans.find(x => x.id === card.dataset.id);
+      card.addEventListener('click', () => openLoan(L));
+      card.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openLoan(L); } });
+    });
+    app.querySelectorAll('.acct-kpi:not([data-loan])').forEach(card => {
       const c = state.contracts.find(x => x.id === card.dataset.id);
       card.addEventListener('click', () => openContract(c));
       card.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openContract(c); } });
