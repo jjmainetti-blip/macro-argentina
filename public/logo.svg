@@ -1,12 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 100" role="img" aria-label="Macrodatos">
-  <defs>
-    <linearGradient id="b1" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7cc4fc"/><stop offset="1" stop-color="#62b4fa"/></linearGradient>
-    <linearGradient id="b2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#5ab5fc"/><stop offset="1" stop-color="#36a0fa"/></linearGradient>
-    <linearGradient id="b3" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2a98f4"/><stop offset="1" stop-color="#0d6fdc"/></linearGradient>
-    <linearGradient id="b4" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0d4f9c"/><stop offset="1" stop-color="#052c63"/></linearGradient>
-  </defs>
-  <rect x="4"  y="73.4" width="21" height="20.6" rx="2.6" fill="url(#b1)"/>
-  <rect x="30" y="59.2" width="21" height="34.8" rx="2.6" fill="url(#b2)"/>
-  <rect x="56" y="42.8" width="22" height="51.2" rx="2.6" fill="url(#b3)"/>
-  <rect x="83" y="22"   width="22" height="72"   rx="2.6" fill="url(#b4)"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="Macrodatos">
+  <path d="M12 86 V20 H27 L50 54 L73 20 H88 V86 H74 V45 L56 71 H44 L26 45 V86 Z" fill="#071b35"/>
+  <path d="M6 78 L36 56 L56 64 L94 30" fill="none" stroke="#fff" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M6 78 L36 56 L56 64 L94 30" fill="none" stroke="#2b8cf0" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="94" cy="30" r="5.5" fill="#2b8cf0" stroke="#fff" stroke-width="2.5"/>
 </svg>

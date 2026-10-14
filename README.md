@@ -389,6 +389,10 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 - `public/reserves-components.json`: swap con China (CNY y tipo de cambio), BIS y otros pasivos de corto plazo, SEDESA, oro (toneladas y precio), con notas y fuentes. Actualizar `through` y los componentes cuando cambien (p. ej., pagos del BIS o el swap).
 - `/api/status` → `reserves`: cuántos meses del FMI ya se cargaron y el último error.
 
+## v174 — Logo nuevo
+
+- Logo: M maciza azul marino cruzada por una línea de tendencia ascendente celeste (`public/logo.svg`); favicon con la misma idea y trazos más gruesos para que se lea en 16 px (`public/favicon.svg`).
+
 ## v173 — Carga más rápida en el celular
 
 - La causa principal: la fecha de hoy (`currentDateAR`) creaba un `Intl.DateTimeFormat` en cada llamada y se usaba dentro de filtros sobre miles de fechas diarias (ICL, CER, UVA) cada vez que llegaba un grupo de datos. En un celular eso bloqueaba la página ~7 s. Ahora se calcula una vez por minuto.
