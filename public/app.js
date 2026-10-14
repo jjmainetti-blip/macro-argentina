@@ -331,7 +331,13 @@ function seriesTickLabel(key,v){
   if(['tradeBalance','exports','imports'].includes(key)) return fmt.format(v);
   return `${fmt.format(v)}%`;
 }
+// v173 · Los gráficos de pestañas ocultas (Series históricas, Dólar) no se dibujan al cargar: se marcan pendientes
+// y se dibujan al abrir la pestaña. En el celular, dibujarlos todos al inicio bloqueaba la página varios segundos.
+const LAZY_PENDING={};
+const tabVisible=t=>(document.documentElement.getAttribute('data-tab')||'inicio')===t;
+document.addEventListener('macro:tab',e=>{const t=e.detail?.tab;if(t==='historicos'&&LAZY_PENDING.history){const k=LAZY_PENDING.history;delete LAZY_PENDING.history;renderHistory(k.key);}if(t==='dolar'&&LAZY_PENDING.fx){delete LAZY_PENDING.fx;renderFx();}});
 function renderHistory(key){
+  if(!tabVisible('historicos')){LAZY_PENDING.history={key};currentSeries=key||currentSeries;return;}
   const visibility={
     inflationControls:key==='inflation',
     tradeControls:['tradeBalance','exports','imports'].includes(key),
@@ -438,7 +444,7 @@ function fxSelectedSpanYears(){
   return 999;
 }
 function fxCombinedData(){const annual=fxAnnualData(),monthly=fxMonthlyData(),daily=fxDailyData(),out={};const spanYears=fxSelectedSpanYears();let f=fxFrequency;if(f==='auto')f=spanYears<=5?'daily':spanYears<=20?'monthly':'annual';if(f==='annual'){for(const [k,v] of Object.entries(annual))out[fxDateKey(k)]=v;}else if(f==='monthly'){for(const [k,v] of Object.entries(monthly))out[`${k}-28`]=v;}else if(f==='daily'){for(const [k,v] of Object.entries(daily))out[k]=v;}return out;}
-function renderFx(){if(!window.Chart)return;let all=Object.entries(fxCombinedData()).sort((a,b)=>a[0].localeCompare(b[0]));const last=all.at(-1)?.[0];if(['5','10','20'].includes(String(fxRange))&&last){const d=new Date(last+'T00:00:00');d.setFullYear(d.getFullYear()-Number(fxRange));all=all.filter(([k])=>k>=d.toISOString().slice(0,10));}if(fxRange==='custom'){if(fxCustomFrom)all=all.filter(([k])=>k>=fxCustomFrom);if(fxCustomTo)all=all.filter(([k])=>k<=fxCustomTo);}if(fxZoomFactor>1&&all.length>10)all=all.slice(-Math.max(10,Math.ceil(all.length/fxZoomFactor)));const labels=all.map(x=>x[0]),values=all.map(x=>x[1]);const gap=fxSeriesMode==='gap';document.getElementById('fxTitle').textContent=gap?'Brecha cambiaria':fxSeriesMode==='official'?'Dólar oficial':'Dólar libre / de mercado';document.getElementById('fxSubtitle').textContent=gap?'Diferencia libre vs. oficial · %':fxPriceMode==='tcr'?`TCR bilateral · base ${fxBaseLabel()}`:`ARS ${fxPriceMode==='real'?`constantes de ${fxBaseLabel()}`:'corrientes'} por USD`;document.querySelectorAll('[data-fx-price]').forEach(b=>b.disabled=gap);const e=document.getElementById('fxEmpty');e.hidden=all.length>0;e.textContent=all.length?'':'Sin observaciones verificadas para esta combinación.';if(all.length>1){const f=all[0][1],l=all.at(-1)[1],pct=f?((l/f)-1)*100:null;document.getElementById('fxSummary').innerHTML=gap?`<strong>${labels[0]}–${labels.at(-1)}:</strong> brecha ${fmt.format(f)}% → <b>${fmt.format(l)}%</b>.`:`<strong>${labels[0]}–${labels.at(-1)}:</strong> variación <b>${pct>=0?'+':''}${fmt.format(pct)}%</b> · ${all.length} observaciones.`;}else document.getElementById('fxSummary').textContent='';const avgOn=!!document.getElementById('fxAvgToggle')?.checked&&all.length>1,avg=avgOn?fxPeriodAverage(all):null,avgLabel=avg!=null?`Promedio ${labels[0].slice(0,4)}–${labels.at(-1).slice(0,4)}`:'';
+function renderFx(){if(!window.Chart)return;if(!tabVisible('dolar')){LAZY_PENDING.fx=true;return;}let all=Object.entries(fxCombinedData()).sort((a,b)=>a[0].localeCompare(b[0]));const last=all.at(-1)?.[0];if(['5','10','20'].includes(String(fxRange))&&last){const d=new Date(last+'T00:00:00');d.setFullYear(d.getFullYear()-Number(fxRange));all=all.filter(([k])=>k>=d.toISOString().slice(0,10));}if(fxRange==='custom'){if(fxCustomFrom)all=all.filter(([k])=>k>=fxCustomFrom);if(fxCustomTo)all=all.filter(([k])=>k<=fxCustomTo);}if(fxZoomFactor>1&&all.length>10)all=all.slice(-Math.max(10,Math.ceil(all.length/fxZoomFactor)));const labels=all.map(x=>x[0]),values=all.map(x=>x[1]);const gap=fxSeriesMode==='gap';document.getElementById('fxTitle').textContent=gap?'Brecha cambiaria':fxSeriesMode==='official'?'Dólar oficial':'Dólar libre / de mercado';document.getElementById('fxSubtitle').textContent=gap?'Diferencia libre vs. oficial · %':fxPriceMode==='tcr'?`TCR bilateral · base ${fxBaseLabel()}`:`ARS ${fxPriceMode==='real'?`constantes de ${fxBaseLabel()}`:'corrientes'} por USD`;document.querySelectorAll('[data-fx-price]').forEach(b=>b.disabled=gap);const e=document.getElementById('fxEmpty');e.hidden=all.length>0;e.textContent=all.length?'':'Sin observaciones verificadas para esta combinación.';if(all.length>1){const f=all[0][1],l=all.at(-1)[1],pct=f?((l/f)-1)*100:null;document.getElementById('fxSummary').innerHTML=gap?`<strong>${labels[0]}–${labels.at(-1)}:</strong> brecha ${fmt.format(f)}% → <b>${fmt.format(l)}%</b>.`:`<strong>${labels[0]}–${labels.at(-1)}:</strong> variación <b>${pct>=0?'+':''}${fmt.format(pct)}%</b> · ${all.length} observaciones.`;}else document.getElementById('fxSummary').textContent='';const avgOn=!!document.getElementById('fxAvgToggle')?.checked&&all.length>1,avg=avgOn?fxPeriodAverage(all):null,avgLabel=avg!=null?`Promedio ${labels[0].slice(0,4)}–${labels.at(-1).slice(0,4)}`:'';
   if(avg!=null){const sm=document.getElementById('fxSummary'),last=values.at(-1),dev=gap?null:((last/avg)-1)*100;sm.innerHTML+=` <span class="fx-avg-note">· <i></i>${avgLabel}: <b>${gap?`${fmt.format(avg)}%`:fmt.format(avg)}</b>${dev!=null?` · último dato ${fmt.format(Math.abs(dev))}% ${dev>=0?'por encima':'por debajo'} del promedio`:` · último dato ${fmt.format(last-avg)} p.p. vs. promedio`}</span>`;}
   if(fxChart)fxChart.destroy();fxChart=new Chart(document.getElementById('fxChart'),{type:'line',plugins:[fxRegimePlugin],data:{labels,datasets:[...(avg!=null?[{label:avgLabel,data:labels.map(()=>avg),borderColor:'#e0832b',borderDash:[7,5],borderWidth:1.8,pointRadius:0,pointHoverRadius:0,fill:false,tension:0,order:0}]:[]),{label:document.getElementById('fxTitle').textContent,data:values,borderColor:'#0b5bd3',backgroundColor:'rgba(11,91,211,.08)',fill:true,tension:all.length>100?0:.15,pointRadius:all.length>80?0:2,pointHoverRadius:5,borderWidth:2.3}]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'nearest',axis:'x',intersect:false},plugins:{legend:{display:false},tooltip:{enabled:true,displayColors:false,callbacks:{title:items=>items.length?items[0].label:'',label:c=>c.dataset.borderDash?`${c.dataset.label}: ${gap?`${fmt.format(c.raw)}%`:fmt.format(c.raw)}`:gap?`Brecha: ${fmt.format(c.raw)}%`:fxPriceMode==='tcr'?`TCR: ${fmt.format(c.raw)}`:`Cotización: $ ${fmt.format(c.raw)} / USD`}}},scales:{x:{grid:{display:false},ticks:{maxTicksLimit:12,callback:function(v){const x=this.getLabelForValue(v);return /^\d{4}-12-31$/.test(x)?x.slice(0,4):x;}}},y:{grid:{color:'#edf2f7'},ticks:{callback:v=>gap?v+'%':fmt.format(v)}}}}});}
 document.querySelectorAll('[data-fx-series]').forEach(b=>b.addEventListener('click',()=>{fxSeriesMode=b.dataset.fxSeries;document.querySelectorAll('[data-fx-series]').forEach(x=>x.classList.toggle('active',x===b));fxZoomFactor=1;renderFx()}));
@@ -471,9 +477,11 @@ function gdpApproxFactor(a,b){
   return f;
 }
 function calcMonthlyFactor(map,a,b){const x=Number(map[a]),y=Number(map[b]);return Number.isFinite(x)&&Number.isFinite(y)&&x>0?y/x:null;}
-function currentYmAR(){const parts=new Intl.DateTimeFormat('en-US',{timeZone:'America/Argentina/Buenos_Aires',year:'numeric',month:'2-digit'}).formatToParts(new Date());const o=Object.fromEntries(parts.map(p=>[p.type,p.value]));return `${o.year}-${o.month}`;}
+// v173: fecha de hoy en Argentina con memoria de 1 minuto (antes se creaba un Intl.DateTimeFormat por llamada,
+// dentro de filtros sobre miles de fechas: eso bloqueaba el celular varios segundos al cargar).
+function currentDateAR(){const c=currentDateAR,n=Date.now();if(!c.v||n-c.at>60000){c.fmt||=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Argentina/Buenos_Aires',year:'numeric',month:'2-digit',day:'2-digit'});c.at=n;c.v=c.fmt.format(new Date(n));}return c.v;}
+function currentYmAR(){return currentDateAR().slice(0,7);}
 function monthOffset(ym,delta){const [y,m]=ym.split('-').map(Number);const d=new Date(Date.UTC(y,m-1+delta,1));return `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}`;}
-function currentDateAR(){const parts=new Intl.DateTimeFormat('en-US',{timeZone:'America/Argentina/Buenos_Aires',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());const o=Object.fromEntries(parts.map(p=>[p.type,p.value]));return `${o.year}-${o.month}-${o.day}`;}
 function monthlyMapForIndex(kind){return ({icl:iclMonthly,cer:cerMonthly,uva:uvaMonthly}[kind]||{});}
 function dailyMapForIndex(kind){return ({icl:iclDaily,cer:cerDaily,uva:uvaDaily}[kind]||{});}
 function hasDailyIndex(kind){return Object.keys(dailyMapForIndex(kind)).filter(d=>/^\d{4}-\d{2}-\d{2}$/.test(d)&&d<=currentDateAR()).length>=2;}
@@ -778,15 +786,17 @@ function applyMacroSources(when){
   if(window.Chart)safeApply('history',()=>renderHistory(currentSeries));
 }
 async function loadAutomaticData(){
-  let received=0;
+  let received=0,applyTimer=null,lastGen=null;
   const fmtWhen=d=>{try{return new Date(d).toLocaleString('es-AR',{dateStyle:'medium',timeStyle:'short'});}catch{return '';}};
   const jobs=MACRO_GROUPS.map(async g=>{
     const r=await fetch(`/api/macro-data?group=${g}`,{headers:{accept:'application/json'}});if(!r.ok)throw new Error(`API ${g} ${r.status}`);
     const d=await r.json();if(!d?.sources)throw new Error(`API ${g} sin fuentes`);
-    received++;apiKpiSources={...apiKpiSources,...d.sources};rebuildKpiSourceCache();applyMacroSources(fmtWhen(d.generatedAt));
-    try{localStorage.setItem(MACRO_LS_KEY,JSON.stringify({generatedAt:d.generatedAt,sources:apiKpiSources}));}catch{}
+    received++;apiKpiSources={...apiKpiSources,...d.sources};lastGen=d.generatedAt;
+    // v173: los grupos que llegan juntos se aplican una sola vez (antes cada grupo recalculaba y redibujaba todo).
+    clearTimeout(applyTimer);applyTimer=setTimeout(()=>{rebuildKpiSourceCache();applyMacroSources(fmtWhen(lastGen));},120);
   });
   const res=await Promise.allSettled(jobs);
+  if(received){clearTimeout(applyTimer);rebuildKpiSourceCache();applyMacroSources(fmtWhen(lastGen));setTimeout(()=>{try{localStorage.setItem(MACRO_LS_KEY,JSON.stringify({generatedAt:lastGen,sources:apiKpiSources}));}catch{}},1500);}
   const failed=res.filter(x=>x.status==='rejected');
   if(failed.length)console.warn('macro-data: grupos con error',failed.map(x=>String(x.reason)));
   if(!received){
@@ -1236,15 +1246,8 @@ setTimeout(loadCardStatus,3500);setInterval(loadCardStatus,10*60*1000);
 loadBundledMacroHistory();
 loadMarketsDaily().then(()=>loadFxDaily());
 
-// v136: menú móvil (☰). Abre/cierra la navegación; se cierra al elegir una sección, al tocar fuera o con Escape.
-(()=>{const btn=document.getElementById('menuBtn'),nav=document.getElementById('nav');if(!btn||!nav)return;
-  const set=open=>{nav.classList.toggle('open',open);btn.setAttribute('aria-expanded',String(open));btn.firstChild.textContent=open?'✕':'☰';const sr=btn.querySelector('.sr-only');if(sr)sr.textContent=open?'Cerrar menú':'Abrir menú';};
-  btn.addEventListener('click',e=>{e.stopPropagation();set(!nav.classList.contains('open'));});
-  nav.addEventListener('click',e=>{if(e.target.closest('a'))set(false);});
-  document.addEventListener('click',e=>{if(nav.classList.contains('open')&&!nav.contains(e.target)&&e.target!==btn)set(false);});
-  document.addEventListener('keydown',e=>{if(e.key==='Escape')set(false);});
-  window.addEventListener('resize',()=>{if(window.innerWidth>900)set(false);});
-})();
+// v173: el menú móvil (☰) se activa con un script chico al final del HTML, antes de que cargue este archivo.
+
 // v153 · Enlaces con ancla (p. ej. macrodatos.ar/#calculadoras): el navegador salta a la sección apenas carga, pero
 // después los gráficos y tarjetas de arriba crecen y la empujan hacia abajo. Mientras la página termina de cargar se
 // mantiene la sección pedida en pantalla; se deja de hacerlo cuando la persona se mueve o a los 12 segundos.

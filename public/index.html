@@ -17,10 +17,10 @@
   <link rel="stylesheet" href="styles.css?v=171">
   <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
   <script type="module" src="releases.js?v=169"></script>
-  <script defer src="app.js?v=169"></script>
+  <script defer src="tabs.js?v=173"></script>
+  <script defer src="app.js?v=173"></script>
   <script defer src="uva-calc.js?v=139b"></script>
   <script defer src="update-schedule.js?v=152"></script>
-  <script defer src="tabs.js?v=164"></script>
   <script defer src="account.js?v=171"></script>
   <script defer src="birth.js?v=155"></script>
   <script defer src="efemerides.js?v=135"></script>
@@ -200,7 +200,7 @@
 </section>
 
 </main>
-<footer><div class="brand"><span class="brand-mark" aria-hidden="true"><img src="logo.svg?v=143" alt="" width="40" height="34"></span><span><strong>MACRODATOS</strong><small>ECONOMÍA ARGENTINA</small></span></div><p>Información económica para análisis. No constituye asesoramiento financiero.</p><a href="#inicio">Volver arriba ↑</a><span class="build-version">macrodatos.ar · v172</span></footer>
+<footer><div class="brand"><span class="brand-mark" aria-hidden="true"><img src="logo.svg?v=143" alt="" width="40" height="34"></span><span><strong>MACRODATOS</strong><small>ECONOMÍA ARGENTINA</small></span></div><p>Información económica para análisis. No constituye asesoramiento financiero.</p><a href="#inicio">Volver arriba ↑</a><span class="build-version">macrodatos.ar · v173</span></footer>
 
 <div id="kpiModal" class="kpi-modal" hidden aria-hidden="true">
   <div class="kpi-modal-backdrop" data-kpi-close></div>
@@ -212,5 +212,14 @@
     <p id="kpiModalSource" class="kpi-modal-source"></p>
   </section>
 </div>
+<script>/* v173 · Menú móvil: se activa apenas se dibuja la página (antes esperaba a que cargara todo el sitio). */
+(()=>{const btn=document.getElementById('menuBtn'),nav=document.getElementById('nav');if(!btn||!nav)return;
+  const set=open=>{nav.classList.toggle('open',open);btn.setAttribute('aria-expanded',String(open));btn.firstChild.textContent=open?'✕':'☰';const sr=btn.querySelector('.sr-only');if(sr)sr.textContent=open?'Cerrar menú':'Abrir menú';};
+  btn.addEventListener('click',e=>{e.stopPropagation();set(!nav.classList.contains('open'));});
+  nav.addEventListener('click',e=>{if(e.target.closest('a'))set(false);});
+  document.addEventListener('click',e=>{if(nav.classList.contains('open')&&!nav.contains(e.target)&&e.target!==btn)set(false);});
+  document.addEventListener('keydown',e=>{if(e.key==='Escape')set(false);});
+  window.addEventListener('resize',()=>{if(window.innerWidth>900)set(false);});
+})();</script>
 </body>
 </html>

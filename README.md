@@ -389,6 +389,14 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 - `public/reserves-components.json`: swap con China (CNY y tipo de cambio), BIS y otros pasivos de corto plazo, SEDESA, oro (toneladas y precio), con notas y fuentes. Actualizar `through` y los componentes cuando cambien (p. ej., pagos del BIS o el swap).
 - `/api/status` → `reserves`: cuántos meses del FMI ya se cargaron y el último error.
 
+## v173 — Carga más rápida en el celular
+
+- La causa principal: la fecha de hoy (`currentDateAR`) creaba un `Intl.DateTimeFormat` en cada llamada y se usaba dentro de filtros sobre miles de fechas diarias (ICL, CER, UVA) cada vez que llegaba un grupo de datos. En un celular eso bloqueaba la página ~7 s. Ahora se calcula una vez por minuto.
+- Los 7 grupos de /api/macro-data se aplican juntos (antes cada uno recalculaba y redibujaba todo) y la copia local se guarda una sola vez al final.
+- Los gráficos de las pestañas ocultas (Series históricas, Dólar) se dibujan recién al abrirlas.
+- El menú móvil se activa con un script chico al final del HTML (antes esperaba a que terminara de cargar app.js) y tabs.js carga antes que app.js.
+- Medido con un celular simulado (CPU 4× más lenta): tareas que bloquean la página 33 s → 1 s; el menú responde a 1,6 s de abrir la página (antes ~35 s).
+
 ## v172 — IPC nacional directo de INDEC
 
 - El IPC dependía sólo de Datos Argentina, que se actualiza días después de la publicación (y últimamente con huecos). Ahora la fuente principal es el CSV oficial de INDEC (`serie_ipc_divisiones.csv`, nivel general nacional), que se actualiza el mismo día; Datos Argentina y la línea de base local quedan de respaldo y se combinan por mes. Variaciones mensual, interanual y acumulada calculadas del índice, sólo entre meses consecutivos. Fecha de publicación: la del archivo de INDEC o la del calendario oficial.
