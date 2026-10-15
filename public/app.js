@@ -380,17 +380,17 @@ function renderHistory(key){
   if(key==='inflation'&&shown.length){const a=shown[0][0],b=shown.at(-1)[0];let accumulated=null;if(isInflationMonthly){const firstIndex=inflationIndex[a], lastIndex=inflationIndex[b];if(firstIndex&&lastIndex)accumulated=(lastIndex/firstIndex-1)*100;}else{let f=1;for(const [,v] of shown)f*=1+v/100;accumulated=(f-1)*100;}document.getElementById('periodSummary').innerHTML=accumulated==null?'':`<strong>${isInflationMonthly?displayMonth(a):a}–${isInflationMonthly?displayMonth(b):b}:</strong> inflación acumulada <b>${fmt.format(accumulated)}%</b>.`;}
   else cumulativeSummary(key,shown);
   {const hc=document.getElementById('historyChart');if(hc){hc._exportKeys=shown.map(x=>x[0]);hc._seriesKey=key;}} // v181: para exportar (Excel / imagen)
-  let projFrom=Infinity,projInfo=null;
+  let projFrom=Infinity,projInfo=null;/* v191: con Desde/Hasta también se muestran si el período llega al último dato observado */const projOk=currentRange!=='custom'||(shown.length>0&&all.length>0&&shown.at(-1)[0]===all.at(-1)[0]);
   if(key==='gdp'){projInfo=gdpProjections();const btn=document.getElementById('gdpProjBtn'),note=document.getElementById('gdpProjNote');
     if(btn){btn.disabled=!projInfo;btn.textContent=projInfo?`Con proyección REM ${projInfo.rows.map(r=>r[0]).join('–')}`:'Proyección REM no disponible';}
     if(note)note.textContent=projInfo&&gdpProjMode==='on'?`Mediana del REM de ${displayMonth(projInfo.survey)} (BCRA).`:'';
-    if(projInfo&&gdpProjMode==='on'&&currentRange!=='custom'){projFrom=labels.length;for(const [y,v] of projInfo.rows){labels.push(`${y} (proy.)`);values.push(v);}
+    if(projInfo&&gdpProjMode==='on'&&projOk){projFrom=labels.length;for(const [y,v] of projInfo.rows){labels.push(`${y} (proy.)`);values.push(v);}
       {const hc=document.getElementById('historyChart');if(hc)hc._exportKeys=[...(hc._exportKeys||[]),...projInfo.rows.map(([y])=>`${y} (proyección REM ${projInfo.survey})`)];}
       document.getElementById('chartSubtitle').textContent+=` · proyección REM ${projInfo.rows.map(r=>r[0]).join('–')}`;}}
   if(key==='inflation'){const P=inflationProjections(isInflationMonthly),note=document.getElementById('infProjNote'),btn=document.getElementById('infProjBtn');
     if(btn)btn.disabled=!P;
     if(note)note.textContent=!P||infProjMode!=='on'?'':P.none?`El REM de ${displayMonth(P.survey)} llega hasta ${displayMonth(P.until)}: no alcanza para estimar el año; se ve en la serie mensual.`:P.kind==='annual'?`${P.rows.map(r=>r[0]).join(' y ')}: INDEC hasta ${displayMonth(P.lastOff)} + mediana del REM de ${displayMonth(P.survey)}.`:`Mediana del REM de ${displayMonth(P.survey)} (BCRA).`;
-    if(P&&!P.none&&infProjMode==='on'&&currentRange!=='custom'){projInfo=P;projFrom=labels.length;P.rows.forEach(([,v],i)=>{labels.push(P.labels[i]);values.push(v);});
+    if(P&&!P.none&&infProjMode==='on'&&projOk){projInfo=P;projFrom=labels.length;P.rows.forEach(([,v],i)=>{labels.push(P.labels[i]);values.push(v);});
       {const hc=document.getElementById('historyChart');if(hc)hc._exportKeys=[...(hc._exportKeys||[]),...P.keys];}
       document.getElementById('chartSubtitle').textContent+=P.kind==='annual'?` · ${P.rows.map(r=>r[0]).join('–')} estimado con REM`:` · REM hasta ${displayMonth(P.until)}`;}}
   if(historyChart)historyChart.destroy();const asBars=['gdp','inflation','tradeBalance','exports','imports'].includes(key); /* v183: inflación en barras (azul; deflación en verde) · v184: comercio exterior en barras (saldo verde/rojo; expo e impo azules) */const barColor0=key==='inflation'?inflationBarColor:(key==='exports'||key==='imports')?'#0b5bd3':barValueColor;const barColor=ctx=>{const c=typeof barColor0==='function'?barColor0(ctx):barColor0;return ctx.dataIndex>=projFrom?(key==='inflation'?'rgba(11,91,211,.25)':Number(ctx.raw)<0?'rgba(214,69,69,.35)':'rgba(31,157,85,.35)'):c;};const barBorder=ctx=>ctx.dataIndex>=projFrom?(key==='inflation'?'#0b5bd3':Number(ctx.raw)<0?'#d64545':'#1f9d55'):(typeof barColor0==='function'?barColor0(ctx):barColor0); // v138: PIB en barras (verde crecimiento, rojo caída), como los gráficos de las tarjetas

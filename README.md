@@ -389,6 +389,10 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 - `public/reserves-components.json`: swap con China (CNY y tipo de cambio), BIS y otros pasivos de corto plazo, SEDESA, oro (toneladas y precio), con notas y fuentes. Actualizar `through` y los componentes cuando cambien (p. ej., pagos del BIS o el swap).
 - `/api/status` → `reserves`: cuántos meses del FMI ya se cargaron y el último error.
 
+## v191 — Proyecciones REM también con Desde/Hasta
+
+- PIB e Inflación: al elegir un período con los selectores Desde/Hasta, las proyecciones/expectativas del REM se siguen mostrando siempre que "Hasta" sea el último dato observado (antes se ocultaban con cualquier período personalizado). Si "Hasta" es anterior, no se agregan.
+
 ## v190 — Inflación con expectativas del REM
 
 - Series históricas · Inflación: nuevo selector "Sin REM / Con expectativas REM" (activado por defecto). Toma la última encuesta REM con IPC mensual (`rem.surveys[*].ipcM`, mediana) y sólo los meses consecutivos posteriores al último dato oficial.
