@@ -2,6 +2,7 @@ import { latestRelease } from '../../public/releases.js';
 import * as XLSX from 'xlsx';
 import { BUNDLED_SOURCES } from './bundled-history.mjs';
 import { TRADE_ANNUAL, INDUSTRY_BRIDGE, INDUSTRY_ANNUAL } from './trade-annual.mjs';
+import { FISCAL_BASE } from './fiscal-base.mjs';
 import { autosLive, ipcCabaLive, povertyLive, cementLive, cameLive, scentiaLive } from './live-sources.mjs';
 import { cardStatus, CARDS, periodEndYm, todayAR, ymShift } from './freshness.mjs';
 import { EVENTS } from './calendar-data.mjs';
@@ -1014,18 +1015,22 @@ async function arrearsHistorical(){
 // IMIG mensual (primario y financiero) / PIB INDEC a precios corrientes (trimestres anualizados: se promedian).
 // Para el año en curso, el PIB se estima con el PIB del año anterior × variación de los trimestres ya publicados.
 async function fiscalPctGdp(){
-  const [pr,fr,gr]=await Promise.all([
-    seriesRows('452.3_RESULTADO_RIO_0_M_18_54',{start:'2022-01-01'}),
-    seriesRows('452.3_RESULTADO_ERO_0_M_20_25',{start:'2022-01-01'}),
+  // v187: desde 2021; base incluida (fiscal-base.mjs) + lo que devuelva la API. Financiero = primario − intereses
+  // cuando la serie de resultado financiero viene sin el mes.
+  const [pr,fr,ir,gr]=await Promise.allSettled([
+    seriesRows('452.3_RESULTADO_RIO_0_M_18_54',{start:'2021-01-01'}),
+    seriesRows('452.3_RESULTADO_ERO_0_M_20_25',{start:'2021-01-01'}),
+    seriesRows('452.3_INTERESES_TOS_0_M_15_62',{start:'2021-01-01'}),
     seriesRows('4.4_OGP_2004_T_17',{start:'2020-01-01'})]);
-  const toMap=rows=>Object.fromEntries(rows.map(r=>[String(r.date).slice(0,7),Number(r.value)]).filter(([k,v])=>/^\d{4}-\d{2}$/.test(k)&&Number.isFinite(v)));
-  const P=toMap(pr.rows),F=toMap(fr.rows),Q=toMap(gr.rows);
+  const toMap=x=>x.status==='fulfilled'?Object.fromEntries(x.value.rows.map(r=>[String(r.date).slice(0,7),Number(r.value)]).filter(([k,v])=>/^\d{4}-\d{2}$/.test(k)&&Number.isFinite(v))):{};
+  const P={...FISCAL_BASE.primary,...toMap(pr)},I={...FISCAL_BASE.interest,...toMap(ir)},Q={...FISCAL_BASE.gdpQ,...toMap(gr)},F=toMap(fr);
+  for(const k of Object.keys(P))if(!Number.isFinite(F[k])&&Number.isFinite(I[k]))F[k]=P[k]-I[k];
   const qm=['01','04','07','10'];
   const gdpYear=y=>{const qs=qm.map(m=>Q[`${y}-${m}`]);if(qs.every(Number.isFinite))return qs.reduce((a,b)=>a+b,0)/4;const prevYear=qm.map(m=>Q[`${y-1}-${m}`]);if(!prevYear.every(Number.isFinite))return null;const base=prevYear.reduce((a,b)=>a+b,0)/4;const idx=qs.map((v,i)=>Number.isFinite(v)?i:-1).filter(i=>i>=0);if(!idx.length)return null;return base*idx.reduce((a,i)=>a+qs[i],0)/idx.reduce((a,i)=>a+prevYear[i],0);};
   const primary={},financial={};const years=[...new Set(Object.keys(P).map(k=>Number(k.slice(0,4))))].sort();
   for(const y of years){const g=gdpYear(y);if(!g)continue;let cp=0,cf=0;for(let m=1;m<=12;m++){const k=`${y}-${String(m).padStart(2,'0')}`;if(!Number.isFinite(P[k])||!Number.isFinite(F[k]))break;cp+=P[k];cf+=F[k];primary[k]=round(cp/g*100,2);financial[k]=round(cf/g*100,2);}}
   const last=Object.keys(primary).sort().at(-1);if(!last)throw new Error('resultado fiscal sin datos');
-  return {period:periodEs(last),source:'Ministerio de Economía — IMIG; PIB nominal INDEC',sourceUrl:pr.url,historyPctGDP:{primary,financial}};
+  return {period:periodEs(last),source:'Ministerio de Economía — IMIG; PIB nominal INDEC',sourceUrl:pr.status==='fulfilled'?pr.value.url:'https://datos.gob.ar/series/api/series/?ids=452.3_RESULTADO_RIO_0_M_18_54',historyPctGDP:{primary,financial}};
 }
 // v113: esta función faltaba y hacía fallar TODO /api/macro-data (ReferenceError).
 // Devuelve sólo lo que puede refrescarse en vivo; el resto proviene del snapshot incluido (bundled-history.mjs).

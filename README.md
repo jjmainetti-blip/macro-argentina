@@ -389,6 +389,31 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 - `public/reserves-components.json`: swap con China (CNY y tipo de cambio), BIS y otros pasivos de corto plazo, SEDESA, oro (toneladas y precio), con notas y fuentes. Actualizar `through` y los componentes cuando cambien (p. ej., pagos del BIS o el swap).
 - `/api/status` → `reserves`: cuántos meses del FMI ya se cargaron y el último error.
 
+## v187 — Compartir el semáforo y resultado fiscal desde 2021
+
+- Semáforo de la economía: barra Exportar (Excel, JPEG, Instagram, X, WhatsApp). La imagen redibuja la tabla (indicador, organismo y un punto por mes) con la leyenda y un resumen del último mes; la apaisada crece con la cantidad de indicadores y la de Instagram es 1080×1350. El Excel trae estado y dato de cada mes por indicador. `renderSemaforo` deja los datos en `#semaforoTable._semData`.
+- Resultado fiscal: el detalle muestra 2021 a 2026 (antes los últimos 3 años); el año en curso resaltado y los anteriores a 2024 en grises. La serie de resultado financiero de Datos Argentina viene con decenas de meses en null: se reconstruye como primario − intereses netos (IMIG, identidad verificada mes a mes). Base incluida ene-2021 a ago-2026 en `src/api/fiscal-base.mjs` (primario, intereses y PIB trimestral); la API agrega o corrige meses.
+
+## v186 — Compartir desde las tarjetas de Pulso económico y Expectativas
+
+- El detalle de cada tarjeta (las 24 de Pulso económico y Expectativas, que comparten el mismo modal) suma la barra Exportar: Excel, JPEG, Instagram, X y WhatsApp, con el mismo armado que en Series históricas (título, organismo y último dato, valor con su comparación, gráfico, fuente y marca).
+- El Excel usa los períodos reales del gráfico (`kpiSeries(key).rawPeriods`) y una columna por serie (p. ej. IPC oficial + cada encuesta REM).
+- Enlace compartible por tarjeta: `https://macrodatos.ar/?kpi=ipc#inicio` abre el detalle de esa tarjeta cuando ya tiene datos.
+
+## v185 — PIB con proyecciones del REM
+
+- Series históricas · PIB real: nuevo selector "Sin proyección / Con proyección REM 2026–2027". Agrega al final del gráfico el año en curso y el siguiente con la mediana de la última encuesta REM del BCRA que traiga PIB anual (`rem.surveys[*].gdpY`), en barras claras con borde y rótulo "(proy.)". Sólo se agregan años que todavía no tienen dato observado; el resumen acumulado sigue usando datos observados.
+- Las proyecciones también salen en las imágenes y en el Excel exportados (período "2026 (proyección REM 2026-09)").
+
+## v184 — Comercio exterior en barras
+
+- Series históricas: Balanza comercial (superávit en verde, déficit en rojo), Exportaciones e Importaciones (azul) se dibujan en barras, también en las imágenes exportadas. El detalle de la tarjeta de Balanza comercial ya era de barras.
+
+## v183 — Inflación en barras
+
+- Series históricas: la inflación (anual y mensual) se dibuja en barras azules (deflación en verde), como el PIB. También en las imágenes que se exportan.
+- Pulso económico: los gráficos del detalle de Inflación nacional e Inflación CABA pasan a barras.
+
 ## v182 — Inflación 2017+ completa y últimos 20 años por defecto
 
 - Inflación: Datos Argentina devuelve el IPC nacional (148.3, 2017+) con muchos meses en null y la cadena terminaba en 2016. El tramo 2017+ ahora sale del IPC oficial que ya trae el sitio (`ipc.monthly`, INDEC, dic-2016 = 100); la serie de Datos Argentina sólo completa meses que falten. La cadena se rearma cuando llega la API.

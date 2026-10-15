@@ -1,4 +1,4 @@
-// v181 · Series históricas: exportar a Excel, JPEG, Instagram, X y WhatsApp.
+// v181 · Series históricas: exportar a Excel, JPEG, Instagram, X y WhatsApp. v186: también el detalle de las tarjetas.
 // Funciona con cualquier gráfico de la sección (serie principal y reservas): toma los datos del gráfico tal como se ve
 // (serie, modo y rango elegidos) y arma una imagen propia con título, fuente y marca para compartir.
 (function () {
@@ -7,7 +7,11 @@
   const XLSX_URL = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
   const MES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
   const CARDS = [{ card: 'historyCard', canvas: 'historyChart', summary: 'periodSummary', key: () => document.getElementById('historyChart')?._seriesKey || 'inflation' },
-                 { card: 'reservas', canvas: 'resChart', summary: 'resSummary', key: () => 'reserves' }];
+                 { card: 'reservas', canvas: 'resChart', summary: 'resSummary', key: () => 'reserves' },
+                 // v186 · Detalle de las tarjetas de Pulso económico y Expectativas (un único modal para todas).
+                 { card: 'kpiModal', canvas: 'kpiModalChart', after: 'kpiModalSource', modal: true, key: () => document.getElementById('kpiModal')?.dataset.kpi || '' },
+                 // v187 · Semáforo de la economía (tabla de puntos, no gráfico).
+                 { card: 'semaforo', afterSel: '#semaforo .sem-note', sem: true, key: () => 'semaforo' }];
   const touch = () => matchMedia('(pointer:coarse)').matches;
   const $ = (root, sel) => root.querySelector(sel);
   const txt = el => (el?.textContent || '').replace(/\s+/g, ' ').trim();
@@ -23,8 +27,28 @@
   };
 
   // ── Datos del gráfico ─────────────────────────────────────────────────────────────────────────────────────
+  function kpiCard(key) { return key ? document.querySelector(`.kpi[data-kpi="${key}"],.forecast[data-kpi="${key}"]`) : null; }
+  const mesLbl = ym => ym ? `${MES[+ym.slice(5, 7) - 1]} ${ym.slice(0, 4)}` : '';
   function meta(def) {
+    if (def.sem) {
+      const D = document.getElementById('semaforoTable')?._semData, months = D?.months || [], last = months.at(-1), cnt = { green: 0, yellow: 0, red: 0 };
+      (D?.rows || []).forEach(r => { const c = r.cells.at(-1); if (c && cnt[c.s] != null) cnt[c.s]++; });
+      return { D, title: 'Semáforo de la economía', subtitle: months.length ? `Cómo vienen los últimos 5 meses · ${mesLbl(months[0])} a ${mesLbl(last)}` : '',
+        summary: last ? `${mesLbl(last)}: ${[[cnt.green, 'favorable', 'favorables'], [cnt.yellow, 'neutral', 'neutrales'], [cnt.red, 'desfavorable', 'desfavorables']].map(([n, a, b]) => `${n} ${n === 1 ? a : b}`).join(' · ')}${(D?.rows || []).filter(r => !r.cells.at(-1)).length ? ` · ${(D?.rows || []).filter(r => !r.cells.at(-1)).length} todavía sin publicar` : ''}` : '',
+        source: 'INDEC, BCRA y otros organismos · mismo criterio que las tarjetas de Pulso económico', note: txt(document.querySelector('#semaforo .sem-note')), key: 'semaforo', url: `${SITE}/#semaforo` };
+    }
     const card = document.getElementById(def.card), cv = document.getElementById(def.canvas), chart = window.Chart?.getChart?.(cv);
+    if (def.modal) {
+      const key = def.key(), c = kpiCard(key), g = id => txt(document.getElementById(id));
+      const value = g('kpiModalValue'), detail = txt(c?.querySelector('[data-detail]')), period = g('kpiModalPeriod').replace(/^Último dato:\s*/i, '');
+      const agency = g('kpiModalAgency'), source = g('kpiModalSource').replace(/^Fuente:\s*/i, '') || agency;
+      const sec = c?.closest('section[id]')?.id || 'inicio';
+      let keys = null; try { const S = typeof kpiSeries === 'function' ? kpiSeries(key) : null; if (S?.rawPeriods?.length === chart?.data.labels.length) keys = S.rawPeriods; } catch {}
+      if (cv) cv._exportKeys = keys;
+      return { card, cv, chart, title: g('kpiModalTitle') || 'Indicador', subtitle: [agency, period ? `último dato: ${period}` : ''].filter(Boolean).join(' · '),
+        source, summary: [value && value !== '—' ? `${value}${period ? ` (${period})` : ''}` : '', detail].filter(Boolean).join(' · '), note: g('kpiModalLegend'), key,
+        url: `${SITE}/?kpi=${encodeURIComponent(key)}#${sec}` };
+    }
     const title = txt($(card, '.chart-meta h3')) || 'Serie histórica';
     const subtitle = txt($(card, '.chart-meta p'));
     const source = txt($(card, '.chart-meta > span')).replace(/^Fuente:\s*/i, '');
@@ -38,7 +62,7 @@
     const ch = M.chart; if (!ch) return { head: [], rows: [] };
     const labels = ch.data.labels || [], keys = Array.isArray(M.cv._exportKeys) && M.cv._exportKeys.length === labels.length ? M.cv._exportKeys : labels;
     const ds = ch.data.datasets.filter(d => !d.hidden && !d._exportSkip);
-    return { head: ['Período', ...ds.map(d => d.label || M.title)], rows: keys.map((k, i) => [k, ...ds.map(d => { const v = d.data[i]; const n = v && typeof v === 'object' ? v.y : v; return n == null || !Number.isFinite(Number(n)) ? null : Number(n); })]) };
+    return { head: ['Período', ...ds.map((d, i) => d.label || (i ? `Serie ${i + 1}` : M.title))], rows: keys.map((k, i) => [k, ...ds.map(d => { const v = d.data[i]; const n = v && typeof v === 'object' ? v.y : v; return n == null || !Number.isFinite(Number(n)) ? null : Number(n); })]) };
   }
 
   // ── Excel ─────────────────────────────────────────────────────────────────────────────────────────────────
@@ -53,7 +77,19 @@
     m = k.match(/^(\d{4})-(\d{2})-(\d{2})$/); if (m) return { t: 'n', v: serial(+m[1], +m[2], +m[3]), z: 'dd/mm/yyyy' };
     return { t: 's', v: k };
   }
+  const SEM_LBL = { green: 'Favorable', yellow: 'Neutral', red: 'Desfavorable' };
   async function buildWorkbook(def) {
+    if (def.sem) {
+      const M = meta(def), D = M.D; if (!D?.rows?.length) throw new Error('El semáforo todavía no tiene datos.');
+      const X = await loadXlsx();
+      const head = ['Indicador', 'Organismo', ...D.months.flatMap(m => [`${mesLbl(m)} · estado`, `${mesLbl(m)} · dato`])];
+      const ws = X.utils.aoa_to_sheet([head, ...D.rows.map(r => [r.name, r.agency, ...r.cells.flatMap(c => c ? [SEM_LBL[c.s] || c.s, c.t] : ['Sin dato publicado', ''])])]);
+      ws['!cols'] = head.map((h, i) => ({ wch: i === 0 ? 30 : i === 1 ? 16 : i % 2 === 0 ? 14 : 46 }));
+      const info = X.utils.aoa_to_sheet([['Serie', M.title], ['Detalle', M.subtitle], ['Resumen', M.summary], ['Criterio', M.note], ['Descargado', today()], ['Enlace', M.url]]);
+      info['!cols'] = [{ wch: 14 }, { wch: 110 }];
+      const wb = X.utils.book_new(); X.utils.book_append_sheet(wb, ws, 'Semáforo'); X.utils.book_append_sheet(wb, info, 'Información');
+      return { X, wb, name: `macrodatos-semaforo-${D.months.at(-1)}.xlsx` };
+    }
     const M = meta(def), { head, rows } = rowsOf(M);
     if (!rows.length) throw new Error('El gráfico todavía no tiene datos.');
     const X = await loadXlsx();
@@ -103,12 +139,23 @@
     const c = new Chart(cv, { type: raw.type, data, options, plugins: raw.plugins || [] });
     return { cv, done: () => { c.destroy(); cv.remove(); } };
   }
+  const F = (w, px) => `${w} ${px}px Inter, -apple-system, "Segoe UI", Roboto, Arial, sans-serif`;
   async function compose(def, fmt, type = 'image/jpeg') {
+    if (def.sem) return composeSem(def, fmt, type);
     const M = meta(def); if (!M.chart) throw new Error('El gráfico todavía no tiene datos.');
     const ig = fmt === 'ig', W = ig ? 1080 : 1600, H = ig ? 1350 : 900, P = ig ? 64 : 72, s = ig ? 1.75 : 1.85;
     const cv = document.createElement('canvas'); cv.width = W; cv.height = H; const ctx = cv.getContext('2d');
-    const F = (w, px) => `${w} ${px}px Inter, -apple-system, "Segoe UI", Roboto, Arial, sans-serif`;
-    ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, W, H);
+    let y = await drawHead(ctx, W, P, ig, M);
+    // Gráfico
+    const footH = ig ? 120 : 92, top = y + 28, ch = H - footH - top - 10;
+    const g = chartClone(M.chart, W - 2 * P + 16, ch, s);
+    try { ctx.drawImage(g.cv, P - 8, top); } finally { g.done(); }
+    drawFoot(ctx, W, H, P, ig, M, footH);
+    const blob = await new Promise(ok => cv.toBlob(ok, type, .92));
+    return { blob, M, name: `macrodatos-${slug(M.title)}${ig ? '-instagram' : ''}.${type === 'image/png' ? 'png' : 'jpg'}` };
+  }
+  async function drawHead(ctx, W, P, ig, M) {
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, W, ctx.canvas.height);
     ctx.fillStyle = '#0b5bd3'; ctx.fillRect(0, 0, W, 10);
     // Marca y fecha
     const logo = await loadLogo(); let y = P + 6;
@@ -126,17 +173,56 @@
       y += 26; ctx.fillStyle = '#eef5ff'; roundRect(ctx, P, y, W - 2 * P, bh, 14); ctx.fill(); ctx.fillStyle = '#0b5bd3'; ctx.fillRect(P, y, 6, bh);
       ctx.fillStyle = '#12233a'; lines.forEach((l, i) => ctx.fillText(l, P + 26, y + 13 + (i + 1) * (ig ? 38 : 36) - 8)); y += bh;
     }
-    // Gráfico
-    const footH = ig ? 120 : 92, top = y + 28, ch = H - footH - top - 10;
-    const g = chartClone(M.chart, W - 2 * P + 16, ch, s);
-    try { ctx.drawImage(g.cv, P - 8, top); } finally { g.done(); }
-    // Pie: fuente y sitio
+    return y;
+  }
+  function drawFoot(ctx, W, H, P, ig, M, footH) {
     ctx.strokeStyle = '#dce6f1'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(P, H - footH + 6); ctx.lineTo(W - P, H - footH + 6); ctx.stroke();
     ctx.font = F(800, ig ? 30 : 28); ctx.fillStyle = '#0b5bd3'; ctx.textAlign = 'right'; const site = 'macrodatos.ar'; ctx.fillText(site, W - P, H - footH / 2 + 18); const sw = ctx.measureText(site).width; ctx.textAlign = 'left';
     ctx.font = F(500, ig ? 24 : 22); ctx.fillStyle = '#63758b';
     wrap(ctx, M.source ? `Fuente: ${M.source}` : '', W - 2 * P - sw - 40, ig ? 2 : 1).forEach((l, i, a) => ctx.fillText(l, P, H - footH / 2 + 18 - (a.length - 1 - i) * 30));
+  }
+  // Semáforo: tabla de indicadores × 5 meses con un punto de color por celda.
+  const SEM_COL = { green: '#1f9d55', yellow: '#e0a100', red: '#d64545' };
+  async function composeSem(def, fmt, type) {
+    const M = meta(def), D = M.D; if (!D?.rows?.length) throw new Error('El semáforo todavía no tiene datos.');
+    const ig = fmt === 'ig', W = ig ? 1080 : 1600, P = ig ? 56 : 72, n = D.rows.length, footH = ig ? 110 : 92, legH = 54;
+    // Alto: fijo 4:5 en Instagram; en la imagen apaisada crece con la cantidad de filas.
+    const probe = document.createElement('canvas').getContext('2d'); probe.font = F(800, ig ? 56 : 54);
+    const headGuess = (ig ? 330 : 310) + (wrap(probe, M.title, W - 2 * P, 2).length - 1) * 58;
+    let rowH = ig ? 0 : 38, H = ig ? 1350 : Math.max(900, headGuess + 24 + (n + 1) * 38 + legH + footH + 20);
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H; const ctx = cv.getContext('2d');
+    let y = await drawHead(ctx, W, P, ig, M) + 24;
+    if (ig) rowH = Math.max(28, Math.min(52, Math.floor((H - y - legH - footH - 16) / (n + 1))));
+    const nameW = Math.round((W - 2 * P) * (ig ? .5 : .46)), colW = (W - 2 * P - nameW) / D.months.length, fs = Math.max(15, Math.min(ig ? 24 : 22, Math.round(rowH * .52))), r = Math.max(7, Math.min(13, Math.round(rowH * .27)));
+    // Encabezado de meses
+    ctx.font = F(800, fs - 1); ctx.fillStyle = '#63758b'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    D.months.forEach((m, i) => ctx.fillText(`${MES[+m.slice(5, 7) - 1]} ${m.slice(2, 4)}`, P + nameW + colW * (i + .5), y + rowH / 2));
+    ctx.textAlign = 'left'; ctx.fillText('Indicador', P + 12, y + rowH / 2); y += rowH;
+    ctx.strokeStyle = '#dce6f1'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(P, y); ctx.lineTo(W - P, y); ctx.stroke();
+    D.rows.forEach((row, i) => {
+      if (i % 2 === 0) { ctx.fillStyle = '#f6f9fc'; ctx.fillRect(P, y, W - 2 * P, rowH); }
+      ctx.textAlign = 'left'; ctx.font = F(700, fs); ctx.fillStyle = '#12233a';
+      const name = wrap(ctx, row.name, nameW - 24, 1)[0]; ctx.fillText(name, P + 12, y + rowH / 2);
+      const nw = ctx.measureText(name).width; ctx.font = F(500, fs - 4); ctx.fillStyle = '#8a9bb0';
+      if (nw + ctx.measureText(row.agency).width + 36 < nameW) ctx.fillText(row.agency, P + 12 + nw + 10, y + rowH / 2 + 1);
+      row.cells.forEach((c, j) => {
+        const cx = P + nameW + colW * (j + .5), cy = y + rowH / 2; ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        if (c && SEM_COL[c.s]) { ctx.fillStyle = SEM_COL[c.s]; ctx.fill(); }
+        else { ctx.setLineDash([4, 3]); ctx.strokeStyle = '#c9d5e3'; ctx.lineWidth = 2; ctx.stroke(); ctx.setLineDash([]); }
+      });
+      y += rowH;
+    });
+    // Leyenda
+    y += 18; ctx.font = F(600, ig ? 22 : 20); ctx.textAlign = 'left'; let x = P;
+    for (const [k, l] of [['green', 'Favorable'], ['yellow', 'Neutral'], ['red', 'Desfavorable'], ['na', 'Sin dato publicado']]) {
+      ctx.beginPath(); ctx.arc(x + 10, y + 12, 9, 0, Math.PI * 2);
+      if (SEM_COL[k]) { ctx.fillStyle = SEM_COL[k]; ctx.fill(); } else { ctx.setLineDash([4, 3]); ctx.strokeStyle = '#c9d5e3'; ctx.lineWidth = 2; ctx.stroke(); ctx.setLineDash([]); }
+      ctx.fillStyle = '#52677e'; ctx.fillText(l, x + 26, y + 13); x += 26 + ctx.measureText(l).width + 30;
+    }
+    ctx.textBaseline = 'alphabetic';
+    drawFoot(ctx, W, H, P, ig, M, footH);
     const blob = await new Promise(ok => cv.toBlob(ok, type, .92));
-    return { blob, M, name: `macrodatos-${slug(M.title)}${ig ? '-instagram' : ''}.${type === 'image/png' ? 'png' : 'jpg'}` };
+    return { blob, M, name: `macrodatos-semaforo-${D.months.at(-1)}${ig ? '-instagram' : ''}.${type === 'image/png' ? 'png' : 'jpg'}` };
   }
   function roundRect(ctx, x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
   function download(blob, name) { const a = document.createElement('a'), u = URL.createObjectURL(blob); a.href = u; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 4000); }
@@ -179,10 +265,10 @@
     toastEl.innerHTML = html; toastEl.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => toastEl.classList.remove('show'), ms);
   }
   function bar(def) {
-    const card = document.getElementById(def.card), cv = document.getElementById(def.canvas); if (!card || !cv || card.querySelector('.share-bar')) return;
+    const card = document.getElementById(def.card), cv = def.canvas ? document.getElementById(def.canvas) : null; if (!card || (!cv && !def.afterSel) || card.querySelector('.share-bar')) return;
     const el = document.createElement('div'); el.className = 'share-bar'; el.setAttribute('role', 'group'); el.setAttribute('aria-label', 'Exportar y compartir el gráfico');
-    el.innerHTML = `<span>Exportar</span>${[['excel', 'Excel'], ['jpeg', 'JPEG'], ['instagram', 'Instagram'], ['x', 'X'], ['whatsapp', 'WhatsApp']].map(([k, l]) => `<button type="button" data-share="${k}" title="${k === 'excel' ? 'Descargar los datos en Excel' : k === 'jpeg' ? 'Descargar el gráfico como imagen' : `Compartir en ${l}`}">${ICON[k]}<b>${l}</b></button>`).join('')}`;
-    (cv.closest('.chart-wrap') || cv.parentElement).after(el);
+    el.innerHTML = `<span>Exportar</span>${[['excel', 'Excel'], ['jpeg', 'JPEG'], ['instagram', 'Instagram'], ['x', 'X'], ['whatsapp', 'WhatsApp']].map(([k, l]) => `<button type="button" data-share="${k}" title="${k === 'excel' ? 'Descargar los datos en Excel' : k === 'jpeg' ? 'Descargar como imagen' : `Compartir en ${l}`}">${ICON[k]}<b>${l}</b></button>`).join('')}`;
+    ((def.afterSel && document.querySelector(def.afterSel)) || (def.after && document.getElementById(def.after)) || cv.closest('.chart-wrap') || cv.parentElement).after(el);
     el.addEventListener('click', async e => {
       const b = e.target.closest('[data-share]'); if (!b || b.disabled) return;
       b.disabled = true; b.classList.add('busy');
@@ -196,10 +282,13 @@
     });
   }
   function init() { CARDS.forEach(bar); }
-  window.__macroShare = { compose, rowsOf: d => rowsOf(meta(d)), cards: CARDS, buildWorkbook };
+  window.__macroShare = { compose, meta, rowsOf: d => rowsOf(meta(d)), cards: CARDS, buildWorkbook };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
 
   // Enlace compartido: /?serie=imports#historicos abre esa serie.
   const wanted = new URLSearchParams(location.search).get('serie');
+  // /?kpi=ipc abre el detalle de esa tarjeta cuando ya tiene datos.
+  const wantedKpi = new URLSearchParams(location.search).get('kpi');
+  if (wantedKpi && /^[\w-]{2,30}$/.test(wantedKpi)) window.addEventListener('load', () => { let n = 0; const t = setInterval(() => { const c = kpiCard(wantedKpi), v = txt(c?.querySelector('[data-value], strong')); if ((c && v && v !== '—' && window.Chart) || ++n > 40) { clearInterval(t); if (c && typeof openKpiModal === 'function') openKpiModal(wantedKpi); } }, 250); });
   if (wanted && /^[\w-]{2,30}$/.test(wanted)) window.addEventListener('load', () => setTimeout(() => document.querySelector(`#historicos [data-series="${wanted}"], [data-series="${wanted}"]`)?.click(), 50));
 })();
