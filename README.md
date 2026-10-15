@@ -389,6 +389,12 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 - `public/reserves-components.json`: swap con China (CNY y tipo de cambio), BIS y otros pasivos de corto plazo, SEDESA, oro (toneladas y precio), con notas y fuentes. Actualizar `through` y los componentes cuando cambien (p. ej., pagos del BIS o el swap).
 - `/api/status` → `reserves`: cuántos meses del FMI ya se cargaron y el último error.
 
+## v176 — Importar pagos y hora de los avisos
+
+- Personal de casas particulares → **Importar pagos (CSV)**: columnas fecha (o fecha_pago) y monto; opcionales semana, arrastrar_diferencia (sí/no) y nota. Cada fila se asigna a una fecha de pago de la tarjeta (por la semana o por la fecha más cercana) y las filas del mismo período se suman. Opciones: armar el historial de montos (un monto nuevo rige cuando se repite 3 períodos seguidos; aguinaldos y pagos sueltos no lo cambian), adelantar el inicio al primer pago y reemplazar pagos ya registrados.
+- Avisos de contratos, créditos y personal: **hora de envío** elegible (00 a 23 h; por defecto 9). La revisión pasa a ser cada hora (`acct:run:<fecha>:<hora>`).
+- Personal: opción **"No avisar si ese pago ya está registrado"** (activada por defecto).
+
 ## v175 — Personal de casas particulares en Mi cuenta
 
 - Nueva sección junto a contratos y créditos: nombre, categoría de la escala oficial (supervisor/a, tareas específicas, caseros, cuidado de personas, tareas generales), con o sin retiro, zona desfavorable, frecuencia de pago (por jornada con los días que trabaja, semanal con el día, quincenal o mensual con el día del mes), monto y horas por período → valor por hora.

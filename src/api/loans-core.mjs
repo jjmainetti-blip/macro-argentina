@@ -26,6 +26,7 @@ export function normalizeLoan(x, { maxRecipients = 3 } = {}) {
     reminders: {
       mode: ['off', 'due'].includes(x?.reminders?.mode) ? x.reminders.mode : 'due',
       daysBefore: Math.min(15, Math.max(0, Math.round(Number(x?.reminders?.daysBefore) || 0))),
+      hour: Number.isInteger(Number(x?.reminders?.hour)) && Number(x.reminders.hour) >= 0 && Number(x.reminders.hour) <= 23 ? Number(x.reminders.hour) : 9,
       self: x?.reminders?.self !== false,
       others: [...new Set((Array.isArray(x?.reminders?.others) ? x.reminders.others : String(x?.reminders?.others || '').split(/[\s,;]+/))
         .map(e => String(e || '').trim().toLowerCase()).filter(Boolean))].slice(0, maxRecipients + 1),

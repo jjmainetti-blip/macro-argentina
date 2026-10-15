@@ -32,6 +32,8 @@ export function normalizeStaff(x, { maxRecipients = 3 } = {}) {
     reminders: {
       mode: ['off', 'due'].includes(x?.reminders?.mode) ? x.reminders.mode : 'due',
       daysBefore: Math.min(7, Math.max(0, Math.round(Number(x?.reminders?.daysBefore) || 0))),
+      hour: Number.isInteger(Number(x?.reminders?.hour)) && Number(x.reminders.hour) >= 0 && Number(x.reminders.hour) <= 23 ? Number(x.reminders.hour) : 9,
+      skipPaid: x?.reminders?.skipPaid !== false,
       scale: x?.reminders?.scale !== false,
       self: x?.reminders?.self !== false,
       others: [...new Set((Array.isArray(x?.reminders?.others) ? x.reminders.others : String(x?.reminders?.others || '').split(/[\s,;]+/))
@@ -95,7 +97,7 @@ export function computeStaff(S, today, { horizon = 40 } = {}) {
     const r = rateAt(S, d), p = pay[d];
     const expected = r2(r.amount + carry);
     const row = { date: d, base: r.amount, carryIn: r2(carry), expected, hours: r.hours, past: d < today, today: d === today };
-    if (p) { row.paid = p.paid; row.paidAt = p.at || null; row.carry = !!p.carry; row.diff = r2(expected - p.paid); carry = p.carry ? row.diff : 0; }
+    if (p) { row.paid = p.paid; row.paidAt = p.at || null; row.carry = !!p.carry; row.note = p.note || null; row.diff = r2(expected - p.paid); carry = p.carry ? row.diff : 0; }
     else carry = 0;
     rows.push(row);
   }

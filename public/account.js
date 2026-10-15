@@ -91,7 +91,7 @@
     if (r.mode === 'off') return 'Sin avisos por mail';
     const when = r.mode === 'monthly' ? `todos los meses (día ${r.day})` : `cuando hay un ajuste${r.daysBefore ? ` (${r.daysBefore} ${r.daysBefore === 1 ? 'día' : 'días'} antes)` : ''}`;
     const who = [r.self !== false ? 'a vos' : null, ...(c.recipients || []).map(x => `${esc(x.email)}${x.status === 'pending' ? ' <i>(falta que confirme)</i>' : x.status === 'off' ? ' <i>(se dio de baja)</i>' : ''}`)].filter(Boolean);
-    return `Aviso ${when}${who.length ? ` · ${who.join(', ')}` : ' · <i>sin destinatarios</i>'}`;
+    return `Aviso ${when}${Number.isInteger(r.hour) ? ` a las ${String(r.hour).padStart(2, '0')}:00` : ''}${who.length ? ` · ${who.join(', ')}` : ' · <i>sin destinatarios</i>'}`;
   }
   function indexText(c) { return c.index === 'fixed' ? `${String(c.fixedPct).replace('.', ',')}% fijo` : INDEX[c.index] + (c.index === 'ipc' ? ` · rezago ${c.lag}` : ''); }
   function nextHtml(c) {
@@ -228,6 +228,7 @@
       <fieldset class="acct-fs"><legend>Avisos por mail</legend><div class="acct-fields">
         <label>Cuándo<select name="mode"><option value="due"${r.mode === 'due' ? ' selected' : ''}>Antes de cada vencimiento</option><option value="off"${r.mode === 'off' ? ' selected' : ''}>No enviar</option></select></label>
         <label data-due>Anticipación<select name="daysBefore">${[0, 1, 2, 3, 5, 7, 10, 15].map(k => `<option value="${k}"${(r.daysBefore || 0) === k ? ' selected' : ''}>${k ? `${k} ${k === 1 ? 'día' : 'días'} antes` : 'El día del vencimiento'}</option>`).join('')}</select></label>
+        <label data-due>Hora del aviso<select name="hour">${Array.from({ length: 24 }, (_, h) => `<option value="${h}"${(r.hour ?? 9) === h ? ' selected' : ''}>${String(h).padStart(2, '0')}:00</option>`).join('')}</select></label>
         <label class="acct-check" data-due><input type="checkbox" name="self"${r.self !== false ? ' checked' : ''}> Enviarme a mí (${esc(state.user.email)})</label>
         <label class="wide" data-due>Otras direcciones (hasta 3, separadas por coma)<input name="others" value="${esc((L?.recipients || []).map(x => x.email).join(', '))}"><small>Cada dirección nueva recibe un mail para confirmar antes de empezar a recibir avisos.</small></label>
       </div></fieldset>
@@ -237,7 +238,7 @@
       <p class="acct-msg" id="loanFormMsg" role="status"></p></form>`;
     const f = document.getElementById('loanForm');
     const sync = () => { f.querySelectorAll('[data-uva]').forEach(el => el.hidden = f.adjust.value !== 'uva'); f.querySelectorAll('[data-due]').forEach(el => el.hidden = f.mode.value === 'off'); };
-    const read = () => ({ name: f.name.value, adjust: f.adjust.value, principal: f.principal.value, principalUnit: f.principalUnit.value, start: f.start.value, firstDue: f.firstDue.value, term: Number(f.term.value), rate: f.rate.value, system: f.system.value, notes: f.notes.value, reminders: { mode: f.mode.value, daysBefore: Number(f.daysBefore.value), self: f.self.checked, others: f.others.value } });
+    const read = () => ({ name: f.name.value, adjust: f.adjust.value, principal: f.principal.value, principalUnit: f.principalUnit.value, start: f.start.value, firstDue: f.firstDue.value, term: Number(f.term.value), rate: f.rate.value, system: f.system.value, notes: f.notes.value, reminders: { mode: f.mode.value, daysBefore: Number(f.daysBefore.value), hour: Number(f.hour.value), self: f.self.checked, others: f.others.value } });
     let t = null, seq = 0;
     const preview = () => { clearTimeout(t); t = setTimeout(async () => {
       const pv = document.getElementById('loanPreview'); if (!pv || !f.isConnected) return;
@@ -269,7 +270,7 @@
     return `<article class="kpi acct-kpi" data-staff="1" data-id="${esc(S.id)}" tabindex="0" role="button" aria-label="Ver detalle de ${esc(S.name)}">
       <div class="kpi-top"><span>${esc(S.name)}</span><b>${esc(FREQS[S.freq])}</b></div>
       <strong>${n ? money(n.expected) : '—'}</strong>
-      <p>${n ? `Próximo pago · ${esc(day(n.date))}${n.carryIn ? ` · incluye ${money(n.carryIn)} anterior` : ''}` : 'Sin pagos próximos'}</p>
+      <p>${n ? `Próximo pago · ${esc(day(n.date))}${n.carryIn > 0 ? ` · incluye ${money(n.carryIn)} anterior` : n.carryIn < 0 ? ` · descuenta ${money(-n.carryIn)} pagados de más` : ''}` : 'Sin pagos próximos'}</p>
       <em class="${ok === false ? 'down' : ok ? '' : 'neutral'}">${S.hourly ? `${money(S.hourly)}/h · oficial ${money(S.official?.hour)}/h${S.gapPct != null ? ` (${pctTxt(S.gapPct)})` : ''}` : ''}</em>
       <div class="data-health ${S.pendingCount ? 'cached' : 'live'}">${S.pendingCount ? `${S.pendingCount} ${S.pendingCount === 1 ? 'pago sin registrar' : 'pagos sin registrar'}` : 'Pagos al día'}</div></article>`;
   }
@@ -289,13 +290,14 @@
       <h3 class="acct-h3b">Pagos</h3>
       <div class="upd-table-wrap acct-loan-table"><table class="upd-table acct-table acct-pay-table"><thead><tr><th>Fecha</th><th>A pagar</th><th>Pagado</th><th>Diferencia</th><th></th></tr></thead><tbody>
       ${rows.map(r => `<tr class="${r.past || r.today ? '' : 'acct-future'}${S.next && r.date === S.next.date ? ' acct-next-row' : ''}" data-date="${r.date}"><td>${esc(day(r.date))}${r.carryIn ? `<small>${r.carryIn > 0 ? '+' : '−'}${money(Math.abs(r.carryIn))} anterior</small>` : ''}</td><td><strong>${money(r.expected)}</strong></td>
-        <td>${r.paid != null ? `${money(r.paid)}<small>${r.carry ? 'diferencia pasada al siguiente' : r.diff ? 'diferencia no se arrastra' : ''}</small>` : (r.past || r.today ? (r.date >= (S.trackFrom || S.start) ? '<i class="acct-bad">sin registrar</i>' : '<i>no registrado</i>') : '—')}</td>
+        <td>${r.paid != null ? `${money(r.paid)}<small>${r.carry ? 'diferencia pasada al siguiente' : r.diff ? 'diferencia no se arrastra' : ''}${r.note ? `${r.carry || r.diff ? ' · ' : ''}${esc(r.note)}` : ''}</small>` : (r.past || r.today ? (r.date >= (S.trackFrom || S.start) ? '<i class="acct-bad">sin registrar</i>' : '<i>no registrado</i>') : '—')}</td>
         <td>${r.paid != null ? (r.diff ? money(r.diff) : '—') : ''}</td>
         <td>${r.paid != null ? '<button class="link-btn" data-unpay>Deshacer</button>' : (r.past || r.today || r === S.next || (S.next && r.date === S.next.date)) ? '<button class="btn small" data-pay>Registrar</button>' : ''}</td></tr>`).join('')}
       </tbody></table></div>
       <div class="acct-payform" id="payForm" hidden></div>
       ${S.notes ? `<p class="acct-note">Nota: ${esc(S.notes)}</p>` : ''}
-      <div class="acct-actions"><button class="btn primary" data-act="edit">Editar</button>${S.reminders?.mode !== 'off' && state.mail ? '<button class="btn small" data-act="test">Enviarme un mail de prueba</button>' : ''}<button class="btn small danger" data-act="del">Eliminar</button></div>
+      <div class="acct-actions"><button class="btn primary" data-act="edit">Editar</button><button class="btn small" data-act="import">Importar pagos (CSV)</button>${S.reminders?.mode !== 'off' && state.mail ? '<button class="btn small" data-act="test">Enviarme un mail de prueba</button>' : ''}<button class="btn small danger" data-act="del">Eliminar</button></div>
+      <div class="acct-payform" id="importForm" hidden></div>
       <p class="acct-msg" role="status"></p>`;
     const msg = body.querySelector('.acct-msg'), pf = body.querySelector('#payForm');
     const refresh = async j => { const i = state.staff.findIndex(x => x.id === S.id); if (j?.staff && i >= 0) state.staff[i] = j.staff; openStaff(state.staff[i]); viewAccountKeepModal(); };
@@ -316,12 +318,46 @@
     body.querySelectorAll('[data-act]').forEach(b => b.onclick = async () => {
       const act = b.dataset.act;
       if (act === 'edit') openStaffForm(S);
+      if (act === 'import') openImport(S, body);
       if (act === 'test') { b.disabled = true; msg.textContent = 'Enviando…'; try { await api(`/staff/${S.id}/test`, { method: 'POST' }); msg.textContent = `Listo: revisá ${state.user.email}.`; } catch (err) { msg.textContent = err.message; } b.disabled = false; }
       if (act === 'del') { if (!confirm(`¿Eliminar "${S.name}" y su registro de pagos?`)) return; try { await api(`/staff/${S.id}`, { method: 'DELETE' }); closeModal(); await loadContracts(); } catch (err) { msg.textContent = err.message; } }
     });
   }
   // Repinta las tarjetas sin cerrar la ventana abierta.
   function viewAccountKeepModal() { const grid = app.querySelectorAll('.acct-kpis')[2]; if (!grid) return; grid.querySelectorAll('.acct-kpi[data-staff]').forEach(card => { const S = state.staff.find(x => x.id === card.dataset.id); if (S) { const t = document.createElement('div'); t.innerHTML = staffCard(S); const n = t.firstElementChild; card.replaceWith(n); n.addEventListener('click', () => openStaff(state.staff.find(x => x.id === n.dataset.id))); } }); }
+
+  // v176 · Importar pagos desde un CSV: columnas fecha (o fecha_pago), monto y, opcionales, semana, arrastrar_diferencia y nota.
+  function parseCsv(text) {
+    const lines = text.replace(/^﻿/, '').split(/\r?\n/).filter(l => l.trim()); if (!lines.length) return [];
+    const d = (lines[0].match(/;/g) || []).length >= (lines[0].match(/,/g) || []).length ? ';' : ',';
+    const split = l => { const out = []; let cur = '', q = false; for (const ch of l) { if (ch === '"') q = !q; else if (ch === d && !q) { out.push(cur); cur = ''; } else cur += ch; } out.push(cur); return out.map(x => x.trim()); };
+    const H = split(lines[0]).map(h => h.toLowerCase());
+    const col = re => H.findIndex(h => re.test(h));
+    let cDate = col(/fecha/), cAmt = col(/monto|importe|pagado/), cWeek = col(/semana/), cCarry = col(/arrastr/), cNote = col(/nota|detalle|obs/);
+    const hasHeader = cDate >= 0 || cAmt >= 0; if (!hasHeader) { cDate = 0; cAmt = 1; }
+    const toIso = v => { v = String(v || '').trim(); let m = v.match(/^(\d{4})-(\d{2})-(\d{2})/); if (m) return `${m[1]}-${m[2]}-${m[3]}`; m = v.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2,4})$/); if (m) { const y = m[3].length === 2 ? `20${m[3]}` : m[3]; return `${y}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`; } return null; };
+    const toNum = v => { v = String(v || '').replace(/[$\s]/g, ''); if (/,\d{1,2}$/.test(v)) v = v.replace(/\./g, '').replace(',', '.'); else v = v.replace(/[.,](?=\d{3}(\D|$))/g, ''); return Number(v); };
+    return lines.slice(hasHeader ? 1 : 0).map(l => { const c = split(l); return { date: toIso(c[cDate]), week: cWeek >= 0 ? toIso(c[cWeek]) : null, amount: toNum(c[cAmt]), carry: cCarry >= 0 && /^(s[ií]|si|x|1|true)$/i.test(c[cCarry] || ''), note: cNote >= 0 ? c[cNote] : '' }; }).filter(r => (r.date || r.week) && Number.isFinite(r.amount));
+  }
+  function openImport(S, body) {
+    const box = body.querySelector('#importForm'); box.hidden = false;
+    box.innerHTML = `<h4>Importar pagos de ${esc(S.name)}</h4><p class="acct-note">Archivo CSV con columnas <b>fecha</b> (o fecha_pago) y <b>monto</b>; opcionales: <b>semana</b>, <b>arrastrar_diferencia</b> (sí/no) y <b>nota</b>. Los pagos de un mismo período se suman.</p>
+      <input type="file" accept=".csv,text/csv,text/plain" id="impFile">
+      <div class="acct-fields"><label class="acct-check"><input type="checkbox" id="impRates" checked> Armar el historial de montos con los del archivo</label>
+      <label class="acct-check"><input type="checkbox" id="impStart" checked> Adelantar el inicio al primer pago del archivo</label>
+      <label class="acct-check"><input type="checkbox" id="impReplace" checked> Reemplazar pagos ya registrados en esas fechas</label></div>
+      <p class="acct-note" id="impInfo"></p><div class="acct-actions"><button class="btn primary" type="button" id="impGo" disabled>Importar</button><button class="btn ghost-dark" type="button" id="impCancel">Cancelar</button></div>`;
+    let rows = [];
+    box.querySelector('#impFile').onchange = async e => { const f = e.target.files[0]; if (!f) return; rows = parseCsv(await f.text()); const tot = rows.reduce((a, r) => a + r.amount, 0), ds = rows.map(r => r.date || r.week).sort(); box.querySelector('#impInfo').textContent = rows.length ? `${rows.length} pagos entre ${day(ds[0])} y ${day(ds.at(-1))} · total ${money(tot)}.` : 'No se encontraron filas con fecha y monto.'; box.querySelector('#impGo').disabled = !rows.length; };
+    box.querySelector('#impCancel').onclick = () => { box.hidden = true; };
+    box.querySelector('#impGo').onclick = async () => {
+      const b = box.querySelector('#impGo'), info = box.querySelector('#impInfo'); b.disabled = true; info.textContent = 'Importando…';
+      try { const j = await api(`/staff/${S.id}/import`, { method: 'POST', body: { rows, options: { rates: box.querySelector('#impRates').checked, moveStart: box.querySelector('#impStart').checked, replace: box.querySelector('#impReplace').checked } } });
+        const i = state.staff.findIndex(x => x.id === S.id); if (i >= 0) state.staff[i] = j.staff; openStaff(state.staff[i]); viewAccountKeepModal();
+        const m = document.querySelector('.acct-modal .acct-msg'); if (m) m.textContent = `Listo: ${j.imported} pagos importados${j.kept ? `, ${j.kept} ya registrados se mantuvieron` : ''}${j.unmatched ? `, ${j.unmatched} filas no coincidieron con ninguna fecha de pago` : ''}.`;
+      } catch (err) { info.textContent = err.message; b.disabled = false; }
+    };
+  }
   function openStaffForm(S) {
     const box = openModal('acct-modal-wide'), r = S?.reminders || { mode: 'due', daysBefore: 1, self: true, scale: true };
     const num = v => v == null ? '' : String(v).replace('.', ',');
@@ -345,6 +381,8 @@
       <fieldset class="acct-fs"><legend>Avisos por mail</legend><div class="acct-fields">
         <label>Antes de cada pago<select name="mode"><option value="due"${r.mode === 'due' ? ' selected' : ''}>Avisarme</option><option value="off"${r.mode === 'off' ? ' selected' : ''}>No avisar</option></select></label>
         <label data-due>Anticipación<select name="daysBefore">${[0, 1, 2, 3, 5, 7].map(k => `<option value="${k}"${(r.daysBefore || 0) === k ? ' selected' : ''}>${k ? `${k} ${k === 1 ? 'día' : 'días'} antes` : 'El mismo día'}</option>`).join('')}</select></label>
+        <label data-due>Hora del aviso<select name="hour">${Array.from({ length: 24 }, (_, h) => `<option value="${h}"${(r.hour ?? 9) === h ? ' selected' : ''}>${String(h).padStart(2, '0')}:00</option>`).join('')}</select></label>
+        <label class="acct-check" data-due><input type="checkbox" name="skipPaid"${r.skipPaid !== false ? ' checked' : ''}> No avisar si ese pago ya está registrado</label>
         <label class="acct-check"><input type="checkbox" name="scale"${r.scale !== false ? ' checked' : ''}> Avisarme cuando cambie la escala oficial</label>
         <label class="acct-check"><input type="checkbox" name="self"${r.self !== false ? ' checked' : ''}> Enviarme a mí (${esc(state.user.email)})</label>
         <label class="wide">Otras direcciones (hasta 3, separadas por coma)<input name="others" value="${esc((S?.recipients || []).map(x => x.email).join(', '))}"><small>Cada dirección nueva recibe un mail para confirmar antes de empezar a recibir avisos.</small></label>
@@ -356,7 +394,7 @@
     const PER = { jornada: 'jornada', semanal: 'semana', quincenal: 'quincena', mensual: 'mes' };
     const sync = () => { f.querySelectorAll('[data-f]').forEach(el => el.hidden = el.dataset.f !== f.freq.value); f.querySelector('[data-ret]').hidden = f.category.value === 'caseros'; f.querySelectorAll('[data-due]').forEach(el => el.hidden = f.mode.value === 'off'); document.getElementById('perLbl').textContent = PER[f.freq.value]; document.getElementById('perLbl2').textContent = PER[f.freq.value]; };
     const read = () => ({ name: f.name.value, category: f.category.value, retiro: f.retiro.value, zona: f.zona.checked, freq: f.freq.value, payDay: f.freq.value === 'semanal' ? Number(f.payDayW.value) : Number(f.payDayM.value), workDays: [...f.querySelectorAll('[name=wd]:checked')].map(x => Number(x.value)), amount: f.amount.value, hours: f.hours.value, start: f.start.value, effective: f.effective?.value || '', notes: f.notes.value,
-      reminders: { mode: f.mode.value, daysBefore: Number(f.daysBefore.value), scale: f.scale.checked, self: f.self.checked, others: f.others.value } });
+      reminders: { mode: f.mode.value, daysBefore: Number(f.daysBefore.value), hour: Number(f.hour.value), skipPaid: f.skipPaid.checked, scale: f.scale.checked, self: f.self.checked, others: f.others.value } });
     let t = null, seq = 0;
     const preview = () => { clearTimeout(t); t = setTimeout(async () => {
       const pv = document.getElementById('staffPreview'); if (!pv || !f.isConnected) return;
@@ -529,6 +567,7 @@
         <div class="acct-fields">
           <label>Cuándo<select name="mode"><option value="adjust"${r.mode === 'adjust' ? ' selected' : ''}>Sólo cuando hay un ajuste</option><option value="monthly"${r.mode === 'monthly' ? ' selected' : ''}>Todos los meses</option><option value="off"${r.mode === 'off' ? ' selected' : ''}>No enviar</option></select></label>
           <label data-show-mode="adjust">Anticipación<select name="daysBefore">${[0, 1, 2, 3, 5, 7, 10, 15].map(n => `<option value="${n}"${(r.daysBefore || 0) === n ? ' selected' : ''}>${n ? `${n} ${n === 1 ? 'día' : 'días'} antes` : 'El día del ajuste'}</option>`).join('')}</select></label>
+          <label data-hide-mode="off">Hora del aviso<select name="hour">${Array.from({ length: 24 }, (_, h) => `<option value="${h}"${(r.hour ?? 9) === h ? ' selected' : ''}>${String(h).padStart(2, '0')}:00</option>`).join('')}</select></label>
           <label data-show-mode="monthly">Día del mes<select name="day">${Array.from({ length: 28 }, (_, i) => `<option value="${i + 1}"${(r.day || 1) === i + 1 ? ' selected' : ''}>${i + 1}</option>`).join('')}</select></label>
           <label class="acct-check" data-hide-mode="off"><input type="checkbox" name="self"${r.self !== false ? ' checked' : ''}> Enviarme a mí (${esc(state.user.email)})</label>
           <label class="wide" data-hide-mode="off">Otras direcciones (hasta 3, separadas por coma)<input name="others" placeholder="inquilino@mail.com" value="${esc((c?.recipients || []).map(x => x.email).join(', '))}"><small>Cada dirección nueva recibe un mail para confirmar antes de empezar a recibir avisos.</small></label>
@@ -550,7 +589,7 @@
     const read = () => ({
       name: f.name.value, amount: f.amount.value, start: f.start.value, end: f.end.value, index: f.index.value, lag: Number(f.lag.value), fixedPct: f.fixedPct.value,
       freq: f.freq.value === 'other' ? Number(f.freqOther.value) : Number(f.freq.value), notes: f.notes.value,
-      reminders: { mode: f.mode.value, day: Number(f.day.value), daysBefore: Number(f.daysBefore.value), self: f.self.checked, others: f.others.value },
+      reminders: { mode: f.mode.value, day: Number(f.day.value), daysBefore: Number(f.daysBefore.value), hour: Number(f.hour.value), self: f.self.checked, others: f.others.value },
     });
     let t = null, seq = 0;
     const preview = () => {

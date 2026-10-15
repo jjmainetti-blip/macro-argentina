@@ -10,7 +10,7 @@
 // Mails: Resend (secreto RESEND_API_KEY; remitente MAIL_FROM, por defecto "Macrodatos <avisos@macrodatos.ar>").
 import { BUNDLED_SOURCES } from './bundled-history.mjs';
 import { normalizeLoan, computeLoan, SYSTEMS, ADJUST } from './loans-core.mjs';
-import { normalizeStaff, computeStaff, STAFF_FREQ, WEEKDAYS } from './staff-core.mjs';
+import { normalizeStaff, computeStaff, payDates, STAFF_FREQ, WEEKDAYS } from './staff-core.mjs';
 import { STAFF_SCALE, STAFF_CATEGORIES, ZONA_PCT } from './casas-scale.mjs';
 import { normalizeContract, computeContract, INDEX_NAMES, freqText, dateLabel, monthLabel, ipcWindowText, pendingHint, addDays } from './contracts-core.mjs';
 
@@ -230,7 +230,7 @@ function publicStaff(S, today) {
   const R = computeStaff(S, today);
   return { id: S.id, type: 'staff', name: S.name, category: S.category, retiro: S.retiro, zona: S.zona, freq: S.freq, amount: S.amount, hours: S.hours, payDay: S.payDay, workDays: S.workDays, start: S.start, notes: S.notes || '',
     reminders: { ...S.reminders, others: (S.recipients || []).map(r => r.email) }, recipients: (S.recipients || []).map(r => ({ email: r.email, status: r.status })),
-    rows: R.rows.slice(-40), hourly: R.hourly, official: R.official, nextOfficial: R.nextOfficial, gapPct: R.gapPct, below: R.below, next: R.next, pendingCount: R.pendingCount, trackFrom: R.trackFrom, current: R.current, rates: S.rates || [] };
+    rows: R.rows.slice(-600), hourly: R.hourly, official: R.official, nextOfficial: R.nextOfficial, gapPct: R.gapPct, below: R.below, next: R.next, pendingCount: R.pendingCount, trackFrom: R.trackFrom, current: R.current, rates: S.rates || [] };
 }
 export function staffDueMail(env, S, row, R, today, rcpt, owner) {
   const title = `${S.name}: pago ${row.date > today ? 'del' : 'de hoy,'} ${dateLabel(row.date)}`;
@@ -284,9 +284,12 @@ async function syncRecipients(env, u, c, prev, wanted) {
 }
 
 // ── Corrida diaria de recordatorios ──────────────────────────────────────────────────────────────────────────
-export async function runReminders(env, { force = false, today = todayAR(), only = null, dryRun = false } = {}) {
+const hourAR = () => Number(new Intl.DateTimeFormat('en-GB', { timeZone: TZ, hour: '2-digit', hour12: false }).format(new Date())) % 24;
+// v176: los avisos se revisan cada hora; cada uno sale el día que corresponde a partir de la hora elegida (por defecto, 9).
+export async function runReminders(env, { force = false, today = todayAR(), hour = hourAR(), only = null, dryRun = false } = {}) {
   if (!env?.MACRO_STORE?.list) return { skipped: 'sin KV' };
-  const runKey = `acct:run:${today}`;
+  const reached = (day, it) => today > day || (today === day && hour >= (Number.isInteger(it?.reminders?.hour) ? it.reminders.hour : 9));
+  const runKey = `acct:run:${today}:${String(hour).padStart(2, '0')}`;
   if (!force && !only) { try { if (await env.MACRO_STORE.get(runKey)) return { skipped: 'ya corrió hoy' }; } catch { } }
   if (!mailConfigured(env) && !dryRun) return { skipped: 'mail no configurado' };
   const idx = await indexData(env);
@@ -303,8 +306,8 @@ export async function runReminders(env, { force = false, today = todayAR(), only
         const rcpts = recipientsFor(u, S); if (!rcpts.length) continue;
         const R = computeStaff(S, today); S.notified ||= {}; const queue = [];
         if (S.reminders?.mode === 'due') for (const r of R.rows) {
-          if (S.notified[r.date] || r.paid != null) continue;
-          if (today < addDays(r.date, -(S.reminders.daysBefore || 0))) break;
+          if (S.notified[r.date] || (r.paid != null && S.reminders.skipPaid !== false)) continue;
+          if (!reached(addDays(r.date, -(S.reminders.daysBefore || 0)), S)) break;
           if (r.date < addDays(today, -2)) { S.notified[r.date] = 'past'; changed = true; continue; }
           queue.push(rc => staffDueMail(env, S, r, R, today, rc, u.email)); S.notified[r.date] = 'sent';
         }
@@ -329,7 +332,7 @@ export async function runReminders(env, { force = false, today = todayAR(), only
         L.notified ||= {}; const queue = [];
         for (const r of R.rows) {
           if (L.notified[r.k]) continue;
-          if (today < addDays(r.date, -(L.reminders.daysBefore || 0))) break;
+          if (!reached(addDays(r.date, -(L.reminders.daysBefore || 0)), L)) break;
           if (r.date < addDays(today, -3)) { L.notified[r.k] = 'past'; changed = true; continue; }
           queue.push(rc => dueMail(env, L, r, R, today, rc, u.email)); L.notified[r.k] = 'sent';
         }
@@ -354,13 +357,13 @@ export async function runReminders(env, { force = false, today = todayAR(), only
           for (const r of R.rows) {
             const st = c.notified[r.k];
             if (st === 'sent' || st === 'past') continue;
-            if (today < addDays(r.date, -(c.reminders.daysBefore || 0))) continue;
+            if (!reached(addDays(r.date, -(c.reminders.daysBefore || 0)), c)) continue;
             if (!r.pending) { queue.push(rc => adjustMail(env, c, r, nextAfter(r), today, rc, u.email)); c.notified[r.k] = 'sent'; }
             else if (today >= r.date && st !== 'pending') { queue.push(rc => pendingMail(env, c, r, rc, u.email)); c.notified[r.k] = 'pending'; }
           }
         } else if (mode === 'monthly') {
           const ym = today.slice(0, 7);
-          if (Number(today.slice(8)) >= (c.reminders.day || 1) && c.lastMonthly !== ym) { queue.push(rc => monthlyMail(env, c, R, today, rc, u.email)); c.lastMonthly = ym; }
+          if (reached(`${ym}-${String(c.reminders.day || 1).padStart(2, '0')}`, c) && c.lastMonthly !== ym) { queue.push(rc => monthlyMail(env, c, R, today, rc, u.email)); c.lastMonthly = ym; }
         }
         if (!queue.length) continue;
         changed = true;
@@ -374,7 +377,12 @@ export async function runReminders(env, { force = false, today = todayAR(), only
       if (changed && !dryRun) await saveUser(env, u);
     }
   } while (cursor);
-  if (!only && !dryRun) { try { await env.MACRO_STORE.put(runKey, JSON.stringify({ at: new Date().toISOString(), sent: log.sent, users: log.users, errors: log.errors.slice(0, 10) }), { expirationTtl: 40 * 86400 }); } catch { } }
+  if (!only && !dryRun) {
+    const sum = JSON.stringify({ at: new Date().toISOString(), hour, sent: log.sent, users: log.users, errors: log.errors.slice(0, 10) });
+    try { await env.MACRO_STORE.put(runKey, sum, { expirationTtl: 3 * 86400 }); } catch { }
+    // Resumen del día (para /api/status): se reescribe sólo si hubo envíos o errores, o en la primera corrida del día.
+    try { const dk = `acct:run:${today}`, prev = await kvGet(env, dk); if (!prev || log.sent || log.errors.length) await env.MACRO_STORE.put(dk, JSON.stringify({ at: new Date().toISOString(), lastHour: hour, sent: (prev?.sent || 0) + log.sent, users: log.users, errors: [...(prev?.errors || []), ...log.errors].slice(-10) }), { expirationTtl: 40 * 86400 }); } catch { }
+  }
   return log;
 }
 
@@ -507,10 +515,57 @@ export async function accountApi(request, env, ctx, url) {
     u.staff = [...(u.staff || []), S]; await saveUser(env, u);
     return json({ ok: true, staff: publicStaff(S, today) });
   }
-  const ms = p.match(/^\/api\/account\/staff\/([\w-]{6,20})(\/test|\/pay)?$/);
+  const ms = p.match(/^\/api\/account\/staff\/([\w-]{6,20})(\/test|\/pay|\/import)?$/);
   if (ms) {
     const i = (u.staff || []).findIndex(x => x.id === ms[1]); if (i < 0) return json({ error: 'No existe ese registro.' }, 404);
     const prev = u.staff[i];
+    if (ms[2] === '/import' && method === 'POST') {
+      // v176 · Importar pagos (CSV): cada fila se asigna a una fecha de pago de la tarjeta (por la semana, o por la fecha
+      // más cercana); varias filas de un mismo período se suman. Opcionalmente arma el historial de montos y adelanta el inicio.
+      const b = await readJson(request), rows = (Array.isArray(b?.rows) ? b.rows : []).slice(0, 2000), o = b?.options || {};
+      const isD = x => /^\d{4}-\d{2}-\d{2}$/.test(String(x || ''));
+      const clean = rows.map(r => ({ week: isD(r.week) ? r.week : null, date: isD(r.date) ? r.date : null, amount: Math.round(Number(r.amount) * 100) / 100, carry: !!r.carry, note: String(r.note || '').replace(/[<>\u0000-\u001f]/g, ' ').slice(0, 200) })).filter(r => (r.date || r.week) && r.amount >= 0 && r.amount < 1e11);
+      if (!clean.length) return json({ error: 'El archivo no tiene filas válidas (fecha y monto).' }, 400);
+      if (o.moveStart !== false) {
+        const first = clean.map(r => r.week && prev.freq === 'semanal' ? addDays(r.week, -6) : r.date || r.week).sort()[0];
+        if (first < prev.start) { prev.start = first; if (prev.rates?.[0]) prev.rates[0].from = first; }
+        prev.trackFrom = prev.start;
+      }
+      const periods = payDates(prev, addDays(today, 40)), win = { semanal: 3, jornada: 1, quincenal: 7, mensual: 15 }[prev.freq] ?? 3;
+      const near = d => { let best = null, bd = 1e9; for (const p of periods) { const x = Math.abs((Date.parse(p) - Date.parse(d)) / 864e5); if (x < bd) { bd = x; best = p; } } return bd <= win ? best : null; };
+      const agg = new Map(); let unmatched = 0;
+      for (const r of clean) {
+        let p = null;
+        if (r.week && prev.freq === 'semanal') p = periods.filter(x => x <= r.week && x > addDays(r.week, -7)).at(-1) || null;
+        if (!p && r.date) p = near(r.date);
+        if (!p) { unmatched++; continue; }
+        const a = agg.get(p) || { paid: 0, notes: [], carry: false, at: null, week: r.week };
+        a.paid = Math.round((a.paid + r.amount) * 100) / 100; if (r.note) a.notes.push(r.note); a.carry ||= r.carry; if (r.date && (!a.at || r.date > a.at)) a.at = r.date;
+        agg.set(p, a);
+      }
+      prev.payments ||= {}; let imported = 0, kept = 0;
+      for (const [p, a] of agg) {
+        if (prev.payments[p] && o.replace === false) { kept++; continue; }
+        prev.payments[p] = { paid: a.paid, carry: a.carry, at: a.at ? `${a.at}T12:00:00.000Z` : new Date().toISOString(), ...(a.notes.length ? { note: a.notes.join(' · ').slice(0, 300) } : {}), imported: true };
+        imported++;
+      }
+      if (o.rates !== false) {
+        // Historial de montos: un monto nuevo rige desde que se repite al menos 3 períodos seguidos (los aguinaldos o pagos sueltos no lo cambian).
+        const seq = [...agg.entries()].sort((x, y) => x[0].localeCompare(y[0])), rates = seq.length ? [{ from: prev.start, amount: seq[0][1].paid, hours: prev.hours }] : [];
+        for (let i = 0; i < seq.length; i++) {
+          const v = seq[i][1].paid; if (rates.length && rates.at(-1).amount === v) continue;
+          if (i + 2 < seq.length && seq[i + 1][1].paid === v && seq[i + 2][1].paid === v) rates.push({ from: rates.length ? seq[i][0] : prev.start, amount: v, hours: prev.hours });
+        }
+        if (rates.length) {
+          const cur = { amount: prev.amount, hours: prev.hours };
+          if (rates.at(-1).amount !== cur.amount) rates.push({ from: today, amount: cur.amount, hours: cur.hours });
+          prev.rates = rates;
+        }
+      }
+      prev.notified ||= {}; for (const p of periods) if (p < today) prev.notified[p] = prev.notified[p] || 'past';
+      prev.updatedAt = new Date().toISOString(); await saveUser(env, u);
+      return json({ ok: true, imported, kept, unmatched, periods: agg.size, staff: publicStaff(prev, today) });
+    }
     if (ms[2] === '/pay' && method === 'POST') {
       const b = await readJson(request), d = String(b?.date || '');
       if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return json({ error: 'Fecha inválida.' }, 400);
@@ -649,7 +704,7 @@ export async function accountApi(request, env, ctx, url) {
 export async function remindersStatus(env) {
   try {
     const t = todayAR(), y = addDays(t, -1);
-    const [a, b] = await Promise.all([kvGet(env, `acct:run:${t}`), kvGet(env, `acct:run:${y}`)]);
+    const [a, b] = await Promise.all([kvGet(env, `acct:run:${t}`), kvGet(env, `acct:run:${y}`)]); // resumen diario
     return { mailConfigured: mailConfigured(env), mail: mailDiag(env), today: a, yesterday: b };
   } catch { return null; }
 }

@@ -90,7 +90,8 @@ export default {
     // v164: recordatorios de contratos — una vez por día (08:47 hora argentina). Si esa ejecución se perdió, la
     // revisión de cada 5 minutos la hace más tarde ese mismo día (runReminders no repite si ya corrió).
     if (event.cron === '47 11 * * *') { ctx.waitUntil(runReminders(env).then(r => console.log(`recordatorios: ${JSON.stringify({ ...r, mails: undefined })}`)).catch(e => console.log(`recordatorios: error ${e?.message || e}`))); return; }
-    { const h = new Date(event.scheduledTime || Date.now()).getUTCHours(); if (h >= 12 && h < 23 && Math.floor((event.scheduledTime || Date.now()) / 300000) % 6 === 0) ctx.waitUntil(runReminders(env).catch(() => { })); }
+    // v176: los avisos se revisan cada hora (runReminders no repite dentro de la misma hora).
+    ctx.waitUntil(runReminders(env).catch(() => { }));
     const groups = Object.keys(GROUPS), tick = Math.floor((event.scheduledTime || Date.now()) / 300000);
     let statuses = [];
     try { statuses = await freshnessReport(env); ctx.waitUntil(saveCardStatus(env, statuses)); } catch { }
