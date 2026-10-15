@@ -389,6 +389,19 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 - `public/reserves-components.json`: swap con China (CNY y tipo de cambio), BIS y otros pasivos de corto plazo, SEDESA, oro (toneladas y precio), con notas y fuentes. Actualizar `through` y los componentes cuando cambien (p. ej., pagos del BIS o el swap).
 - `/api/status` → `reserves`: cuántos meses del FMI ya se cargaron y el último error.
 
+## v181 — Exportar y compartir las series históricas
+
+- Debajo de cada gráfico de "Series históricas" (incluidas las reservas) hay una barra "Exportar" con Excel, JPEG, Instagram, X y WhatsApp (`public/share.js`). Siempre exporta lo que se ve: la serie, el modo (ARS/USD, constantes/corrientes, etc.) y el rango elegidos.
+- **Excel**: hoja "Datos" (período como fecha/año real de Excel y una columna por serie) y hoja "Información" (detalle, fuente, resumen, metodología, fecha y enlace). Se genera en el navegador con SheetJS 0.18.5, que se carga recién al apretar el botón.
+- **JPEG**: imagen 1600×900 armada aparte (no una captura): marca, título, detalle, resumen del período, gráfico redibujado en alta resolución, fuente y macrodatos.ar.
+- **Instagram**: imagen 1080×1350 (4:5). **X / WhatsApp**: en el celular se abre el menú de compartir del sistema con la imagen, el texto y el enlace; en la computadora se abre X o WhatsApp Web con texto y enlace, y la imagen queda copiada para pegarla (si el navegador no deja copiarla, se descarga).
+- Enlace compartible por serie: `https://macrodatos.ar/?serie=imports#historicos` abre directamente esa serie.
+
+## v180 — Importaciones y comercio exterior sin depender de Datos Argentina
+
+- El navegador ya no pide a Datos Argentina las series anuales de exportaciones, importaciones y saldo (74.1_*): la de importaciones vuelve vacía, y hasta que llegaba el grupo `history` del backend el gráfico de Importaciones quedaba sin datos. Ahora se lee `public/trade-annual.json` (misma tabla que `src/api/trade-annual.mjs`, más la serie anual de industria), que sólo completa años que el backend todavía no trajo.
+- Con la API caída y sin conexión a Datos Argentina, Balanza comercial, Exportaciones, Importaciones e Industria igual se dibujan completas.
+
 ## v179 — Series de industria y comercio exterior sin huecos
 
 - Datos Argentina devuelve `null` en muchas observaciones (las importaciones y el saldo anual del ICA perdieron decenas de años) y `Number(null)` las convertía en 0: balanza, exportaciones e importaciones mostraban años en cero. `seriesRows` (worker) y `publicSeries` (navegador) ahora descartan los nulls.

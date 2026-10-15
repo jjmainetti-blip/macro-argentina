@@ -167,11 +167,11 @@ async function loadPublicHistorical(){
     publicSeries('45.1_ECTDT_0_A_33',{start_date:'2003-01-01'}),
     worldBankUnemploymentNational(),
     worldBankGdpGrowth(),
-    publicSeries('74.1_IET_0_A_16',{start_date:'1900-01-01'}),
-    publicSeries('74.1_IIT_0_A_25',{start_date:'1900-01-01'}),
-    publicSeries('74.1_SC_0_A_15',{start_date:'1900-01-01'}),
+    // v180: comercio exterior desde la tabla anual completa incluida en el sitio (Datos Argentina ya no devuelve
+    // las importaciones anuales). El backend la actualiza con los años nuevos.
+    fetch('/trade-annual.json?v=180').then(r=>{if(!r.ok)throw new Error('trade-annual '+r.status);return r.json();}),
   ]);
-  const [histIpc,slIpc,natIpc,gdpR,emiR,ipiR,unempR,wbUnempR,wbGdpR,expR,impR,balR]=results;
+  const [histIpc,slIpc,natIpc,gdpR,emiR,ipiR,unempR,wbUnempR,wbGdpR,tradeR]=results;
   if(histIpc.status==='fulfilled'&&slIpc.status==='fulfilled'&&natIpc.status==='fulfilled') buildInflationChain(histIpc.value,slIpc.value,natIpc.value);
   if(gdpR.status==='fulfilled')Object.assign(gdpGrowth,growthObject(annualObject(gdpR.value)));
   // 1961+ usa una serie anual continua de crecimiento real para evitar huecos entre bases históricas.
@@ -184,9 +184,9 @@ async function loadPublicHistorical(){
   else if(wbUnempR.status==='fulfilled')Object.assign(unemployment,wbUnempR.value);
   // Control con los cuatro trimestres publicados por INDEC para 2025: 7,9; 7,6; 6,6; 7,5.
   unemployment[2025]=7.4;
-  if(expR.status==='fulfilled')Object.assign(exportsNominal,annualObject(expR.value));
-  if(impR.status==='fulfilled')Object.assign(importsNominal,annualObject(impR.value));
-  if(balR.status==='fulfilled')Object.assign(tradeBalanceNominal,annualObject(balR.value));
+  // Sólo completa años que el backend todavía no trajo (si ya llegó, su dato manda).
+  if(tradeR.status==='fulfilled'){const T=tradeR.value;for(const [k,target] of [['exports',exportsNominal],['imports',importsNominal],['balance',tradeBalanceNominal]])for(const [y,v] of Object.entries(T[k]||{}))if(!Number(target[y]))target[y]=v;}
+  if(tradeR.status==='fulfilled')for(const [y,v] of Object.entries(tradeR.value.industry||{}))if(industry[y]==null)industry[y]=v;
   for(const y of Object.keys(exportsNominal)) if(importsNominal[y]!=null && tradeBalanceNominal[y]==null) tradeBalanceNominal[y]=Number((exportsNominal[y]-importsNominal[y]).toFixed(1));
   rebuildRealTrade();
   if(Object.keys(salaryRipte).length)applySalaryMode();
@@ -365,6 +365,7 @@ function renderHistory(key){
   document.getElementById('chartSource').textContent='Fuente: '+cfg.source;document.getElementById('methodNote').innerHTML=cfg.note;
   if(key==='inflation'&&shown.length){const a=shown[0][0],b=shown.at(-1)[0];let accumulated=null;if(isInflationMonthly){const firstIndex=inflationIndex[a], lastIndex=inflationIndex[b];if(firstIndex&&lastIndex)accumulated=(lastIndex/firstIndex-1)*100;}else{let f=1;for(const [,v] of shown)f*=1+v/100;accumulated=(f-1)*100;}document.getElementById('periodSummary').innerHTML=accumulated==null?'':`<strong>${isInflationMonthly?displayMonth(a):a}–${isInflationMonthly?displayMonth(b):b}:</strong> inflación acumulada <b>${fmt.format(accumulated)}%</b>.`;}
   else cumulativeSummary(key,shown);
+  {const hc=document.getElementById('historyChart');if(hc){hc._exportKeys=shown.map(x=>x[0]);hc._seriesKey=key;}} // v181: para exportar (Excel / imagen)
   if(historyChart)historyChart.destroy();const asBars=key==='gdp'; // v138: PIB en barras (verde crecimiento, rojo caída), como los gráficos de las tarjetas
   historyChart=new Chart(document.getElementById('historyChart'),{type:asBars?'bar':'line',data:{labels,datasets:[asBars?{label:cfg.title,data:values,backgroundColor:barValueColor,borderColor:barValueColor,borderWidth:0,borderRadius:2,maxBarThickness:22}:{label:cfg.title,data:values,borderColor:'#0b5bd3',backgroundColor:'rgba(11,91,211,.08)',fill:true,tension:.18,pointRadius:shown.length>35?0:2,pointHoverRadius:5,borderWidth:2.3}]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>seriesValueLabel(currentSeries,c.raw)}}},scales:{x:{grid:{display:false},ticks:{maxRotation:0,autoSkip:true,maxTicksLimit:12}},y:{grid:{color:'#edf2f7'},ticks:{callback:v=>seriesTickLabel(currentSeries,v)}}}}});
 }
