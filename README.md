@@ -389,6 +389,11 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 - `public/reserves-components.json`: swap con China (CNY y tipo de cambio), BIS y otros pasivos de corto plazo, SEDESA, oro (toneladas y precio), con notas y fuentes. Actualizar `through` y los componentes cuando cambien (p. ej., pagos del BIS o el swap).
 - `/api/status` → `reserves`: cuántos meses del FMI ya se cargaron y el último error.
 
+## v178 — Medio aguinaldo como botón y aviso configurable
+
+- En el detalle de cada persona, el medio aguinaldo pasa a ser un botón (con el monto estimado y el vencimiento) que despliega el cálculo al apretarlo.
+- Nueva opción en "Avisos por mail": "Avisarme cuando haya que pagar el medio aguinaldo", con anticipación de 1, 3, 5, 7 (por defecto), 10 o 15 días. Es independiente de los avisos de cada pago y usa la misma hora; no se envía si el aguinaldo ya está registrado como pagado.
+
 ## v177 — Medio aguinaldo del personal de casas particulares
 
 - En el detalle de cada persona: medio aguinaldo del semestre actual (estimado al cierre, con los pagos que faltan al monto vigente) y del anterior. 50% de la mayor remuneración mensual devengada del semestre (Ley 26.844), proporcional a los días si empezó a trabajar dentro del semestre; muestra lo devengado mes por mes, el mayor mes, el proporcional a hoy y el vencimiento (30/6 y 31/12).

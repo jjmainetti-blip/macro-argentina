@@ -318,8 +318,8 @@ export async function runReminders(env, { force = false, today = todayAR(), hour
           if (r.date < addDays(today, -2)) { S.notified[r.date] = 'past'; changed = true; continue; }
           queue.push(rc => staffDueMail(env, S, r, R, today, rc, u.email)); S.notified[r.date] = 'sent';
         }
-        // Medio aguinaldo: aviso 7 días antes del vencimiento si no está registrado.
-        if (S.reminders?.mode === 'due') { const A = computeSac(S, today, semesterOf(today)), k = `sac:${A.key}`; if (!S.notified[k] && !A.paid && A.amount > 0 && reached(addDays(A.due, -7), S)) { queue.push(rc => staffSacMail(env, S, A, rc, u.email)); S.notified[k] = 'sent'; } }
+        // Medio aguinaldo: aviso N días antes del vencimiento (opción propia, independiente de los avisos de cada pago) si no está registrado.
+        if (S.reminders?.sac !== false) { const A = computeSac(S, today, semesterOf(today)), k = `sac:${A.key}`; if (!S.notified[k] && !A.paid && A.amount > 0 && reached(addDays(A.due, -(S.reminders?.sacDays ?? 7)), S)) { queue.push(rc => staffSacMail(env, S, A, rc, u.email)); S.notified[k] = 'sent'; } }
         if (S.reminders?.scale !== false && R.official?.from && S.lastScale !== R.official.from) {
           if (S.lastScale) queue.push(rc => staffScaleMail(env, S, R, rc, u.email));
           S.lastScale = R.official.from; changed = true;

@@ -286,8 +286,9 @@
         <div><span>Próxima escala</span><b>${nx ? money(nx.hour) : '—'}</b><small>${nx ? `desde ${esc(day(nx.from))} (+${String(nx.pct).replace('.', ',')}%)` : 'sin aumentos acordados'}</small></div></div>
       ${S.below ? `<p class="acct-warn">Para llegar al mínimo oficial, el pago de ${S.current.hours} h debería ser de al menos <b>${money(o.hour * S.current.hours)}</b>.</p>` : ''}
       ${o?.month ? `<p class="acct-note">Mínimo mensual oficial de la categoría (jornada completa): ${money(o.month)}. Escala de la Comisión Nacional de Trabajo en Casas Particulares${S.zona ? ', con el adicional por zona desfavorable' : ''}; no incluye antigüedad (1% por año).</p>` : ''}
-      <p class="acct-rem">${remindersText({ ...S, reminders: { ...S.reminders, mode: S.reminders.mode === 'due' ? 'adjust' : S.reminders.mode } }).replace('cuando hay un ajuste', 'antes de cada pago')}${S.reminders.scale !== false ? ' · aviso cuando cambia la escala oficial' : ''}</p>
-      <div id="sacBox"></div>
+      <p class="acct-rem">${remindersText({ ...S, reminders: { ...S.reminders, mode: S.reminders.mode === 'due' ? 'adjust' : S.reminders.mode } }).replace('cuando hay un ajuste', 'antes de cada pago')}${S.reminders.scale !== false ? ' · aviso cuando cambia la escala oficial' : ''}${S.reminders.sac !== false ? ` · aviso del medio aguinaldo ${S.reminders.sacDays ?? 7} días antes del vencimiento` : ''}</p>
+      ${S.sac?.current ? `<button type="button" class="acct-sac-btn" id="sacToggle" aria-expanded="false"><span>Medio aguinaldo</span><b>${money(S.sac.current.amount)}</b><small>${esc(S.sac.current.label)}${S.sac.current.paid ? ' · pagado' : ` · vence ${esc(day(S.sac.current.due))}`}</small><i aria-hidden="true">▾</i></button>` : ''}
+      <div id="sacBox" hidden></div>
       <h3 class="acct-h3b">Pagos</h3>
       <div class="upd-table-wrap acct-loan-table"><table class="upd-table acct-table acct-pay-table"><thead><tr><th>Fecha</th><th>A pagar</th><th>Pagado</th><th>Diferencia</th><th></th></tr></thead><tbody>
       ${rows.map(r => `<tr class="${r.past || r.today ? '' : 'acct-future'}${S.next && r.date === S.next.date ? ' acct-next-row' : ''}" data-date="${r.date}"><td>${esc(day(r.date))}${r.carryIn ? `<small>${r.carryIn > 0 ? '+' : '−'}${money(Math.abs(r.carryIn))} anterior</small>` : ''}</td><td><strong>${money(r.expected)}</strong></td>
@@ -301,7 +302,8 @@
       <div class="acct-payform" id="importForm" hidden></div>
       <p class="acct-msg" role="status"></p>`;
     const msg = body.querySelector('.acct-msg'), pf = body.querySelector('#payForm');
-    renderSac(S, body.querySelector('#sacBox'), 'current');
+    const sacBox = body.querySelector('#sacBox'), sacBtn = body.querySelector('#sacToggle');
+    sacBtn?.addEventListener('click', () => { const open = sacBox.hidden; sacBox.hidden = !open; sacBtn.setAttribute('aria-expanded', String(open)); if (open && !sacBox.firstChild) renderSac(S, sacBox, 'current'); });
     const refresh = async j => { const i = state.staff.findIndex(x => x.id === S.id); if (j?.staff && i >= 0) state.staff[i] = j.staff; openStaff(state.staff[i]); viewAccountKeepModal(); };
     body.querySelectorAll('[data-pay]').forEach(b => b.onclick = () => {
       const tr = b.closest('tr'), r = S.rows.find(x => x.date === tr.dataset.date);
@@ -402,9 +404,11 @@
       <fieldset class="acct-fs"><legend>Avisos por mail</legend><div class="acct-fields">
         <label>Antes de cada pago<select name="mode"><option value="due"${r.mode === 'due' ? ' selected' : ''}>Avisarme</option><option value="off"${r.mode === 'off' ? ' selected' : ''}>No avisar</option></select></label>
         <label data-due>Anticipación<select name="daysBefore">${[0, 1, 2, 3, 5, 7].map(k => `<option value="${k}"${(r.daysBefore || 0) === k ? ' selected' : ''}>${k ? `${k} ${k === 1 ? 'día' : 'días'} antes` : 'El mismo día'}</option>`).join('')}</select></label>
-        <label data-due>Hora del aviso<select name="hour">${Array.from({ length: 24 }, (_, h) => `<option value="${h}"${(r.hour ?? 9) === h ? ' selected' : ''}>${String(h).padStart(2, '0')}:00</option>`).join('')}</select></label>
+        <label data-hour>Hora de los avisos<select name="hour">${Array.from({ length: 24 }, (_, h) => `<option value="${h}"${(r.hour ?? 9) === h ? ' selected' : ''}>${String(h).padStart(2, '0')}:00</option>`).join('')}</select></label>
         <label class="acct-check" data-due><input type="checkbox" name="skipPaid"${r.skipPaid !== false ? ' checked' : ''}> No avisar si ese pago ya está registrado</label>
         <label class="acct-check"><input type="checkbox" name="scale"${r.scale !== false ? ' checked' : ''}> Avisarme cuando cambie la escala oficial</label>
+        <label class="acct-check"><input type="checkbox" name="sac"${r.sac !== false ? ' checked' : ''}> Avisarme cuando haya que pagar el medio aguinaldo</label>
+        <label data-sac>Anticipación del aviso de aguinaldo<select name="sacDays">${[1, 3, 5, 7, 10, 15].map(k => `<option value="${k}"${(r.sacDays ?? 7) === k ? ' selected' : ''}>${k} ${k === 1 ? 'día' : 'días'} antes (vence 30/6 y 31/12)</option>`).join('')}</select></label>
         <label class="acct-check"><input type="checkbox" name="self"${r.self !== false ? ' checked' : ''}> Enviarme a mí (${esc(state.user.email)})</label>
         <label class="wide">Otras direcciones (hasta 3, separadas por coma)<input name="others" value="${esc((S?.recipients || []).map(x => x.email).join(', '))}"><small>Cada dirección nueva recibe un mail para confirmar antes de empezar a recibir avisos.</small></label>
       </div></fieldset>
@@ -413,9 +417,9 @@
       <p class="acct-msg" id="staffFormMsg" role="status"></p></form>`;
     const f = document.getElementById('staffForm');
     const PER = { jornada: 'jornada', semanal: 'semana', quincenal: 'quincena', mensual: 'mes' };
-    const sync = () => { f.querySelectorAll('[data-f]').forEach(el => el.hidden = el.dataset.f !== f.freq.value); f.querySelector('[data-ret]').hidden = f.category.value === 'caseros'; f.querySelectorAll('[data-due]').forEach(el => el.hidden = f.mode.value === 'off'); document.getElementById('perLbl').textContent = PER[f.freq.value]; document.getElementById('perLbl2').textContent = PER[f.freq.value]; };
+    const sync = () => { f.querySelectorAll('[data-f]').forEach(el => el.hidden = el.dataset.f !== f.freq.value); f.querySelector('[data-ret]').hidden = f.category.value === 'caseros'; f.querySelectorAll('[data-due]').forEach(el => el.hidden = f.mode.value === 'off'); f.querySelector('[data-sac]').hidden = !f.sac.checked; f.querySelector('[data-hour]').hidden = f.mode.value === 'off' && !f.sac.checked; document.getElementById('perLbl').textContent = PER[f.freq.value]; document.getElementById('perLbl2').textContent = PER[f.freq.value]; };
     const read = () => ({ name: f.name.value, category: f.category.value, retiro: f.retiro.value, zona: f.zona.checked, freq: f.freq.value, payDay: f.freq.value === 'semanal' ? Number(f.payDayW.value) : Number(f.payDayM.value), workDays: [...f.querySelectorAll('[name=wd]:checked')].map(x => Number(x.value)), amount: f.amount.value, hours: f.hours.value, start: f.start.value, effective: f.effective?.value || '', notes: f.notes.value,
-      reminders: { mode: f.mode.value, daysBefore: Number(f.daysBefore.value), hour: Number(f.hour.value), skipPaid: f.skipPaid.checked, scale: f.scale.checked, self: f.self.checked, others: f.others.value } });
+      reminders: { mode: f.mode.value, daysBefore: Number(f.daysBefore.value), hour: Number(f.hour.value), skipPaid: f.skipPaid.checked, scale: f.scale.checked, sac: f.sac.checked, sacDays: Number(f.sacDays.value), self: f.self.checked, others: f.others.value } });
     let t = null, seq = 0;
     const preview = () => { clearTimeout(t); t = setTimeout(async () => {
       const pv = document.getElementById('staffPreview'); if (!pv || !f.isConnected) return;

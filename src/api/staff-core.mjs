@@ -35,6 +35,8 @@ export function normalizeStaff(x, { maxRecipients = 3 } = {}) {
       hour: Number.isInteger(Number(x?.reminders?.hour)) && Number(x.reminders.hour) >= 0 && Number(x.reminders.hour) <= 23 ? Number(x.reminders.hour) : 9,
       skipPaid: x?.reminders?.skipPaid !== false,
       scale: x?.reminders?.scale !== false,
+      sac: x?.reminders?.sac !== false,
+      sacDays: [1, 3, 5, 7, 10, 15].includes(Number(x?.reminders?.sacDays)) ? Number(x.reminders.sacDays) : 7,
       self: x?.reminders?.self !== false,
       others: [...new Set((Array.isArray(x?.reminders?.others) ? x.reminders.others : String(x?.reminders?.others || '').split(/[\s,;]+/))
         .map(e => String(e || '').trim().toLowerCase()).filter(Boolean))].slice(0, maxRecipients + 1),
