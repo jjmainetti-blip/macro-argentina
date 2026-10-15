@@ -10,7 +10,7 @@
 // Mails: Resend (secreto RESEND_API_KEY; remitente MAIL_FROM, por defecto "Macrodatos <avisos@macrodatos.ar>").
 import { BUNDLED_SOURCES } from './bundled-history.mjs';
 import { normalizeLoan, computeLoan, SYSTEMS, ADJUST } from './loans-core.mjs';
-import { normalizeStaff, computeStaff, payDates, STAFF_FREQ, WEEKDAYS } from './staff-core.mjs';
+import { normalizeStaff, computeStaff, payDates, computeSac, semesterOf, prevSemester, STAFF_FREQ, WEEKDAYS } from './staff-core.mjs';
 import { STAFF_SCALE, STAFF_CATEGORIES, ZONA_PCT } from './casas-scale.mjs';
 import { normalizeContract, computeContract, INDEX_NAMES, freqText, dateLabel, monthLabel, ipcWindowText, pendingHint, addDays } from './contracts-core.mjs';
 
@@ -230,7 +230,7 @@ function publicStaff(S, today) {
   const R = computeStaff(S, today);
   return { id: S.id, type: 'staff', name: S.name, category: S.category, retiro: S.retiro, zona: S.zona, freq: S.freq, amount: S.amount, hours: S.hours, payDay: S.payDay, workDays: S.workDays, start: S.start, notes: S.notes || '',
     reminders: { ...S.reminders, others: (S.recipients || []).map(r => r.email) }, recipients: (S.recipients || []).map(r => ({ email: r.email, status: r.status })),
-    rows: R.rows.slice(-600), hourly: R.hourly, official: R.official, nextOfficial: R.nextOfficial, gapPct: R.gapPct, below: R.below, next: R.next, pendingCount: R.pendingCount, trackFrom: R.trackFrom, current: R.current, rates: S.rates || [] };
+    rows: R.rows.slice(-600), hourly: R.hourly, official: R.official, nextOfficial: R.nextOfficial, gapPct: R.gapPct, below: R.below, next: R.next, pendingCount: R.pendingCount, trackFrom: R.trackFrom, current: R.current, rates: S.rates || [], sac: (() => { const cur = semesterOf(today); return { current: computeSac(S, today, cur), previous: computeSac(S, today, prevSemester(cur.key)) }; })() };
 }
 export function staffDueMail(env, S, row, R, today, rcpt, owner) {
   const title = `${S.name}: pago ${row.date > today ? 'del' : 'de hoy,'} ${dateLabel(row.date)}`;
@@ -250,6 +250,13 @@ export function staffScaleMail(env, S, R, rcpt, owner) {
   return { subject: `${S.name}: la escala oficial subió ${o.pct ? `${String(o.pct).replace('.', ',')}% ` : ''}en ${monthLabel(o.from)}`, text: `${title}\nMínimo por hora: ${money(o.hour)}\nPagás: ${money(R.hourly)} por hora\n\nVer: ${site(env)}/#cuenta`, html: layout(env, { title, intro: `${esc(staffFacts(S))}. Escala de la Comisión Nacional de Trabajo en Casas Particulares.`, body: table(lines) + sug, button: { href: `${site(env)}/#cuenta`, label: 'Ver el detalle' }, footer: footerFor(env, rcpt, owner).replace('de este contrato', 'de este pago') }) };
 }
 const row_ = (k, v, strong) => row(k, v, strong);
+export function staffSacMail(env, S, A, rcpt, owner) {
+  const title = `${S.name}: medio aguinaldo del ${A.label}`;
+  const lines = [row_('Medio aguinaldo', money(A.amount), true), row_(`Mayor remuneración mensual (${monthLabel(A.best?.ym || A.from.slice(0, 7))})`, money(A.best?.amount || 0))];
+  if (!A.full) lines.push(row_('Proporcional', `${A.workedDays} de ${A.semDays} días`));
+  lines.push(row_('Vence', esc(dateLabel(A.due))));
+  return { subject: `${S.name}: medio aguinaldo ${money(A.amount)} · vence el ${dateLabel(A.due)}`, text: `${title}\nMonto: ${money(A.amount)}\nVence: ${dateLabel(A.due)}\n\nRegistrar el pago: ${site(env)}/#cuenta`, html: layout(env, { title, intro: `${esc(staffFacts(S))}. 50% de la mayor remuneración mensual devengada en el semestre${A.full ? '' : ', proporcional a los días trabajados'}${A.projected ? ' (los pagos que faltan hasta fin del semestre se estiman con el monto vigente)' : ''}.`, body: table(lines), button: { href: `${site(env)}/#cuenta`, label: 'Registrar el pago' }, footer: footerFor(env, rcpt, owner).replace('de este contrato', 'de este pago') }) };
+}
 
 // ── Destinatarios ─────────────────────────────────────────────────────────────────────────────────────────────
 function recipientsFor(u, c) {
@@ -311,6 +318,8 @@ export async function runReminders(env, { force = false, today = todayAR(), hour
           if (r.date < addDays(today, -2)) { S.notified[r.date] = 'past'; changed = true; continue; }
           queue.push(rc => staffDueMail(env, S, r, R, today, rc, u.email)); S.notified[r.date] = 'sent';
         }
+        // Medio aguinaldo: aviso 7 días antes del vencimiento si no está registrado.
+        if (S.reminders?.mode === 'due') { const A = computeSac(S, today, semesterOf(today)), k = `sac:${A.key}`; if (!S.notified[k] && !A.paid && A.amount > 0 && reached(addDays(A.due, -7), S)) { queue.push(rc => staffSacMail(env, S, A, rc, u.email)); S.notified[k] = 'sent'; } }
         if (S.reminders?.scale !== false && R.official?.from && S.lastScale !== R.official.from) {
           if (S.lastScale) queue.push(rc => staffScaleMail(env, S, R, rc, u.email));
           S.lastScale = R.official.from; changed = true;
@@ -515,7 +524,7 @@ export async function accountApi(request, env, ctx, url) {
     u.staff = [...(u.staff || []), S]; await saveUser(env, u);
     return json({ ok: true, staff: publicStaff(S, today) });
   }
-  const ms = p.match(/^\/api\/account\/staff\/([\w-]{6,20})(\/test|\/pay|\/import)?$/);
+  const ms = p.match(/^\/api\/account\/staff\/([\w-]{6,20})(\/test|\/pay|\/import|\/sac)?$/);
   if (ms) {
     const i = (u.staff || []).findIndex(x => x.id === ms[1]); if (i < 0) return json({ error: 'No existe ese registro.' }, 404);
     const prev = u.staff[i];
@@ -565,6 +574,14 @@ export async function accountApi(request, env, ctx, url) {
       prev.notified ||= {}; for (const p of periods) if (p < today) prev.notified[p] = prev.notified[p] || 'past';
       prev.updatedAt = new Date().toISOString(); await saveUser(env, u);
       return json({ ok: true, imported, kept, unmatched, periods: agg.size, staff: publicStaff(prev, today) });
+    }
+    if (ms[2] === '/sac' && method === 'POST') {
+      const b = await readJson(request), key = String(b?.key || '');
+      if (!/^\d{4}-S[12]$/.test(key)) return json({ error: 'Semestre inválido.' }, 400);
+      prev.sac ||= {};
+      if (b?.remove) delete prev.sac[key];
+      else { const paid = Math.round(Number(String(b?.paid ?? '').replace(/\./g, '').replace(',', '.')) * 100) / 100; if (!(paid >= 0 && paid < 1e11)) return json({ error: 'Indicá el monto pagado.' }, 400); prev.sac[key] = { paid, at: new Date().toISOString() }; }
+      await saveUser(env, u); return json({ ok: true, staff: publicStaff(prev, today) });
     }
     if (ms[2] === '/pay' && method === 'POST') {
       const b = await readJson(request), d = String(b?.date || '');

@@ -220,3 +220,8 @@ body.modal-open{overflow:hidden}
 .acct-bad{color:#b4232f!important}.acct-good{color:var(--green)!important}.acct-pay-table td small{display:block}
 .acct-payform{border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-top:12px;background:#fbfdff}.acct-payform h4{margin:0 0 4px;font-size:15px}
 .acct-days{display:flex;flex-wrap:wrap;gap:4px 14px;align-items:center;margin:10px 0}.acct-days>span{width:100%;font-size:11px;font-weight:800;color:#40556e}.acct-form .acct-days label.acct-check{margin:2px 0}.acct-days[hidden]{display:none}
+/* v177 · Medio aguinaldo */
+.acct-sac{border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin:16px 0 6px;background:#fbfdff}.acct-sac-head{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}.acct-sac-head h3{margin:0;font-size:17px}
+.acct-sac-months{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;margin:8px 0}.acct-sac-months span{display:grid;border:1px solid var(--line);border-radius:9px;padding:6px 8px;font-size:12px;background:#fff}.acct-sac-months span b{font-size:10px;text-transform:uppercase;color:var(--muted)}.acct-sac-months span small{font-size:10px;color:var(--muted)}.acct-sac-months span.best{border-color:#0b5bd3;background:#eef5ff}.acct-sac-months span.proj{font-style:italic}
+.acct-sac-input{padding:7px 10px;border:1px solid #cfdbe8;border-radius:8px;font:inherit;width:140px}
+@media(max-width:620px){.acct-sac-months{grid-template-columns:repeat(3,1fr)}}

@@ -389,6 +389,12 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 - `public/reserves-components.json`: swap con China (CNY y tipo de cambio), BIS y otros pasivos de corto plazo, SEDESA, oro (toneladas y precio), con notas y fuentes. Actualizar `through` y los componentes cuando cambien (p. ej., pagos del BIS o el swap).
 - `/api/status` → `reserves`: cuántos meses del FMI ya se cargaron y el último error.
 
+## v177 — Medio aguinaldo del personal de casas particulares
+
+- En el detalle de cada persona: medio aguinaldo del semestre actual (estimado al cierre, con los pagos que faltan al monto vigente) y del anterior. 50% de la mayor remuneración mensual devengada del semestre (Ley 26.844), proporcional a los días si empezó a trabajar dentro del semestre; muestra lo devengado mes por mes, el mayor mes, el proporcional a hoy y el vencimiento (30/6 y 31/12).
+- Se puede registrar el pago del aguinaldo; si no está registrado, llega un aviso por mail 7 días antes del vencimiento (a la hora elegida).
+- Cálculo en `computeSac` (`src/api/staff-core.mjs`): suma de los montos de cada pago del mes (sin diferencias arrastradas ni pagos extra); no incluye antigüedad.
+
 ## v176 — Importar pagos y hora de los avisos
 
 - Personal de casas particulares → **Importar pagos (CSV)**: columnas fecha (o fecha_pago) y monto; opcionales semana, arrastrar_diferencia (sí/no) y nota. Cada fila se asigna a una fecha de pago de la tarjeta (por la semana o por la fecha más cercana) y las filas del mismo período se suman. Opciones: armar el historial de montos (un monto nuevo rige cuando se repite 3 períodos seguidos; aguinaldos y pagos sueltos no lo cambian), adelantar el inicio al primer pago y reemplazar pagos ya registrados.

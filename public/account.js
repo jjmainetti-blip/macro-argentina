@@ -287,6 +287,7 @@
       ${S.below ? `<p class="acct-warn">Para llegar al mínimo oficial, el pago de ${S.current.hours} h debería ser de al menos <b>${money(o.hour * S.current.hours)}</b>.</p>` : ''}
       ${o?.month ? `<p class="acct-note">Mínimo mensual oficial de la categoría (jornada completa): ${money(o.month)}. Escala de la Comisión Nacional de Trabajo en Casas Particulares${S.zona ? ', con el adicional por zona desfavorable' : ''}; no incluye antigüedad (1% por año).</p>` : ''}
       <p class="acct-rem">${remindersText({ ...S, reminders: { ...S.reminders, mode: S.reminders.mode === 'due' ? 'adjust' : S.reminders.mode } }).replace('cuando hay un ajuste', 'antes de cada pago')}${S.reminders.scale !== false ? ' · aviso cuando cambia la escala oficial' : ''}</p>
+      <div id="sacBox"></div>
       <h3 class="acct-h3b">Pagos</h3>
       <div class="upd-table-wrap acct-loan-table"><table class="upd-table acct-table acct-pay-table"><thead><tr><th>Fecha</th><th>A pagar</th><th>Pagado</th><th>Diferencia</th><th></th></tr></thead><tbody>
       ${rows.map(r => `<tr class="${r.past || r.today ? '' : 'acct-future'}${S.next && r.date === S.next.date ? ' acct-next-row' : ''}" data-date="${r.date}"><td>${esc(day(r.date))}${r.carryIn ? `<small>${r.carryIn > 0 ? '+' : '−'}${money(Math.abs(r.carryIn))} anterior</small>` : ''}</td><td><strong>${money(r.expected)}</strong></td>
@@ -300,6 +301,7 @@
       <div class="acct-payform" id="importForm" hidden></div>
       <p class="acct-msg" role="status"></p>`;
     const msg = body.querySelector('.acct-msg'), pf = body.querySelector('#payForm');
+    renderSac(S, body.querySelector('#sacBox'), 'current');
     const refresh = async j => { const i = state.staff.findIndex(x => x.id === S.id); if (j?.staff && i >= 0) state.staff[i] = j.staff; openStaff(state.staff[i]); viewAccountKeepModal(); };
     body.querySelectorAll('[data-pay]').forEach(b => b.onclick = () => {
       const tr = b.closest('tr'), r = S.rows.find(x => x.date === tr.dataset.date);
@@ -357,6 +359,25 @@
         const m = document.querySelector('.acct-modal .acct-msg'); if (m) m.textContent = `Listo: ${j.imported} pagos importados${j.kept ? `, ${j.kept} ya registrados se mantuvieron` : ''}${j.unmatched ? `, ${j.unmatched} filas no coincidieron con ninguna fecha de pago` : ''}.`;
       } catch (err) { info.textContent = err.message; b.disabled = false; }
     };
+  }
+
+  // v177 · Medio aguinaldo (SAC).
+  function renderSac(S, box, which) {
+    const A = S.sac?.[which]; if (!A || !box) return;
+    const MESL = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+    const months = Object.entries(A.months);
+    box.innerHTML = `<div class="acct-sac"><div class="acct-sac-head"><h3>Medio aguinaldo</h3><div class="segmented compact"><button type="button" data-sem="current" class="${which === 'current' ? 'active' : ''}">Semestre actual</button><button type="button" data-sem="previous" class="${which === 'previous' ? 'active' : ''}">Anterior</button></div></div>
+      <div class="acct-loan-sum"><div><span>${esc(A.label)}</span><b>${money(A.amount)}</b><small>${A.projected ? 'estimado al cierre del semestre' : 'devengado'}${A.full ? '' : ` · proporcional ${A.workedDays}/${A.semDays} días`}</small></div>
+        <div><span>Mayor mes</span><b>${money(A.best?.amount)}</b><small>${A.best ? esc(MESL[Number(A.best.ym.slice(5)) - 1] + ' ' + A.best.ym.slice(0, 4)) : ''}</small></div>
+        ${A.toDate != null ? `<div><span>Proporcional a hoy</span><b>${money(A.toDate)}</b><small>si la relación terminara hoy</small></div>` : ''}
+        <div><span>Vence</span><b>${esc(day(A.due))}</b><small>${A.paid ? `pagado: ${money(A.paid.paid)}` : 'sin registrar'}</small></div></div>
+      <div class="acct-sac-months">${months.map(([k, M]) => `<span class="${A.best?.ym === k ? 'best' : ''}${M.projected ? ' proj' : ''}"><b>${MESL[Number(k.slice(5)) - 1]}</b>${money(M.accrued)}<small>${M.periods} ${M.periods === 1 ? 'pago' : 'pagos'}${M.projected ? ' · estimado' : ''}</small></span>`).join('')}</div>
+      <p class="acct-note">50% de la mayor remuneración mensual devengada del semestre (Ley 26.844); si no trabajó el semestre completo, proporcional a los días. Se calcula con los montos de cada pago (sin diferencias arrastradas ni pagos extra); no incluye antigüedad.</p>
+      <div class="acct-actions">${A.paid ? `<button class="link-btn" data-sacundo>Deshacer pago registrado</button>` : `<input class="acct-sac-input" inputmode="decimal" value="${String(A.amount).replace('.', ',')}" aria-label="Monto pagado"><button class="btn small" data-sacpay>Registrar pago del aguinaldo</button>`}</div></div>`;
+    box.querySelectorAll('[data-sem]').forEach(b => b.onclick = () => renderSac(S, box, b.dataset.sem));
+    const upd = j => { const i = state.staff.findIndex(x => x.id === S.id); if (i >= 0 && j?.staff) { state.staff[i] = j.staff; renderSac(j.staff, box, which); } };
+    box.querySelector('[data-sacpay]')?.addEventListener('click', async () => { try { upd(await api(`/staff/${S.id}/sac`, { method: 'POST', body: { key: A.key, paid: box.querySelector('.acct-sac-input').value } })); } catch (e) { alert(e.message); } });
+    box.querySelector('[data-sacundo]')?.addEventListener('click', async () => { try { upd(await api(`/staff/${S.id}/sac`, { method: 'POST', body: { key: A.key, remove: true } })); } catch (e) { alert(e.message); } });
   }
   function openStaffForm(S) {
     const box = openModal('acct-modal-wide'), r = S?.reminders || { mode: 'due', daysBefore: 1, self: true, scale: true };

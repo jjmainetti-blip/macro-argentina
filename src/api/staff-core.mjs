@@ -108,3 +108,30 @@ export function computeStaff(S, today, { horizon = 40 } = {}) {
   const gapPct = hourly && off.hour ? r2((hourly / off.hour - 1) * 100) : null;
   return { rows, hourly, official: off, nextOfficial: next, gapPct, below: gapPct != null && gapPct < -0.05, next: nextRow, pendingCount: pending.length, trackFrom, current: cur };
 }
+
+// ── v177 · Medio aguinaldo (SAC, Ley 26.844) ───────────────────────────────────────────────────────────────────
+// 50% de la mayor remuneración mensual devengada en el semestre (enero–junio / julio–diciembre). Si no trabajó el
+// semestre completo, proporcional a los días trabajados. Vence el 30 de junio y el 31 de diciembre.
+// Remuneración mensual devengada = suma de los montos de los pagos (sin arrastres) cuyas fechas caen en ese mes.
+export function semesterOf(d) { const y = d.slice(0, 4), h = Number(d.slice(5, 7)) <= 6 ? 1 : 2; return { key: `${y}-S${h}`, from: `${y}-${h === 1 ? '01-01' : '07-01'}`, to: `${y}-${h === 1 ? '06-30' : '12-31'}`, due: `${y}-${h === 1 ? '06-30' : '12-31'}`, label: `${h === 1 ? 'primer' : 'segundo'} semestre ${y}` }; }
+export function prevSemester(key) { const [y, h] = key.split('-S').map(Number); return h === 2 ? semesterOf(`${y}-01-15`) : semesterOf(`${y - 1}-07-15`); }
+export function computeSac(S, today, sem = semesterOf(today)) {
+  const dates = payDates(S, sem.to).filter(d => d >= sem.from && d <= sem.to);
+  const months = {};
+  for (let m = Number(sem.from.slice(5, 7)); m <= Number(sem.to.slice(5, 7)); m++) months[`${sem.from.slice(0, 4)}-${String(m).padStart(2, '0')}`] = { accrued: 0, periods: 0, projected: false };
+  for (const d of dates) { const r = rateAt(S, d), M = months[d.slice(0, 7)]; if (!M) continue; M.accrued = r2(M.accrued + r.amount); M.periods++; if (d > today) M.projected = true; }
+  const best = Object.entries(months).sort((a, b) => b[1].accrued - a[1].accrued)[0];
+  const start = S.start > sem.from ? S.start : sem.from, end = sem.to;
+  const semDays = (Date.parse(sem.to) - Date.parse(sem.from)) / 864e5 + 1, worked = Math.max(0, (Date.parse(end) - Date.parse(start)) / 864e5 + 1);
+  const full = start === sem.from, factor = full ? 1 : worked / semDays;
+  const amount = best ? r2(best[1].accrued / 2 * factor) : 0;
+  // A la fecha (si el semestre está en curso): proporcional a los días transcurridos, con lo devengado hasta hoy.
+  let toDate = null;
+  if (today < sem.to && today >= sem.from) {
+    const past = Object.entries(months).map(([k, M]) => [k, dates.filter(d => d.slice(0, 7) === k && d <= today).reduce((a, d) => a + rateAt(S, d).amount, 0)]);
+    const bestPast = past.sort((a, b) => b[1] - a[1])[0]; const days = Math.max(0, (Date.parse(today) - Date.parse(start)) / 864e5 + 1);
+    toDate = bestPast ? r2(bestPast[1] / 2 * days / semDays) : 0;
+  }
+  const paid = S.sac?.[sem.key] || null;
+  return { ...sem, months, best: best ? { ym: best[0], amount: best[1].accrued } : null, full, factor: r2(factor * 10000) / 10000, workedDays: Math.round(worked), semDays, amount, toDate, inProgress: today <= sem.to, paid, projected: Object.values(months).some(M => M.projected) };
+}
