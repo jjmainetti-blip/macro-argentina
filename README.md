@@ -389,6 +389,13 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 - `public/reserves-components.json`: swap con China (CNY y tipo de cambio), BIS y otros pasivos de corto plazo, SEDESA, oro (toneladas y precio), con notas y fuentes. Actualizar `through` y los componentes cuando cambien (p. ej., pagos del BIS o el swap).
 - `/api/status` → `reserves`: cuántos meses del FMI ya se cargaron y el último error.
 
+## v175 — Personal de casas particulares en Mi cuenta
+
+- Nueva sección junto a contratos y créditos: nombre, categoría de la escala oficial (supervisor/a, tareas específicas, caseros, cuidado de personas, tareas generales), con o sin retiro, zona desfavorable, frecuencia de pago (por jornada con los días que trabaja, semanal con el día, quincenal o mensual con el día del mes), monto y horas por período → valor por hora.
+- Registro de pagos: en cada fecha se marca cuánto se pagó; si fue menos (o más), se elige si la diferencia se suma (o descuenta) en el pago siguiente. Cambios de monto u horas con fecha "vigente desde" sin alterar los pagos anteriores.
+- Comparación con la escala oficial de la Comisión Nacional de Trabajo en Casas Particulares (`src/api/casas-scale.mjs`, historia dic 2023–dic 2026, resoluciones CNTCP; zona desfavorable +30%/+31%): mínimo por hora vigente, diferencia en %, próxima escala acordada y monto mínimo sugerido si se paga por debajo.
+- Avisos por mail antes de cada pago (incluye la diferencia arrastrada) y cuando empieza una escala oficial nueva. **Actualizar `casas-scale.mjs` cuando la CNTCP publique una resolución nueva** (la última cargada llega a diciembre 2026).
+
 ## v174 — Logo nuevo
 
 - Logo: M maciza azul marino cruzada por una línea de tendencia ascendente celeste (`public/logo.svg`); favicon con la misma idea y trazos más gruesos para que se lea en 16 px (`public/favicon.svg`).

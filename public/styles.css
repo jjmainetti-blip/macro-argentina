@@ -216,3 +216,7 @@ body.modal-open{overflow:hidden}
 .acct-loan-sum{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:14px 0 4px}.acct-loan-sum>div{background:#f4f8fc;border-radius:11px;padding:10px 12px;display:grid}.acct-loan-sum span{font-size:10px;text-transform:uppercase;letter-spacing:.07em;font-weight:800;color:var(--muted)}.acct-loan-sum b{font-size:17px;color:var(--navy)}.acct-loan-sum small{font-size:11px;color:var(--muted)}
 .acct-loan-table{max-height:420px!important}.acct-table tr.acct-next-row td{background:#fff7e0!important;font-weight:700}
 @media(max-width:760px){.acct-loan-sum{grid-template-columns:1fr 1fr}}
+/* v175 · Personal de casas particulares */
+.acct-bad{color:#b4232f!important}.acct-good{color:var(--green)!important}.acct-pay-table td small{display:block}
+.acct-payform{border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-top:12px;background:#fbfdff}.acct-payform h4{margin:0 0 4px;font-size:15px}
+.acct-days{display:flex;flex-wrap:wrap;gap:4px 14px;align-items:center;margin:10px 0}.acct-days>span{width:100%;font-size:11px;font-weight:800;color:#40556e}.acct-form .acct-days label.acct-check{margin:2px 0}.acct-days[hidden]{display:none}

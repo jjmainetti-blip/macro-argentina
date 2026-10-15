@@ -10,6 +10,8 @@
 // Mails: Resend (secreto RESEND_API_KEY; remitente MAIL_FROM, por defecto "Macrodatos <avisos@macrodatos.ar>").
 import { BUNDLED_SOURCES } from './bundled-history.mjs';
 import { normalizeLoan, computeLoan, SYSTEMS, ADJUST } from './loans-core.mjs';
+import { normalizeStaff, computeStaff, STAFF_FREQ, WEEKDAYS } from './staff-core.mjs';
+import { STAFF_SCALE, STAFF_CATEGORIES, ZONA_PCT } from './casas-scale.mjs';
 import { normalizeContract, computeContract, INDEX_NAMES, freqText, dateLabel, monthLabel, ipcWindowText, pendingHint, addDays } from './contracts-core.mjs';
 
 const SNAP_CORE = 'macro:snapshot:v131:core';
@@ -217,7 +219,37 @@ function markPastLoan(L, idx, today) {
   const R = computeLoan(L, idx, today); if (R.error) return;
   for (const r of R.rows) if (r.date < today) L.notified[r.k] = 'past';
 }
-const findItem = (u, id) => (u?.contracts || []).find(x => x.id === id) || (u?.loans || []).find(x => x.id === id);
+const findItem = (u, id) => (u?.contracts || []).find(x => x.id === id) || (u?.loans || []).find(x => x.id === id) || (u?.staff || []).find(x => x.id === id);
+
+// ── v175 · Personal de casas particulares ────────────────────────────────────────────────────────────────────
+function staffFacts(S) {
+  const f = S.freq === 'semanal' ? `semanal (${WEEKDAYS[S.payDay]})` : S.freq === 'mensual' ? `mensual (día ${S.payDay})` : S.freq === 'jornada' ? `por jornada (${S.workDays.map(d => WEEKDAYS[d].slice(0, 3)).join(', ')})` : 'quincenal';
+  return `${STAFF_CATEGORIES[S.category]} · ${S.category === 'caseros' ? '' : `${S.retiro} retiro · `}pago ${f}`;
+}
+function publicStaff(S, today) {
+  const R = computeStaff(S, today);
+  return { id: S.id, type: 'staff', name: S.name, category: S.category, retiro: S.retiro, zona: S.zona, freq: S.freq, amount: S.amount, hours: S.hours, payDay: S.payDay, workDays: S.workDays, start: S.start, notes: S.notes || '',
+    reminders: { ...S.reminders, others: (S.recipients || []).map(r => r.email) }, recipients: (S.recipients || []).map(r => ({ email: r.email, status: r.status })),
+    rows: R.rows.slice(-40), hourly: R.hourly, official: R.official, nextOfficial: R.nextOfficial, gapPct: R.gapPct, below: R.below, next: R.next, pendingCount: R.pendingCount, trackFrom: R.trackFrom, current: R.current, rates: S.rates || [] };
+}
+export function staffDueMail(env, S, row, R, today, rcpt, owner) {
+  const title = `${S.name}: pago ${row.date > today ? 'del' : 'de hoy,'} ${dateLabel(row.date)}`;
+  const lines = [row_('Monto a pagar', money(row.expected), true)];
+  if (row.carryIn) lines.push(row_(row.carryIn > 0 ? 'Incluye diferencia del pago anterior' : 'Descuenta lo pagado de más antes', money(Math.abs(row.carryIn))));
+  lines.push(row_('Horas del período', `${String(row.hours).replace('.', ',')} h`), row_('Valor por hora', money(row.base / row.hours)));
+  if (R.official?.hour) lines.push(row_(`Mínimo oficial por hora (${S.category === 'caseros' ? 'caseros' : `${S.retiro} retiro`})`, money(R.official.hour)));
+  const warn = R.below ? `<p style="font-size:13px;color:#b4232f;margin:10px 0 0">El valor por hora que pagás está ${Math.abs(R.gapPct).toFixed(1).replace('.', ',')}% por debajo del mínimo oficial vigente.</p>` : '';
+  const text = [title, '', `Monto a pagar: ${money(row.expected)}`, row.carryIn ? `Incluye diferencia anterior: ${money(row.carryIn)}` : '', `Valor por hora: ${money(row.base / row.hours)}`, R.official?.hour ? `Mínimo oficial por hora: ${money(R.official.hour)}` : '', '', staffFacts(S), '', `Registrar el pago: ${site(env)}/#cuenta`, `Darse de baja: ${unsubLinks(env, rcpt.token).page}`].filter(Boolean).join('\n');
+  return { subject: `${S.name}: pagar ${money(row.expected)} el ${dateLabel(row.date)}`, text, html: layout(env, { title, intro: esc(staffFacts(S)), body: table(lines) + warn, button: { href: `${site(env)}/#cuenta`, label: 'Registrar el pago' }, footer: footerFor(env, rcpt, owner).replace('de este contrato', 'de este pago') }) };
+}
+export function staffScaleMail(env, S, R, rcpt, owner) {
+  const o = R.official, title = `${S.name}: nueva escala oficial desde ${monthLabel(o.from)}`;
+  const lines = [row_('Mínimo oficial por hora', money(o.hour), true), row_('Lo que pagás por hora', money(R.hourly)), row_('Diferencia', `${R.gapPct > 0 ? '+' : '−'}${Math.abs(R.gapPct).toFixed(1).replace('.', ',')}%`)];
+  if (o.month) lines.push(row_('Mínimo mensual oficial', money(o.month)));
+  const sug = R.below ? `<p style="font-size:14px;color:#b4232f;margin:10px 0 0">Para llegar al mínimo, el pago de ${R.current.hours} h debería ser de al menos <b>${money(o.hour * R.current.hours)}</b>.</p>` : '<p style="font-size:14px;color:#0d8a67;margin:10px 0 0">Lo que pagás está por encima del mínimo oficial.</p>';
+  return { subject: `${S.name}: la escala oficial subió ${o.pct ? `${String(o.pct).replace('.', ',')}% ` : ''}en ${monthLabel(o.from)}`, text: `${title}\nMínimo por hora: ${money(o.hour)}\nPagás: ${money(R.hourly)} por hora\n\nVer: ${site(env)}/#cuenta`, html: layout(env, { title, intro: `${esc(staffFacts(S))}. Escala de la Comisión Nacional de Trabajo en Casas Particulares.`, body: table(lines) + sug, button: { href: `${site(env)}/#cuenta`, label: 'Ver el detalle' }, footer: footerFor(env, rcpt, owner).replace('de este contrato', 'de este pago') }) };
+}
+const row_ = (k, v, strong) => row(k, v, strong);
 
 // ── Destinatarios ─────────────────────────────────────────────────────────────────────────────────────────────
 function recipientsFor(u, c) {
@@ -237,12 +269,12 @@ async function syncRecipients(env, u, c, prev, wanted) {
     const rec = { email, status: 'pending', token, invitedAt: new Date().toISOString() };
     list.push(rec);
     if (await rateLimit(env, 'invite', u.email, 10)) {
-      const s = site(env), isLoan = c.type === 'loan', what = isLoan ? 'de las cuotas del crédito' : 'de actualización del contrato', title = `${u.email} quiere enviarte avisos ${isLoan ? 'de un crédito' : 'de un contrato'}`;
+      const s = site(env), isLoan = c.type === 'loan', isStaff = c.type === 'staff', what = isStaff ? 'de los pagos a' : isLoan ? 'de las cuotas del crédito' : 'de actualización del contrato', title = `${u.email} quiere enviarte avisos ${isStaff ? 'de pagos' : isLoan ? 'de un crédito' : 'de un contrato'}`;
       try {
         await sendMail(env, {
           to: email, subject: title,
           text: `${u.email} te agregó como destinatario de los avisos ${what} "${c.name}" en Macrodatos.\n\nPara recibirlos, confirmá en: ${s}/#confirmar=${token}\n\nSi no conocés a esta persona, ignorá este mail: no vas a recibir nada más.`,
-          html: layout(env, { title, intro: `${esc(u.email)} te agregó como destinatario de los avisos ${what} <strong>${esc(c.name)}</strong> (${esc(isLoan ? loanFacts(c) : contractFacts(c))}).`, body: '<p style="font-size:14px;color:#40556e">Para empezar a recibirlos tenés que confirmarlo. Si no conocés a esta persona, ignorá este mail: no vas a recibir nada más.</p>', button: { href: `${s}/#confirmar=${token}`, label: 'Confirmar' } }),
+          html: layout(env, { title, intro: `${esc(u.email)} te agregó como destinatario de los avisos ${what} <strong>${esc(c.name)}</strong> (${esc(isStaff ? staffFacts(c) : isLoan ? loanFacts(c) : contractFacts(c))}).`, body: '<p style="font-size:14px;color:#40556e">Para empezar a recibirlos tenés que confirmarlo. Si no conocés a esta persona, ignorá este mail: no vas a recibir nada más.</p>', button: { href: `${s}/#confirmar=${token}`, label: 'Confirmar' } }),
         });
       } catch (e) { rec.inviteError = String(e?.message || e).slice(0, 160); }
     } else rec.inviteError = 'Se alcanzó el límite de invitaciones por hora.';
@@ -264,8 +296,31 @@ export async function runReminders(env, { force = false, today = todayAR(), only
     const page = only ? { keys: [{ name: userKey(only) }], list_complete: true } : await env.MACRO_STORE.list({ prefix: 'acct:user:', cursor });
     cursor = page.list_complete ? null : page.cursor;
     for (const { name } of page.keys) {
-      const u = await kvGet(env, name); if (!u?.contracts?.length && !u?.loans?.length) continue;
+      const u = await kvGet(env, name); if (!u?.contracts?.length && !u?.loans?.length && !u?.staff?.length) continue;
       log.users++; let changed = false;
+      // v175 · Personal de casas particulares: aviso antes de cada pago y cuando cambia la escala oficial.
+      for (const S of u.staff || []) {
+        const rcpts = recipientsFor(u, S); if (!rcpts.length) continue;
+        const R = computeStaff(S, today); S.notified ||= {}; const queue = [];
+        if (S.reminders?.mode === 'due') for (const r of R.rows) {
+          if (S.notified[r.date] || r.paid != null) continue;
+          if (today < addDays(r.date, -(S.reminders.daysBefore || 0))) break;
+          if (r.date < addDays(today, -2)) { S.notified[r.date] = 'past'; changed = true; continue; }
+          queue.push(rc => staffDueMail(env, S, r, R, today, rc, u.email)); S.notified[r.date] = 'sent';
+        }
+        if (S.reminders?.scale !== false && R.official?.from && S.lastScale !== R.official.from) {
+          if (S.lastScale) queue.push(rc => staffScaleMail(env, S, R, rc, u.email));
+          S.lastScale = R.official.from; changed = true;
+        }
+        if (!queue.length) continue;
+        changed = true;
+        for (const make of queue) for (const rc of rcpts) {
+          const m = make(rc);
+          if (dryRun) { log.mails.push({ to: rc.to, subject: m.subject }); continue; }
+          try { await sendMail(env, { to: rc.to, subject: m.subject, html: m.html, text: m.text, unsubscribe: unsubLinks(env, rc.token) }); log.sent++; }
+          catch (e) { log.errors.push(`${S.id}: ${String(e?.message || e).slice(0, 120)}`); }
+        }
+      }
       // v171 · Créditos: aviso antes de cada vencimiento.
       for (const L of u.loans || []) {
         if ((L.reminders?.mode || 'off') === 'off') continue;
@@ -424,14 +479,76 @@ export async function accountApi(request, env, ctx, url) {
   if (p === '/api/account' && method === 'DELETE') {
     try { await (await import('./digest.mjs')).removeSubscriber(env, u.email); } catch { }
     for (const s of u.sessions || []) { try { await env.MACRO_STORE.delete(`acct:sess:${s.h}`); } catch { } }
-    for (const c of [...(u.contracts || []), ...(u.loans || [])]) for (const t of [c.selfToken, ...(c.recipients || []).map(r => r.token)]) { if (t) try { await env.MACRO_STORE.delete(`acct:rcpt:${t}`); } catch { } }
+    for (const c of [...(u.contracts || []), ...(u.loans || []), ...(u.staff || [])]) for (const t of [c.selfToken, ...(c.recipients || []).map(r => r.token)]) { if (t) try { await env.MACRO_STORE.delete(`acct:rcpt:${t}`); } catch { } }
     await env.MACRO_STORE.delete(userKey(u.email));
     return json({ ok: true }, 200, { 'set-cookie': sessionCookie('', 0) });
   }
 
   const idx = await indexData(env);
   if (p === '/api/account/contracts' && method === 'GET') {
-    return json({ email: u.email, mail: mailConfigured(env), today, data: lastData(idx), contracts: (u.contracts || []).map(c => publicContract(c, idx, today)), loans: (u.loans || []).map(L => publicLoan(L, idx, today)) });
+    return json({ email: u.email, mail: mailConfigured(env), today, data: lastData(idx), contracts: (u.contracts || []).map(c => publicContract(c, idx, today)), loans: (u.loans || []).map(L => publicLoan(L, idx, today)), staff: (u.staff || []).map(S => publicStaff(S, today)), staffScale: { scale: STAFF_SCALE, categories: STAFF_CATEGORIES, freq: STAFF_FREQ } });
+  }
+  // v175 · Personal de casas particulares.
+  if (p === '/api/account/staff/preview' && method === 'POST') {
+    const { staff, errors } = normalizeStaff(await readJson(request), { maxRecipients: MAX_RECIPIENTS });
+    if (errors.length) return json({ errors }, 400);
+    return json({ staff: publicStaff({ ...staff, id: 'preview' }, today) });
+  }
+  if (p === '/api/account/staff' && method === 'POST') {
+    if ((u.staff || []).length >= 10) return json({ errors: ['Podés guardar hasta 10 personas.'] }, 400);
+    const { staff, errors } = normalizeStaff(await readJson(request), { maxRecipients: MAX_RECIPIENTS });
+    if (errors.length) return json({ errors }, 400);
+    const now = new Date().toISOString(), S = { ...staff, trackFrom: today, id: randomToken(9), createdAt: now, updatedAt: now, selfToken: randomToken(24), payments: {}, rates: [{ from: staff.start, amount: staff.amount, hours: staff.hours }] };
+    delete S.effective; const others = S.reminders.others; delete S.reminders.others;
+    await kvPut(env, `acct:rcpt:${S.selfToken}`, { owner: u.email, cid: S.id, to: u.email, self: true });
+    S.recipients = await syncRecipients(env, u, S, null, others);
+    S.notified = {}; for (const r of computeStaff(S, today).rows) if (r.date < today) S.notified[r.date] = 'past';
+    S.lastScale = computeStaff(S, today).official.from;
+    u.staff = [...(u.staff || []), S]; await saveUser(env, u);
+    return json({ ok: true, staff: publicStaff(S, today) });
+  }
+  const ms = p.match(/^\/api\/account\/staff\/([\w-]{6,20})(\/test|\/pay)?$/);
+  if (ms) {
+    const i = (u.staff || []).findIndex(x => x.id === ms[1]); if (i < 0) return json({ error: 'No existe ese registro.' }, 404);
+    const prev = u.staff[i];
+    if (ms[2] === '/pay' && method === 'POST') {
+      const b = await readJson(request), d = String(b?.date || '');
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return json({ error: 'Fecha inválida.' }, 400);
+      prev.payments ||= {};
+      if (b?.remove) delete prev.payments[d];
+      else {
+        const paid = Math.round(Number(String(b?.paid ?? '').replace(/\./g, '').replace(',', '.')) * 100) / 100;
+        if (!(paid >= 0 && paid < 1e11)) return json({ error: 'Indicá el monto pagado.' }, 400);
+        prev.payments[d] = { paid, carry: !!b?.carry, at: new Date().toISOString() };
+      }
+      prev.updatedAt = new Date().toISOString(); await saveUser(env, u);
+      return json({ ok: true, staff: publicStaff(prev, today) });
+    }
+    if (ms[2] === '/test' && method === 'POST') {
+      if (!(await rateLimit(env, 'test', u.email, 5))) return json({ error: 'Llegaste al límite de mails de prueba por hora.' }, 429);
+      const R = computeStaff(prev, today), r = R.next || R.rows.at(-1); if (!r) return json({ error: 'Todavía no hay pagos en el calendario.' }, 400);
+      const rc = { to: u.email, token: prev.selfToken, self: true }, mail = staffDueMail(env, prev, r, R, today, rc, u.email);
+      try { await sendMail(env, { to: u.email, subject: `[Prueba] ${mail.subject}`, html: mail.html, text: mail.text, unsubscribe: unsubLinks(env, rc.token) }); }
+      catch (e) { return json({ error: `No se pudo enviar (${String(e?.message || e).slice(0, 120)}).` }, 502); }
+      return json({ ok: true });
+    }
+    if (method === 'DELETE') {
+      for (const t of [prev.selfToken, ...(prev.recipients || []).map(r => r.token)]) { if (t) try { await env.MACRO_STORE.delete(`acct:rcpt:${t}`); } catch { } }
+      u.staff.splice(i, 1); await saveUser(env, u); return json({ ok: true });
+    }
+    if (method === 'PUT') {
+      const { staff, errors } = normalizeStaff(await readJson(request), { maxRecipients: MAX_RECIPIENTS });
+      if (errors.length) return json({ errors }, 400);
+      const S = { ...prev, ...staff, id: prev.id, updatedAt: new Date().toISOString() };
+      // Si cambió el monto o las horas, la nueva tarifa rige desde "vigente desde" (por defecto, hoy); los pagos anteriores no cambian.
+      S.rates = [...(prev.rates || [{ from: prev.start, amount: prev.amount, hours: prev.hours }])];
+      if (staff.amount !== prev.amount || staff.hours !== prev.hours) { const from = /^\d{4}-\d{2}-\d{2}$/.test(staff.effective) ? staff.effective : today; S.rates = S.rates.filter(r => r.from < from); S.rates.push({ from, amount: staff.amount, hours: staff.hours }); }
+      if (staff.start !== prev.start && S.rates[0]) S.rates[0].from = staff.start;
+      delete S.effective; const others = S.reminders.others; delete S.reminders.others;
+      S.recipients = await syncRecipients(env, u, S, prev, others);
+      u.staff[i] = S; await saveUser(env, u);
+      return json({ ok: true, staff: publicStaff(S, today) });
+    }
   }
   // v171 · Créditos.
   if (p === '/api/account/loans/preview' && method === 'POST') {

@@ -83,7 +83,7 @@
 
   // ── Con sesión: contratos ──────────────────────────────────────────────────────────────────────────────────
   async function loadContracts() {
-    try { const j = await api('/contracts'); Object.assign(state, { user: { email: j.email }, mail: j.mail, contracts: j.contracts, loans: j.loans || [], data: j.data, today: j.today, loaded: true }); setNav(); viewAccount(); }
+    try { const j = await api('/contracts'); Object.assign(state, { user: { email: j.email }, mail: j.mail, contracts: j.contracts, loans: j.loans || [], staff: j.staff || [], staffScale: j.staffScale || null, data: j.data, today: j.today, loaded: true }); setNav(); viewAccount(); }
     catch (err) { if (err.status === 401) { state.user = null; setNav(); viewLogin(); } else app.innerHTML = `<div class="acct-card">No se pudo cargar tu cuenta: ${esc(err.message)}</div>`; }
   }
   function remindersText(c) {
@@ -257,6 +257,123 @@
       catch (err) { m.textContent = err.message; b.disabled = false; }
     });
   }
+
+  // ── v175 · Personal de casas particulares ─────────────────────────────────────────────────────────────────
+  const WD = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+  const CATS = { supervisor: 'Supervisor/a', especificas: 'Tareas específicas (cocina, etc.)', caseros: 'Caseros/as', cuidado: 'Asistencia y cuidado de personas', generales: 'Tareas generales (limpieza, etc.)' };
+  const FREQS = { jornada: 'Por jornada', semanal: 'Semanal', quincenal: 'Quincenal', mensual: 'Mensual' };
+  const staffFreqTxt = S => S.freq === 'semanal' ? `Semanal · ${WD[S.payDay]}` : S.freq === 'mensual' ? `Mensual · día ${S.payDay}` : S.freq === 'jornada' ? `Por jornada · ${S.workDays.map(d => WD[d].slice(0, 3)).join(', ')}` : 'Quincenal · 15 y fin de mes';
+  const pctTxt = n => `${n > 0 ? '+' : n < 0 ? '−' : ''}${new Intl.NumberFormat('es-AR', { maximumFractionDigits: 1 }).format(Math.abs(n))}%`;
+  function staffCard(S) {
+    const n = S.next, ok = S.gapPct == null ? null : !S.below;
+    return `<article class="kpi acct-kpi" data-staff="1" data-id="${esc(S.id)}" tabindex="0" role="button" aria-label="Ver detalle de ${esc(S.name)}">
+      <div class="kpi-top"><span>${esc(S.name)}</span><b>${esc(FREQS[S.freq])}</b></div>
+      <strong>${n ? money(n.expected) : '—'}</strong>
+      <p>${n ? `Próximo pago · ${esc(day(n.date))}${n.carryIn ? ` · incluye ${money(n.carryIn)} anterior` : ''}` : 'Sin pagos próximos'}</p>
+      <em class="${ok === false ? 'down' : ok ? '' : 'neutral'}">${S.hourly ? `${money(S.hourly)}/h · oficial ${money(S.official?.hour)}/h${S.gapPct != null ? ` (${pctTxt(S.gapPct)})` : ''}` : ''}</em>
+      <div class="data-health ${S.pendingCount ? 'cached' : 'live'}">${S.pendingCount ? `${S.pendingCount} ${S.pendingCount === 1 ? 'pago sin registrar' : 'pagos sin registrar'}` : 'Pagos al día'}</div></article>`;
+  }
+  function openStaff(S) {
+    const body = openModal('acct-modal-wide'), o = S.official, nx = S.nextOfficial;
+    const rows = [...S.rows].reverse();
+    body.innerHTML = `<div class="kpi-modal-head"><div><span class="kpi-modal-agency">${esc(CATS[S.category])}${S.category === 'caseros' ? '' : ` · ${S.retiro} retiro`}${S.zona ? ' · zona desfavorable' : ''}</span><h2>${esc(S.name)}</h2><p>${esc(staffFreqTxt(S))} · ${money(S.current.amount)} por ${S.current.hours} h</p></div>
+      <strong>${S.next ? money(S.next.expected) : '—'}<small class="acct-modal-sub">${S.next ? `próximo pago · ${esc(day(S.next.date))}` : ''}</small></strong></div>
+      <div class="acct-loan-sum">
+        <div><span>Valor por hora</span><b>${money(S.hourly)}</b></div>
+        <div><span>Mínimo oficial por hora</span><b>${money(o?.hour)}</b><small>escala de ${esc(day(o?.from))}</small></div>
+        <div><span>Diferencia</span><b class="${S.below ? 'acct-bad' : 'acct-good'}">${S.gapPct == null ? '—' : pctTxt(S.gapPct)}</b><small>${S.below ? 'por debajo del mínimo' : 'por encima del mínimo'}</small></div>
+        <div><span>Próxima escala</span><b>${nx ? money(nx.hour) : '—'}</b><small>${nx ? `desde ${esc(day(nx.from))} (+${String(nx.pct).replace('.', ',')}%)` : 'sin aumentos acordados'}</small></div></div>
+      ${S.below ? `<p class="acct-warn">Para llegar al mínimo oficial, el pago de ${S.current.hours} h debería ser de al menos <b>${money(o.hour * S.current.hours)}</b>.</p>` : ''}
+      ${o?.month ? `<p class="acct-note">Mínimo mensual oficial de la categoría (jornada completa): ${money(o.month)}. Escala de la Comisión Nacional de Trabajo en Casas Particulares${S.zona ? ', con el adicional por zona desfavorable' : ''}; no incluye antigüedad (1% por año).</p>` : ''}
+      <p class="acct-rem">${remindersText({ ...S, reminders: { ...S.reminders, mode: S.reminders.mode === 'due' ? 'adjust' : S.reminders.mode } }).replace('cuando hay un ajuste', 'antes de cada pago')}${S.reminders.scale !== false ? ' · aviso cuando cambia la escala oficial' : ''}</p>
+      <h3 class="acct-h3b">Pagos</h3>
+      <div class="upd-table-wrap acct-loan-table"><table class="upd-table acct-table acct-pay-table"><thead><tr><th>Fecha</th><th>A pagar</th><th>Pagado</th><th>Diferencia</th><th></th></tr></thead><tbody>
+      ${rows.map(r => `<tr class="${r.past || r.today ? '' : 'acct-future'}${S.next && r.date === S.next.date ? ' acct-next-row' : ''}" data-date="${r.date}"><td>${esc(day(r.date))}${r.carryIn ? `<small>${r.carryIn > 0 ? '+' : '−'}${money(Math.abs(r.carryIn))} anterior</small>` : ''}</td><td><strong>${money(r.expected)}</strong></td>
+        <td>${r.paid != null ? `${money(r.paid)}<small>${r.carry ? 'diferencia pasada al siguiente' : r.diff ? 'diferencia no se arrastra' : ''}</small>` : (r.past || r.today ? (r.date >= (S.trackFrom || S.start) ? '<i class="acct-bad">sin registrar</i>' : '<i>no registrado</i>') : '—')}</td>
+        <td>${r.paid != null ? (r.diff ? money(r.diff) : '—') : ''}</td>
+        <td>${r.paid != null ? '<button class="link-btn" data-unpay>Deshacer</button>' : (r.past || r.today || r === S.next || (S.next && r.date === S.next.date)) ? '<button class="btn small" data-pay>Registrar</button>' : ''}</td></tr>`).join('')}
+      </tbody></table></div>
+      <div class="acct-payform" id="payForm" hidden></div>
+      ${S.notes ? `<p class="acct-note">Nota: ${esc(S.notes)}</p>` : ''}
+      <div class="acct-actions"><button class="btn primary" data-act="edit">Editar</button>${S.reminders?.mode !== 'off' && state.mail ? '<button class="btn small" data-act="test">Enviarme un mail de prueba</button>' : ''}<button class="btn small danger" data-act="del">Eliminar</button></div>
+      <p class="acct-msg" role="status"></p>`;
+    const msg = body.querySelector('.acct-msg'), pf = body.querySelector('#payForm');
+    const refresh = async j => { const i = state.staff.findIndex(x => x.id === S.id); if (j?.staff && i >= 0) state.staff[i] = j.staff; openStaff(state.staff[i]); viewAccountKeepModal(); };
+    body.querySelectorAll('[data-pay]').forEach(b => b.onclick = () => {
+      const tr = b.closest('tr'), r = S.rows.find(x => x.date === tr.dataset.date);
+      pf.hidden = false;
+      pf.innerHTML = `<h4>Registrar el pago del ${esc(day(r.date))}</h4><div class="acct-fields"><label>Monto pagado<input name="paid" inputmode="decimal" value="${String(r.expected).replace('.', ',')}"></label>
+        <label class="acct-check"><input type="checkbox" name="carry" checked> Sumar (o descontar) la diferencia en el pago siguiente</label></div>
+        <p class="acct-note" id="payDiff"></p><div class="acct-actions"><button class="btn primary" type="button" id="paySave">Guardar pago</button><button class="btn ghost-dark" type="button" id="payCancel">Cancelar</button></div>`;
+      const inp = pf.querySelector('[name=paid]'), dif = pf.querySelector('#payDiff');
+      const upd = () => { const v = Number(inp.value.replace(/\./g, '').replace(',', '.')), d = r.expected - v; dif.textContent = Number.isFinite(v) && Math.abs(d) >= 0.01 ? (d > 0 ? `Quedan ${money(d)} sin pagar.` : `Se pagaron ${money(-d)} de más.`) : ''; };
+      inp.oninput = upd; upd(); inp.focus(); inp.select(); pf.scrollIntoView({ block: 'nearest' });
+      pf.querySelector('#payCancel').onclick = () => { pf.hidden = true; };
+      pf.querySelector('#paySave').onclick = async () => { try { refresh(await api(`/staff/${S.id}/pay`, { method: 'POST', body: { date: r.date, paid: inp.value, carry: pf.querySelector('[name=carry]').checked } })); } catch (err) { dif.textContent = err.message; } };
+    });
+    body.querySelectorAll('[data-unpay]').forEach(b => b.onclick = async () => { const d = b.closest('tr').dataset.date; try { refresh(await api(`/staff/${S.id}/pay`, { method: 'POST', body: { date: d, remove: true } })); } catch (err) { msg.textContent = err.message; } });
+    requestAnimationFrame(() => { const row = body.querySelector('.acct-next-row'), wrap = body.querySelector('.acct-loan-table'); if (row && wrap) wrap.scrollTop = Math.max(0, row.offsetTop - wrap.clientHeight / 2); });
+    body.querySelectorAll('[data-act]').forEach(b => b.onclick = async () => {
+      const act = b.dataset.act;
+      if (act === 'edit') openStaffForm(S);
+      if (act === 'test') { b.disabled = true; msg.textContent = 'Enviando…'; try { await api(`/staff/${S.id}/test`, { method: 'POST' }); msg.textContent = `Listo: revisá ${state.user.email}.`; } catch (err) { msg.textContent = err.message; } b.disabled = false; }
+      if (act === 'del') { if (!confirm(`¿Eliminar "${S.name}" y su registro de pagos?`)) return; try { await api(`/staff/${S.id}`, { method: 'DELETE' }); closeModal(); await loadContracts(); } catch (err) { msg.textContent = err.message; } }
+    });
+  }
+  // Repinta las tarjetas sin cerrar la ventana abierta.
+  function viewAccountKeepModal() { const grid = app.querySelectorAll('.acct-kpis')[2]; if (!grid) return; grid.querySelectorAll('.acct-kpi[data-staff]').forEach(card => { const S = state.staff.find(x => x.id === card.dataset.id); if (S) { const t = document.createElement('div'); t.innerHTML = staffCard(S); const n = t.firstElementChild; card.replaceWith(n); n.addEventListener('click', () => openStaff(state.staff.find(x => x.id === n.dataset.id))); } }); }
+  function openStaffForm(S) {
+    const box = openModal('acct-modal-wide'), r = S?.reminders || { mode: 'due', daysBefore: 1, self: true, scale: true };
+    const num = v => v == null ? '' : String(v).replace('.', ',');
+    box.innerHTML = `<form class="acct-card acct-form" id="staffForm" novalidate>
+      <h3>${S ? 'Editar' : 'Agregar persona'}</h3>
+      <div class="acct-fields">
+        <label class="wide">Nombre<input name="name" maxlength="80" placeholder="Ej.: María (limpieza)" value="${esc(S?.name || '')}"></label>
+        <label>Categoría (escala oficial)<select name="category">${Object.entries(CATS).map(([k, v]) => `<option value="${k}"${(S?.category || 'generales') === k ? ' selected' : ''}>${v}</option>`).join('')}</select></label>
+        <label data-ret>Modalidad<select name="retiro"><option value="con"${(S?.retiro || 'con') === 'con' ? ' selected' : ''}>Con retiro (no vive en la casa)</option><option value="sin"${S?.retiro === 'sin' ? ' selected' : ''}>Sin retiro (vive en la casa)</option></select></label>
+        <label class="acct-check"><input type="checkbox" name="zona"${S?.zona ? ' checked' : ''}> Zona desfavorable (Patagonia)</label>
+        <label>Frecuencia de pago<select name="freq">${Object.entries(FREQS).map(([k, v]) => `<option value="${k}"${(S?.freq || 'semanal') === k ? ' selected' : ''}>${v}</option>`).join('')}</select></label>
+        <label data-f="semanal">Día de pago<select name="payDayW">${WD.map((d, i) => `<option value="${i}"${(S?.freq === 'semanal' ? S.payDay : 5) === i ? ' selected' : ''}>${d[0].toUpperCase() + d.slice(1)}</option>`).join('')}</select></label>
+        <label data-f="mensual">Día del mes<select name="payDayM">${Array.from({ length: 31 }, (_, i) => `<option value="${i + 1}"${(S?.freq === 'mensual' ? S.payDay : 1) === i + 1 ? ' selected' : ''}>${i + 1}</option>`).join('')}</select></label>
+        <div class="wide acct-days" data-f="jornada"><span>Días que trabaja (se paga cada jornada)</span>${WD.map((d, i) => `<label class="acct-check"><input type="checkbox" name="wd" value="${i}"${(S?.workDays || [1, 3, 5]).includes(i) ? ' checked' : ''}> ${d.slice(0, 3)}</label>`).join('')}</div>
+        <label>Monto por <span id="perLbl">período</span> ($)<input name="amount" inputmode="decimal" placeholder="100.000" value="${esc(num(S?.amount))}"></label>
+        <label>Horas por <span id="perLbl2">período</span><input name="hours" inputmode="decimal" placeholder="12" value="${esc(num(S?.hours))}"></label>
+        <label>Pagos desde<input name="start" type="date" value="${esc(S?.start || state.today || '')}"></label>
+        ${S ? `<label>Si cambiás monto u horas, rige desde<input name="effective" type="date" value="${esc(state.today || '')}"><small>Los pagos anteriores quedan como estaban.</small></label>` : ''}
+      </div>
+      <div class="acct-preview" id="staffPreview"></div>
+      <fieldset class="acct-fs"><legend>Avisos por mail</legend><div class="acct-fields">
+        <label>Antes de cada pago<select name="mode"><option value="due"${r.mode === 'due' ? ' selected' : ''}>Avisarme</option><option value="off"${r.mode === 'off' ? ' selected' : ''}>No avisar</option></select></label>
+        <label data-due>Anticipación<select name="daysBefore">${[0, 1, 2, 3, 5, 7].map(k => `<option value="${k}"${(r.daysBefore || 0) === k ? ' selected' : ''}>${k ? `${k} ${k === 1 ? 'día' : 'días'} antes` : 'El mismo día'}</option>`).join('')}</select></label>
+        <label class="acct-check"><input type="checkbox" name="scale"${r.scale !== false ? ' checked' : ''}> Avisarme cuando cambie la escala oficial</label>
+        <label class="acct-check"><input type="checkbox" name="self"${r.self !== false ? ' checked' : ''}> Enviarme a mí (${esc(state.user.email)})</label>
+        <label class="wide">Otras direcciones (hasta 3, separadas por coma)<input name="others" value="${esc((S?.recipients || []).map(x => x.email).join(', '))}"><small>Cada dirección nueva recibe un mail para confirmar antes de empezar a recibir avisos.</small></label>
+      </div></fieldset>
+      <label class="wide">Notas (opcional)<input name="notes" maxlength="300" value="${esc(S?.notes || '')}"></label>
+      <div class="acct-actions"><button class="btn primary" type="submit">${S ? 'Guardar cambios' : 'Guardar'}</button><button class="btn ghost-dark" type="button" id="staffCancel">Cancelar</button></div>
+      <p class="acct-msg" id="staffFormMsg" role="status"></p></form>`;
+    const f = document.getElementById('staffForm');
+    const PER = { jornada: 'jornada', semanal: 'semana', quincenal: 'quincena', mensual: 'mes' };
+    const sync = () => { f.querySelectorAll('[data-f]').forEach(el => el.hidden = el.dataset.f !== f.freq.value); f.querySelector('[data-ret]').hidden = f.category.value === 'caseros'; f.querySelectorAll('[data-due]').forEach(el => el.hidden = f.mode.value === 'off'); document.getElementById('perLbl').textContent = PER[f.freq.value]; document.getElementById('perLbl2').textContent = PER[f.freq.value]; };
+    const read = () => ({ name: f.name.value, category: f.category.value, retiro: f.retiro.value, zona: f.zona.checked, freq: f.freq.value, payDay: f.freq.value === 'semanal' ? Number(f.payDayW.value) : Number(f.payDayM.value), workDays: [...f.querySelectorAll('[name=wd]:checked')].map(x => Number(x.value)), amount: f.amount.value, hours: f.hours.value, start: f.start.value, effective: f.effective?.value || '', notes: f.notes.value,
+      reminders: { mode: f.mode.value, daysBefore: Number(f.daysBefore.value), scale: f.scale.checked, self: f.self.checked, others: f.others.value } });
+    let t = null, seq = 0;
+    const preview = () => { clearTimeout(t); t = setTimeout(async () => {
+      const pv = document.getElementById('staffPreview'); if (!pv || !f.isConnected) return;
+      const b = read(), my = ++seq; if (!b.amount || !b.hours || !b.start) { pv.innerHTML = ''; return; }
+      try { const j = await api('/staff/preview', { method: 'POST', body: b }); if (my !== seq || !pv.isConnected) return; const P = j.staff;
+        pv.innerHTML = `<div class="acct-preview-head"><div><span>Valor por hora</span><b>${money(P.hourly)}</b><small>${money(P.current.amount)} / ${P.current.hours} h</small></div><div><span>Mínimo oficial por hora</span><b>${money(P.official.hour)}</b><small>escala desde ${esc(day(P.official.from))}</small></div><div><span>Diferencia</span><b class="${P.below ? 'acct-bad' : 'acct-good'}">${pctTxt(P.gapPct)}</b><small>${P.below ? `mínimo: ${money(P.official.hour * P.current.hours)} por ${PER[P.freq]}` : 'por encima del mínimo'}</small></div>${P.next ? `<div><span>Próximo pago</span><b>${money(P.next.expected)}</b><small>${esc(day(P.next.date))}</small></div>` : ''}</div>`;
+      } catch (err) { if (my === seq && pv.isConnected) pv.innerHTML = `<p class="acct-warn">${esc(err.message)}</p>`; }
+    }, 300); };
+    f.addEventListener('input', () => { sync(); preview(); }); f.addEventListener('change', () => { sync(); preview(); });
+    sync(); preview();
+    document.getElementById('staffCancel').onclick = () => { if (S) openStaff(S); else closeModal(); };
+    f.addEventListener('submit', async e => {
+      e.preventDefault(); const m = document.getElementById('staffFormMsg'), b = f.querySelector('[type=submit]'); b.disabled = true; m.textContent = 'Guardando…';
+      try { await api(S ? `/staff/${S.id}` : '/staff', { method: S ? 'PUT' : 'POST', body: read() }); closeModal(); await loadContracts(); }
+      catch (err) { m.textContent = err.message; b.disabled = false; }
+    });
+  }
   function viewAccount() {
     const d = state.data || {};
     const dataNote = [d.ipc ? `IPC hasta ${day(d.ipc)}` : null, d.icl ? `ICL hasta ${day(d.icl)}` : null, d.cer ? `CER hasta ${day(d.cer)}` : null, d.uva ? `UVA hasta ${day(d.uva)}` : null].filter(Boolean).join(' · ');
@@ -268,6 +385,9 @@
       <div class="acct-section-head"><h3>Tus créditos</h3><span class="acct-note">Hipotecarios, prendarios o personales, en UVA o en pesos.</span></div>
       <div class="kpi-grid acct-kpis">${(state.loans || []).map(loanCard).join('')}
         <button type="button" class="kpi acct-kpi-add" id="loanAdd"><span>+</span><b>Agregar crédito</b><small>Monto, tasa, plazo, sistema de amortización y ajuste</small></button></div>
+      <div class="acct-section-head"><h3>Personal de casas particulares</h3><span class="acct-note">Pagos, registro de lo abonado y comparación con la escala oficial.</span></div>
+      <div class="kpi-grid acct-kpis">${(state.staff || []).map(staffCard).join('')}
+        <button type="button" class="kpi acct-kpi-add" id="staffAdd"><span>+</span><b>Agregar persona</b><small>Monto, frecuencia, día de pago y horas</small></button></div>
       <p class="acct-data">${esc(dataNote)}</p>
       <div class="acct-card acct-prefs-bar"><div><h3>Resúmenes, alertas y seguimiento</h3><p id="acctPrefsSummary" class="acct-note">Cargando…</p></div><button class="btn primary" id="acctPrefsBtn" type="button">Configurar resúmenes y alertas</button></div>
       <details class="acct-danger"><summary>Eliminar mi cuenta</summary><p>Se borran tus contratos y dejás de recibir avisos. No se puede deshacer.</p><button class="btn small danger" id="acctDelete">Eliminar mi cuenta</button></details>`;
@@ -277,12 +397,18 @@
     document.getElementById('acctLogout').onclick = async () => { try { await api('/logout', { method: 'POST' }); } catch { } state.user = null; setNav(); viewLogin(); };
     document.getElementById('acctDelete').onclick = async () => { if (!confirm('¿Eliminar tu cuenta y todos tus contratos?')) return; try { await api('', { method: 'DELETE' }); } catch { } state.user = null; setNav(); viewLogin('Tu cuenta fue eliminada.'); };
     document.getElementById('loanAdd').onclick = () => openLoanForm(null);
+    document.getElementById('staffAdd').onclick = () => openStaffForm(null);
+    app.querySelectorAll('.acct-kpi[data-staff]').forEach(card => {
+      const S = state.staff.find(x => x.id === card.dataset.id);
+      card.addEventListener('click', () => openStaff(S));
+      card.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openStaff(S); } });
+    });
     app.querySelectorAll('.acct-kpi[data-loan]').forEach(card => {
       const L = state.loans.find(x => x.id === card.dataset.id);
       card.addEventListener('click', () => openLoan(L));
       card.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openLoan(L); } });
     });
-    app.querySelectorAll('.acct-kpi:not([data-loan])').forEach(card => {
+    app.querySelectorAll('.acct-kpi:not([data-loan]):not([data-staff])').forEach(card => {
       const c = state.contracts.find(x => x.id === card.dataset.id);
       card.addEventListener('click', () => openContract(c));
       card.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openContract(c); } });
