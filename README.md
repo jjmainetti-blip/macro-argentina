@@ -389,6 +389,10 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 - `public/reserves-components.json`: swap con China (CNY y tipo de cambio), BIS y otros pasivos de corto plazo, SEDESA, oro (toneladas y precio), con notas y fuentes. Actualizar `through` y los componentes cuando cambien (p. ej., pagos del BIS o el swap).
 - `/api/status` → `reserves`: cuántos meses del FMI ya se cargaron y el último error.
 
+## v188 — Resultado fiscal: unidad como subtítulo
+
+- Detalle de Resultado fiscal: "Como % del PBI" pasa a ser un subtítulo chico debajo del título; se quita de "Último dato" y del valor principal. En la tarjeta, el período queda sólo con el mes (la unidad ya figura debajo de cada valor). La imagen compartida lleva la unidad en la línea de detalle.
+
 ## v187 — Compartir el semáforo y resultado fiscal desde 2021
 
 - Semáforo de la economía: barra Exportar (Excel, JPEG, Instagram, X, WhatsApp). La imagen redibuja la tabla (indicador, organismo y un punto por mes) con la leyenda y un resumen del último mes; la apaisada crece con la cantidad de indicadores y la de Instagram es 1080×1350. El Excel trae estado y dato de cada mes por indicador. `renderSemaforo` deja los datos en `#semaforoTable._semData`.

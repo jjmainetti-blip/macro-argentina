@@ -246,3 +246,7 @@ body.modal-open{overflow:hidden}
 
 /* v186 · compartir desde el detalle de las tarjetas */
 .kpi-modal .share-bar{margin-top:10px;padding-top:12px;border-top:1px solid var(--line)}
+
+/* v188 · subtítulo de unidad en el detalle de tarjetas */
+.kpi-modal-subtitle{display:block;font-size:15px;font-weight:600;color:var(--muted);margin:2px 0 0;letter-spacing:0}
+.kpi-modal-subtitle[hidden]{display:none}

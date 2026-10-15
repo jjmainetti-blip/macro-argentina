@@ -45,7 +45,7 @@
       const sec = c?.closest('section[id]')?.id || 'inicio';
       let keys = null; try { const S = typeof kpiSeries === 'function' ? kpiSeries(key) : null; if (S?.rawPeriods?.length === chart?.data.labels.length) keys = S.rawPeriods; } catch {}
       if (cv) cv._exportKeys = keys;
-      return { card, cv, chart, title: g('kpiModalTitle') || 'Indicador', subtitle: [agency, period ? `último dato: ${period}` : ''].filter(Boolean).join(' · '),
+      return { card, cv, chart, title: g('kpiModalTitle') || 'Indicador', subtitle: [agency, g('kpiModalSubtitle'), period ? `último dato: ${period}` : ''].filter(Boolean).join(' · '),
         source, summary: [value && value !== '—' ? `${value}${period ? ` (${period})` : ''}` : '', detail].filter(Boolean).join(' · '), note: g('kpiModalLegend'), key,
         url: `${SITE}/?kpi=${encodeURIComponent(key)}#${sec}` };
     }
