@@ -1,6 +1,7 @@
 import { latestRelease } from '../../public/releases.js';
 import * as XLSX from 'xlsx';
 import { BUNDLED_SOURCES } from './bundled-history.mjs';
+import { TRADE_ANNUAL, INDUSTRY_BRIDGE, INDUSTRY_ANNUAL } from './trade-annual.mjs';
 import { autosLive, ipcCabaLive, povertyLive, cementLive, cameLive, scentiaLive } from './live-sources.mjs';
 import { cardStatus, CARDS, periodEndYm, todayAR, ymShift } from './freshness.mjs';
 import { EVENTS } from './calendar-data.mjs';
@@ -40,12 +41,20 @@ async function seriesRows(id,{start='1900-01-01',end=`${new Date().getUTCFullYea
   const url=`${SERIES_API}?ids=${encodeURIComponent(id)}&start_date=${start}&end_date=${end}&limit=1000&sort=desc&format=json`;
   const j=await get(url,'json'); const rows=(j?.data||[]).slice().sort((a,b)=>String(a[0]).localeCompare(String(b[0])));
   if(!Array.isArray(rows)||!rows.length)throw new Error(`sin datos para ${id}`);
-  return {rows:rows.map(r=>({date:String(r[0]),value:Number(r[1])})).filter(r=>Number.isFinite(r.value)),url};
+  // v179: Datos Argentina devuelve null en observaciones faltantes; Number(null) es 0 y se colaba como dato.
+  return {rows:rows.filter(r=>r[1]!==null&&r[1]!==undefined&&r[1]!=='').map(r=>({date:String(r[0]),value:Number(r[1])})).filter(r=>Number.isFinite(r.value)),url};
 }
 function annualFromRows(rows,mode='last'){
   const by={}; for(const r of rows){const m=r.date.match(/(19|20)\d{2}/);if(!m)continue;(by[+m[0]]??=[]).push(r.value)}
   const out={}; for(const [y,a] of Object.entries(by))out[y]=round(mode==='avg'?a.reduce((x,z)=>x+z,0)/a.length:mode==='sum'?a.reduce((x,z)=>x+z,0):a.at(-1),1); return out;
 }
+// v179: variación anual del promedio de los niveles mensuales; el año en curso (incompleto) se compara con los
+// mismos meses del año anterior (antes se comparaba, p. ej., ene–ago 2026 contra el promedio de todo 2025).
+function growthFromMonthlyYtd(rows){const lv={};for(const r of rows){const k=String(r.date).slice(0,7);if(/^\d{4}-\d{2}$/.test(k)&&Number.isFinite(r.value))lv[k]=r.value;}
+  const by={};for(const k of Object.keys(lv))(by[k.slice(0,4)]??=[]).push(k.slice(5));const out={};
+  for(const y of Object.keys(by).sort()){const p=String(+y-1);if(!by[p])continue;const ms=by[y].filter(m=>lv[`${p}-${m}`]!=null);if(!ms.length)continue;if(by[y].length===12&&by[p].length<12)continue;
+    const a=ms.reduce((s,m)=>s+lv[`${y}-${m}`],0),b=ms.reduce((s,m)=>s+lv[`${p}-${m}`],0);out[y]=round(pct(a,b),1);}
+  return out;}
 function growthFromAnnualLevels(levels){const out={},ys=Object.keys(levels).map(Number).sort((a,b)=>a-b);for(const y of ys)if(levels[y-1]!=null)out[y]=round(pct(levels[y],levels[y-1]),1);return out;}
 function yoyFromRows(rows){const levels={};for(const r of rows||[]){const k=String(r.date||'').slice(0,7);if(/^\d{4}-\d{2}$/.test(k)&&Number.isFinite(Number(r.value)))levels[k]=Number(r.value);}const out={};for(const [k,v] of Object.entries(levels)){const [y,m]=k.split('-');const prev=`${Number(y)-1}-${m}`;if(Number.isFinite(levels[prev]))out[k]=round(pct(v,levels[prev]),1);}return out;}
 // v113: algunas series de Datos Argentina (EMAE, ISAC) llegan como fracción (0,064 = 6,4%).
@@ -66,7 +75,7 @@ async function ipcHistorical(){
   const id='178.1_NL_GENERAL_0_0_13:end_of_period';
   const url=`${SERIES_API}?ids=${encodeURIComponent(id)}&collapse=year&start_date=1943-01-01&end_date=2006-12-31&limit=1000&format=json&metadata=none`;
   const j=await get(url,'json'); const levels={};
-  for(const r of (j?.data||[])){const m=String(r[0]).match(/(19|20)\d{2}/),v=Number(r[1]);if(m&&Number.isFinite(v))levels[+m[0]]=v;}
+  for(const r of (j?.data||[])){const m=String(r[0]).match(/(19|20)\d{2}/),v=r[1]==null?NaN:Number(r[1]);if(m&&Number.isFinite(v))levels[+m[0]]=v;}
   const annual=growthFromAnnualLevels(levels);
   if(Object.keys(annual).length<40)throw new Error(`IPC histórico incompleto: ${Object.keys(annual).length} años`);
   return {status:'ok',source:'Datos Argentina / INDEC — IPC GBA histórico',sourceUrl:url,annual};
@@ -196,8 +205,13 @@ async function addIndecNews(out,subject){
 async function industryHistorical(){
   const annual={}; const segments=[];
   try{const x=await seriesRows('12.1_E_2004_A_3',{start:'1994-01-01',end:'2015-12-31'});Object.assign(annual,growthFromAnnualLevels(annualFromRows(x.rows,'avg')));segments.push({range:'EMI hasta 2015',sourceUrl:x.url});}catch{}
-  let monthlyYoy={};try{const x=await seriesRows('453.1_SERIE_ORIGNAL_0_0_14_46',{start:'2016-01-01'});Object.assign(annual,growthFromAnnualLevels(annualFromRows(x.rows,'avg')));monthlyYoy=yoyFromRows(x.rows);segments.push({range:'IPI desde 2016',sourceUrl:x.url});}catch{}
-  if(!Object.keys(annual).length)throw new Error('series industriales no disponibles');
+  let monthlyYoy={};try{const x=await seriesRows('453.1_SERIE_ORIGNAL_0_0_14_46',{start:'2016-01-01'});Object.assign(annual,growthFromMonthlyYtd(x.rows));monthlyYoy=yoyFromRows(x.rows);segments.push({range:'IPI desde 2016',sourceUrl:x.url});}catch{}
+  if(!Object.keys(annual).length&&!Object.keys(monthlyYoy).length)throw new Error('series industriales no disponibles');
+  for(const [y,v] of Object.entries(INDUSTRY_ANNUAL))if(annual[y]==null)annual[y]=v;
+  // v179: puente 2015–2016 (EMI termina en 2014; la primera variación del IPI es 2017) con el EMAE industria.
+  try{const x=await seriesRows('11.1_VMASD_2004_A_23',{start:'2013-01-01',end:'2016-12-31'});const g=growthFromAnnualLevels(annualFromRows(x.rows,'avg'));for(const y of [2015,2016])if(annual[y]==null&&Number.isFinite(g[y]))annual[y]=g[y];}catch{}
+  for(const [y,v] of Object.entries(INDUSTRY_BRIDGE))if(annual[y]==null)annual[y]=v;
+  if(annual[2015]!=null)segments.push({range:'2015–2016: EMAE industria manufacturera (empalme)'});
   let monthlySaMom;try{monthlySaMom=await saMomFromLevels('453.1_SERIE_DESEADA_0_0_24_58');}catch{}
   return await addIndecNews({status:'ok',source:'INDEC / Datos Argentina — EMI + IPI manufacturero',annual,monthlyYoy,...(monthlySaMom?{monthlySaMom}:{}),segments},'[ií]ndice de producci[oó]n industrial manufacturero(?: \\(IPI manufacturero\\))?').then(o=>withCalendarDate(o,/manufacturero \(IPI\)/i));
 }
@@ -235,13 +249,18 @@ async function usCpiMonthly(){
 }
 function latestCommonMonth(a,b){const common=Object.keys(a||{}).filter(k=>b?.[k]!=null).sort();return common.at(-1)||null;}
 async function tradeHistorical(){
-  const [ex,im,bal]=await Promise.all([
+  // v179: la base es la tabla anual completa (trade-annual.mjs); la API sólo agrega o corrige años con dato real.
+  const [ex,im,bal]=await Promise.allSettled([
     seriesRows('74.1_IET_0_A_16',{start:'1900-01-01'}),
     seriesRows('74.1_IIT_0_A_25',{start:'1900-01-01'}),
     seriesRows('74.1_SC_0_A_15',{start:'1900-01-01'})
   ]);
-  const exports=annualFromRows(ex.rows), imports=annualFromRows(im.rows), balance=annualFromRows(bal.rows);
-  for(const y of Object.keys(exports))if(balance[y]==null && imports[y]!=null)balance[y]=round(exports[y]-imports[y],1);
+  const live=x=>x.status==='fulfilled'?annualFromRows(x.value.rows):{};
+  const exports={...TRADE_ANNUAL.exports,...live(ex)}, imports={...TRADE_ANNUAL.imports}, balance={...TRADE_ANNUAL.balance};
+  const est=new Set(TRADE_ANNUAL.estimated);
+  for(const [y,v] of Object.entries(live(im))){imports[y]=v;est.delete(y);}
+  for(const [y,v] of Object.entries(live(bal)))balance[y]=v;
+  for(const y of Object.keys(exports)){if(imports[y]==null&&balance[y]!=null)imports[y]=round(exports[y]-balance[y],1);if(balance[y]==null&&imports[y]!=null)balance[y]=round(exports[y]-imports[y],1);}
   let real=null;
   try{const cpi=usCpiAnnual(),bls=await usCpiMonthly(),basePeriod=Object.keys(bls.monthly).sort().at(-1),base=bls.monthly[basePeriod],rx={},ri={},rb={};for(const y of Object.keys(exports)){if(!cpi[y])continue;const f=base/cpi[y];rx[y]=round(exports[y]*f,1);if(imports[y]!=null)ri[y]=round(imports[y]*f,1);if(balance[y]!=null)rb[y]=round(balance[y]*f,1);}real={basePeriod,baseIndex:base,exports:rx,imports:ri,balance:rb};}catch{}
   // Serie mensual ICA. La API histórica puede quedar rezagada; completamos el tramo reciente
@@ -254,7 +273,7 @@ async function tradeHistorical(){
     '2026-07':2115,'2026-08':2187
   };
   Object.assign(monthlyBalance,indecRecent);
-  return {status:'ok',source:'INDEC — Intercambio Comercial Argentino (ICA); CPI-U BLS para USD constantes',sourceUrl:'https://www.indec.gob.ar/indec/web/Nivel4-Tema-3-2-40',balance,exports,imports,real,monthlyBalance};
+  return {status:'ok',source:'INDEC — Intercambio Comercial Argentino (ICA); CPI-U BLS para USD constantes',sourceUrl:'https://www.indec.gob.ar/indec/web/Nivel4-Tema-3-2-40',balance,exports,imports,real,monthlyBalance,estimatedImports:[...est].sort()};
 }
 
 function annualLastGeneric(rows){
@@ -1024,6 +1043,14 @@ let MEMORY_SNAPSHOT=null;
 const SNAPSHOT_PREFIX='macro:snapshot:v131:';
 const MEMORY_SNAPSHOTS={};
 function isPlainObject(v){return !!v&&typeof v==='object'&&!Array.isArray(v);}
+// v179 · Repara snapshots guardados antes del arreglo de nulls (Datos Argentina → 0): completa la industria con la
+// serie anual incluida y reemplaza en comercio exterior los años en 0 o faltantes por la tabla anual completa.
+function repairHistorical(S){
+  const I=S?.industryHistorical;if(I&&typeof I==='object'){I.annual={...(I.annual||{})};for(const [y,v] of Object.entries(INDUSTRY_ANNUAL))if(!Number.isFinite(Number(I.annual[y])))I.annual[y]=v;}
+  const T=S?.tradeHistorical;if(T&&typeof T==='object'){let fixed=false;
+    for(const k of ['exports','imports','balance']){T[k]={...(T[k]||{})};for(const [y,v] of Object.entries(TRADE_ANNUAL[k])){const c=Number(T[k][y]);if(!Number.isFinite(c)||c===0){T[k][y]=v;fixed=true;}}}
+    if(fixed&&T.real?.baseIndex){const cpi=usCpiAnnual(),b=T.real.baseIndex;for(const k of ['exports','imports','balance']){T.real[k]={...(T.real[k]||{})};for(const y of Object.keys(T[k]))if(cpi[y])T.real[k][y]=round(T[k][y]*b/cpi[y],1);}}}
+}
 function mergeSnapshot(oldValue,newValue){
   if(Array.isArray(oldValue)||Array.isArray(newValue)){
     const a=Array.isArray(oldValue)?oldValue:[],b=Array.isArray(newValue)?newValue:[];
@@ -1202,6 +1229,7 @@ export default async(env={},ctx=null,request=null,opts={})=>{
     else out.sources[name]={status:'error',error:String(j.reason?.message||j.reason)};
   });
   for(const [name,old] of Object.entries(previous?.sources||{}))if(!out.sources[name])out.sources[name]=old;
+  repairHistorical(out.sources);
   // Tarjetas: alinear ISAC, mora y crédito con sus series (mismo grupo "activity").
   const AP=out.sources.activityPulse;
   if(AP){

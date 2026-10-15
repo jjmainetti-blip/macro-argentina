@@ -389,6 +389,13 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 - `public/reserves-components.json`: swap con China (CNY y tipo de cambio), BIS y otros pasivos de corto plazo, SEDESA, oro (toneladas y precio), con notas y fuentes. Actualizar `through` y los componentes cuando cambien (p. ej., pagos del BIS o el swap).
 - `/api/status` → `reserves`: cuántos meses del FMI ya se cargaron y el último error.
 
+## v179 — Series de industria y comercio exterior sin huecos
+
+- Datos Argentina devuelve `null` en muchas observaciones (las importaciones y el saldo anual del ICA perdieron decenas de años) y `Number(null)` las convertía en 0: balanza, exportaciones e importaciones mostraban años en cero. `seriesRows` (worker) y `publicSeries` (navegador) ahora descartan los nulls.
+- Nueva tabla anual completa 1910–2025 de exportaciones, importaciones y saldo (`src/api/trade-annual.mjs`): saldo = expo − impo cuando falta uno, suma del saldo mensual ICA desde 1992, y en 17 años previos a 1991 sin importaciones ni saldo, importaciones del balance de pagos llevadas a CIF (relación ICA/BP de años vecinos ≈ 1,086; quedan listados en `estimatedImports`). La API sólo agrega o corrige años con dato real.
+- Industria: 2015 y 2016 faltaban (EMI termina en 2014 y la primera variación del IPI es 2017); se empalman con el EMAE · industria manufacturera. El año en curso se compara con los mismos meses del año anterior (antes ene–ago contra todo el año previo). Serie anual incluida como respaldo.
+- `repairHistorical` corrige al vuelo los snapshots guardados con ceros.
+
 ## v178 — Medio aguinaldo como botón y aviso configurable
 
 - En el detalle de cada persona, el medio aguinaldo pasa a ser un botón (con el monto estimado y el vencimiento) que despliega el cálculo al apretarlo.
