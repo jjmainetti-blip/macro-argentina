@@ -8,6 +8,8 @@
   const MES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
   const CARDS = [{ card: 'historyCard', canvas: 'historyChart', summary: 'periodSummary', key: () => document.getElementById('historyChart')?._seriesKey || 'inflation' },
                  { card: 'reservas', canvas: 'resChart', summary: 'resSummary', key: () => 'reserves' },
+                 // v189 · Dólar (libre, oficial, brecha).
+                 { card: 'fxCard', canvas: 'fxChart', summary: 'fxSummary', key: () => 'dolar', url: () => `${SITE}/#tipo-cambio` },
                  // v186 · Detalle de las tarjetas de Pulso económico y Expectativas (un único modal para todas).
                  { card: 'kpiModal', canvas: 'kpiModalChart', after: 'kpiModalSource', modal: true, key: () => document.getElementById('kpiModal')?.dataset.kpi || '' },
                  // v187 · Semáforo de la economía (tabla de puntos, no gráfico).
@@ -53,9 +55,9 @@
     const subtitle = txt($(card, '.chart-meta p'));
     const source = txt($(card, '.chart-meta > span')).replace(/^Fuente:\s*/i, '');
     const summary = txt(document.getElementById(def.summary));
-    const note = txt(card.querySelector('#methodNote, #resExplainer'));
+    const note = txt(card.querySelector('#methodNote, #resExplainer, .method-note'));
     const key = def.key();
-    const url = `${SITE}/?serie=${encodeURIComponent(key)}#historicos`;
+    const url = def.url ? def.url() : `${SITE}/?serie=${encodeURIComponent(key)}#historicos`;
     return { card, cv, chart, title, subtitle, source, summary, note, key, url };
   }
   function rowsOf(M) {

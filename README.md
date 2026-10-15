@@ -389,6 +389,18 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 - `public/reserves-components.json`: swap con China (CNY y tipo de cambio), BIS y otros pasivos de corto plazo, SEDESA, oro (toneladas y precio), con notas y fuentes. Actualizar `through` y los componentes cuando cambien (p. ej., pagos del BIS o el swap).
 - `/api/status` → `reserves`: cuántos meses del FMI ya se cargaron y el último error.
 
+## v190 — Inflación con expectativas del REM
+
+- Series históricas · Inflación: nuevo selector "Sin REM / Con expectativas REM" (activado por defecto). Toma la última encuesta REM con IPC mensual (`rem.surveys[*].ipcM`, mediana) y sólo los meses consecutivos posteriores al último dato oficial.
+  - Mensual: agrega esos meses como barras claras con borde ("oct 2026 (REM)" …).
+  - Anual: si el REM cubre hasta diciembre, estima el año en curso encadenando los meses oficiales de INDEC con los del REM ("2026 (est.)"), tanto punta a punta como promedio anual; si además cubriera un año completo siguiente, también lo estima. Si no alcanza, lo aclara y se ve sólo en la serie mensual.
+- El resumen acumulado sigue usando sólo datos oficiales; la imagen y el Excel exportados incluyen las estimaciones identificadas.
+
+## v189 — Dólar: compartir y 20 años por defecto
+
+- Gráfico del dólar (libre, oficial y brecha): barra Exportar (Excel, JPEG, Instagram, X, WhatsApp), con la serie, el modo de pesos (corrientes, constantes o TCR), la frecuencia y el rango elegidos. Enlace compartido: `https://macrodatos.ar/#tipo-cambio`.
+- Rango por defecto: 20 años (antes Máximo). Los campos Desde/Hasta muestran el período visible.
+
 ## v188 — Resultado fiscal: unidad como subtítulo
 
 - Detalle de Resultado fiscal: "Como % del PBI" pasa a ser un subtítulo chico debajo del título; se quita de "Último dato" y del valor principal. En la tarjeta, el período queda sólo con el mes (la unidad ya figura debajo de cada valor). La imagen compartida lleva la unidad en la línea de detalle.
