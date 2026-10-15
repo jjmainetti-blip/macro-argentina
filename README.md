@@ -389,6 +389,12 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 - `public/reserves-components.json`: swap con China (CNY y tipo de cambio), BIS y otros pasivos de corto plazo, SEDESA, oro (toneladas y precio), con notas y fuentes. Actualizar `through` y los componentes cuando cambien (p. ej., pagos del BIS o el swap).
 - `/api/status` → `reserves`: cuántos meses del FMI ya se cargaron y el último error.
 
+## v182 — Inflación 2017+ completa y últimos 20 años por defecto
+
+- Inflación: Datos Argentina devuelve el IPC nacional (148.3, 2017+) con muchos meses en null y la cadena terminaba en 2016. El tramo 2017+ ahora sale del IPC oficial que ya trae el sitio (`ipc.monthly`, INDEC, dic-2016 = 100); la serie de Datos Argentina sólo completa meses que falten. La cadena se rearma cuando llega la API.
+- Series históricas: el período por defecto pasa a ser "20 años" (antes "Máximo"), también al cambiar de serie. 20 años = exactamente 20 observaciones anuales (2006–2025) o 240 meses.
+- Los selectores Desde/Hasta muestran el período que se ve.
+
 ## v181 — Exportar y compartir las series históricas
 
 - Debajo de cada gráfico de "Series históricas" (incluidas las reservas) hay una barra "Exportar" con Excel, JPEG, Instagram, X y WhatsApp (`public/share.js`). Siempre exporta lo que se ve: la serie, el modo (ARS/USD, constantes/corrientes, etc.) y el rango elegidos.

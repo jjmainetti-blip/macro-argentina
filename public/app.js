@@ -128,6 +128,17 @@ function annualObject(rows, mode='last'){const by={}; for(const r of rows){const
 function growthObject(levels){const out={};const ys=Object.keys(levels).map(Number).sort((a,b)=>a-b);for(const y of ys){if(levels[y-1]!=null)out[y]=Number(((levels[y]/levels[y-1]-1)*100).toFixed(1));}return out;}
 function rowsToMap(rows){const o={};for(const r of rows)o[r.date.slice(0,7)]=r.value;return o;}
 function pct(a,b){return a&&b?((b/a)-1)*100:null;}
+// v182: Datos Argentina devuelve el IPC nacional (2017+) con muchos meses en null; la cadena se cortaba y la
+// inflación anual terminaba en 2016. El tramo 2017+ se completa con el IPC oficial que ya trae el sitio (INDEC,
+// índice dic-2016=100, igual base que la serie 148.3).
+let ipcRawRows=null;
+function officialNatRows(){let M=[];try{M=kpiSourceCache?.ipc?.monthly||[];}catch{}const rows=M.filter(r=>/^\d{4}-\d{2}$/.test(String(r.date).slice(0,7))&&Number(r.index)>0).map(r=>({date:String(r.date).slice(0,7),value:Number(r.index)}));return rows.length?[{date:'2016-12',value:100},...rows]:[];}
+function rebuildInflationFromSources(){
+  if(!ipcRawRows)return false;const off=officialNatRows();if(!ipcRawRows.n.length&&!off.length&&!ipcRawRows.h.length)return false;
+  const N=[...ipcRawRows.n.map(r=>({date:r.date.slice(0,7),value:r.value})),...off];
+  for(const o of [inflationIndex,inflationMonthly])for(const k of Object.keys(o))delete o[k];
+  buildInflationChain(ipcRawRows.h,ipcRawRows.s,N);return true;
+}
 function buildInflationChain(histRows,slRows,natRows){
   const H=rowsToMap(histRows), S=rowsToMap(slRows), N=rowsToMap(natRows);
   const months=[]; for(let y=1943;y<=new Date().getFullYear();y++)for(let m=1;m<=12;m++)months.push(`${y}-${String(m).padStart(2,'0')}`);
@@ -138,7 +149,7 @@ function buildInflationChain(histRows,slRows,natRows){
     if(y<=2006 && H[prev]!=null && H[ym]!=null) r=pct(H[prev],H[ym]);
     else if(y>=2007 && y<=2016 && S[prev]!=null && S[ym]!=null) r=pct(S[prev],S[ym]);
     else if(y>=2017 && N[prev]!=null && N[ym]!=null) r=pct(N[prev],N[ym]);
-    if(!started){ if(H[ym]!=null){inflationIndex[ym]=chain;started=true;} continue; }
+    if(!started){ if(H[ym]!=null||(y>=2007&&y<=2016&&S[ym]!=null)||(y>=2017&&N[ym]!=null)){inflationIndex[ym]=chain;started=true;} continue; }
     if(r!=null){chain*=1+r/100; inflationMonthly[ym]=Number(r.toFixed(2)); inflationIndex[ym]=chain;}
   }
   rebuildAnnualInflation();
@@ -172,7 +183,8 @@ async function loadPublicHistorical(){
     fetch('/trade-annual.json?v=180').then(r=>{if(!r.ok)throw new Error('trade-annual '+r.status);return r.json();}),
   ]);
   const [histIpc,slIpc,natIpc,gdpR,emiR,ipiR,unempR,wbUnempR,wbGdpR,tradeR]=results;
-  if(histIpc.status==='fulfilled'&&slIpc.status==='fulfilled'&&natIpc.status==='fulfilled') buildInflationChain(histIpc.value,slIpc.value,natIpc.value);
+  ipcRawRows={h:histIpc.status==='fulfilled'?histIpc.value:[],s:slIpc.status==='fulfilled'?slIpc.value:[],n:natIpc.status==='fulfilled'?natIpc.value:[]};
+  rebuildInflationFromSources();
   if(gdpR.status==='fulfilled')Object.assign(gdpGrowth,growthObject(annualObject(gdpR.value)));
   // 1961+ usa una serie anual continua de crecimiento real para evitar huecos entre bases históricas.
   if(wbGdpR.status==='fulfilled')Object.assign(gdpGrowth,wbGdpR.value);
@@ -272,7 +284,7 @@ const seriesConfig = {
   salary:{title:'Salario promedio (RIPTE)',subtitle:'Remuneración imponible promedio de trabajadores estables · ARS',source:'Secretaría de Seguridad Social',data:salaryRipte,note:'<strong>Cobertura:</strong> RIPTE mide la remuneración imponible promedio de trabajadores estables registrados con al menos 13 meses continuos bajo las condiciones del SIPA. No representa el salario promedio de toda la población ocupada.'}
 };
 
-let historyChart; let currentSeries='inflation'; let currentRange='max'; let zoomFactor=1;
+let historyChart; let currentSeries='inflation'; let currentRange='20'; /* v182: por defecto, los últimos 20 años */ let zoomFactor=1;
 function chartDefaults(){
   Chart.defaults.font.family='Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif';
   Chart.defaults.color='#63758b';
@@ -355,8 +367,9 @@ function renderHistory(key){
   syncPeriodSelectors(cleanData);
   const all=Object.entries(cleanData).sort((a,b)=>a[0].localeCompare(b[0])); let shown=all;
   const from=document.getElementById('periodFrom')?.value, to=document.getElementById('periodTo')?.value;
-  if(currentRange==='custom'&&from&&to)shown=all.filter(([x])=>x.slice(0,from.length)>=from&&x.slice(0,to.length)<=to); else if(['5','10','20'].includes(String(currentRange))&&all.length){const lastKey=all.at(-1)[0];const lastYear=Number(String(lastKey).slice(0,4));const cutoffYear=lastYear-Number(currentRange);shown=all.filter(([x])=>Number(String(x).slice(0,4))>=cutoffYear);}
+  if(currentRange==='custom'&&from&&to)shown=all.filter(([x])=>x.slice(0,from.length)>=from&&x.slice(0,to.length)<=to); else if(['5','10','20'].includes(String(currentRange))&&all.length){const lastKey=String(all.at(-1)[0]);const n=Number(currentRange),lastYear=Number(lastKey.slice(0,4));/* v182: exactamente N años (20 años anuales = 2006–2025; mensuales = 240 meses) */shown=lastKey.length===4?all.filter(([x])=>Number(String(x).slice(0,4))>lastYear-n):all.filter(([x])=>String(x)>`${lastYear-n}${lastKey.slice(4)}`);}
   if(zoomFactor>1&&shown.length>4)shown=shown.slice(-Math.max(4,Math.ceil(shown.length/zoomFactor)));
+  if(currentRange!=='custom'&&shown.length){/* v182: Desde/Hasta reflejan el período que se ve */const daily=DAILY_SERIES.has(key);for(const [id,k] of [['periodFrom',shown[0][0]],['periodTo',shown.at(-1)[0]]]){const el=document.getElementById(id),v=daily?String(k).slice(0,4):String(k);if(el&&[...el.options].some(o=>o.value===v))el.value=v;}}
   const labels=shown.map(x=>isDaily?displayDay(x[0]):isMonthly?displayMonth(x[0]):key==='poverty'?povertyLabel(x[0]):x[0]), values=shown.map(x=>x[1]);
   const empty=document.getElementById('chartEmpty');if(empty){empty.hidden=shown.length>0;empty.textContent=shown.length?'':`No se recibieron observaciones para ${cfg.title}.`;}
   const annualLabel=inflationAnnualMode==='eop'?'punta a punta (dic./dic.)':'promedio anual';
@@ -369,10 +382,10 @@ function renderHistory(key){
   if(historyChart)historyChart.destroy();const asBars=key==='gdp'; // v138: PIB en barras (verde crecimiento, rojo caída), como los gráficos de las tarjetas
   historyChart=new Chart(document.getElementById('historyChart'),{type:asBars?'bar':'line',data:{labels,datasets:[asBars?{label:cfg.title,data:values,backgroundColor:barValueColor,borderColor:barValueColor,borderWidth:0,borderRadius:2,maxBarThickness:22}:{label:cfg.title,data:values,borderColor:'#0b5bd3',backgroundColor:'rgba(11,91,211,.08)',fill:true,tension:.18,pointRadius:shown.length>35?0:2,pointHoverRadius:5,borderWidth:2.3}]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>seriesValueLabel(currentSeries,c.raw)}}},scales:{x:{grid:{display:false},ticks:{maxRotation:0,autoSkip:true,maxTicksLimit:12}},y:{grid:{color:'#edf2f7'},ticks:{callback:v=>seriesTickLabel(currentSeries,v)}}}}});
 }
-document.querySelectorAll('[data-series]').forEach(btn=>btn.addEventListener('click',()=>{if(btn.dataset.series==='reserves'){showReservesSeries(true);document.querySelectorAll('[data-series]').forEach(b=>b.classList.toggle('active',b===btn));return;}showReservesSeries(false);document.querySelectorAll('[data-series]').forEach(b=>b.classList.remove('active'));btn.classList.add('active');currentRange='max';zoomFactor=1;document.querySelectorAll('[data-range]').forEach(b=>b.classList.toggle('active',b.dataset.range==='max'));renderHistory(btn.dataset.series)}));
+document.querySelectorAll('[data-series]').forEach(btn=>btn.addEventListener('click',()=>{if(btn.dataset.series==='reserves'){showReservesSeries(true);document.querySelectorAll('[data-series]').forEach(b=>b.classList.toggle('active',b===btn));return;}showReservesSeries(false);document.querySelectorAll('[data-series]').forEach(b=>b.classList.remove('active'));btn.classList.add('active');currentRange='20';zoomFactor=1;document.querySelectorAll('[data-range]').forEach(b=>b.classList.toggle('active',b.dataset.range==='20'));renderHistory(btn.dataset.series)}));
 document.querySelectorAll('[data-range]').forEach(btn=>btn.addEventListener('click',()=>{document.querySelectorAll('[data-range]').forEach(b=>b.classList.remove('active'));btn.classList.add('active');currentRange=btn.dataset.range;zoomFactor=1;renderHistory(currentSeries)}));
 ['periodFrom','periodTo'].forEach(id=>document.getElementById(id)?.addEventListener('change',()=>{const a=document.getElementById('periodFrom').value,b=document.getElementById('periodTo').value;if(a>b){if(id==='periodFrom')document.getElementById('periodTo').value=String(a);else document.getElementById('periodFrom').value=String(b);}currentRange='custom';document.querySelectorAll('[data-range]').forEach(x=>x.classList.remove('active'));zoomFactor=1;renderHistory(currentSeries);}));
-document.querySelectorAll('[data-inf-frequency]').forEach(btn=>btn.addEventListener('click',()=>{inflationFrequency=btn.dataset.infFrequency;document.querySelectorAll('[data-inf-frequency]').forEach(b=>b.classList.toggle('active',b===btn));currentRange='max';renderHistory('inflation');}));
+document.querySelectorAll('[data-inf-frequency]').forEach(btn=>btn.addEventListener('click',()=>{inflationFrequency=btn.dataset.infFrequency;document.querySelectorAll('[data-inf-frequency]').forEach(b=>b.classList.toggle('active',b===btn));currentRange='20';document.querySelectorAll('[data-range]').forEach(b=>b.classList.toggle('active',b.dataset.range==='20'));renderHistory('inflation');}));
 document.querySelectorAll('[data-inf-annual]').forEach(btn=>btn.addEventListener('click',()=>{inflationAnnualMode=btn.dataset.infAnnual;document.querySelectorAll('[data-inf-annual]').forEach(b=>b.classList.toggle('active',b===btn));rebuildAnnualInflation();renderHistory('inflation');}));
 document.querySelectorAll('[data-trade-price]').forEach(btn=>btn.addEventListener('click',()=>{tradePriceMode=btn.dataset.tradePrice;document.querySelectorAll('[data-trade-price]').forEach(b=>b.classList.toggle('active',b===btn));if(tradePriceMode==='nominal'){for(const o of [tradeBalance,exportsSeries,importsSeries])for(const k of Object.keys(o))delete o[k];Object.assign(tradeBalance,tradeBalanceNominal);Object.assign(exportsSeries,exportsNominal);Object.assign(importsSeries,importsNominal);}else rebuildRealTrade();const real=tradePriceMode==='real';seriesConfig.tradeBalance.subtitle=`Saldo anual · millones de USD ${real?`constantes de ${tradeBasePeriod||'último CPI-U'}`:'corrientes'}`;seriesConfig.exports.subtitle=`Total anual · millones de USD ${real?`constantes de ${tradeBasePeriod||'último CPI-U'}`:'corrientes'}`;seriesConfig.imports.subtitle=`Total anual · millones de USD ${real?`constantes de ${tradeBasePeriod||'último CPI-U'}`:'corrientes'}`;renderHistory(currentSeries);}));
 document.querySelectorAll('[data-dollar-price]').forEach(btn=>btn.addEventListener('click',()=>{dollarPriceMode=btn.dataset.dollarPrice;document.querySelectorAll('[data-dollar-price]').forEach(b=>b.classList.toggle('active',b===btn));seriesConfig.freeDollar.data=dollarPriceMode==='real'?freeDollarReal:freeDollarNominal;seriesConfig.freeDollar.subtitle=`Venta · ARS ${dollarPriceMode==='real'?`constantes de ${tradeBasePeriod||'último CPI-U'}`:'corrientes'} por USD`;renderHistory('freeDollar');}));
@@ -688,6 +701,7 @@ function applyHistorySources(S){
       if(diag)diag.textContent=`RIPTE cargado: ${n} meses${last?` · último ${displayMonth(last)}`:''}`;
     }
 
+    safeApply('inflationChain',()=>{if(srcOk(S.ipc)&&ipcRawRows)rebuildInflationFromSources();});
     const merge=(target,src)=>{if(srcOk(src)&&src.annual)Object.assign(target,src.annual)};
     merge(industry,S.industryHistorical); if(srcOk(S.unemploymentHistorical)&&S.unemploymentHistorical.annual){for(const [y,v0] of Object.entries(S.unemploymentHistorical.annual)){const v=Number(v0);if(Number.isFinite(v))unemployment[y]=Number((Math.abs(v)<=1?v*100:v).toFixed(1));}}
     if(srcOk(S.tradeHistorical)){if(Object.keys(tradeBalanceMonthly).length<55)Object.assign(tradeBalanceMonthly,S.tradeHistorical.monthlyBalance||{});const from1913=o=>Object.fromEntries(Object.entries(o||{}).filter(([y])=>Number(y)>=1913));Object.assign(tradeBalanceNominal,from1913(S.tradeHistorical.balance));Object.assign(exportsNominal,from1913(S.tradeHistorical.exports));Object.assign(importsNominal,from1913(S.tradeHistorical.imports));if(S.tradeHistorical.real){tradeBasePeriod=S.tradeHistorical.real.basePeriod||'';Object.assign(tradeBalance,from1913(S.tradeHistorical.real.balance));Object.assign(exportsSeries,from1913(S.tradeHistorical.real.exports));Object.assign(importsSeries,from1913(S.tradeHistorical.real.imports));}else rebuildRealTrade();}
