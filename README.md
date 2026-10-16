@@ -389,6 +389,10 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 - `public/reserves-components.json`: swap con China (CNY y tipo de cambio), BIS y otros pasivos de corto plazo, SEDESA, oro (toneladas y precio), con notas y fuentes. Actualizar `through` y los componentes cuando cambien (p. ej., pagos del BIS o el swap).
 - `/api/status` → `reserves`: cuántos meses del FMI ya se cargaron y el último error.
 
+## v193 — Dólar: fechas con el formato del sitio
+
+- Gráfico del dólar: el eje horizontal muestra "jul 2021" en frecuencia mensual y diaria, y el año en anual (antes "2021-07-28"). La variación del período usa "dic 2016–sep 2026" (mensual), "2021–2026" (anual) o "30 sep 2021 – 30 sep 2026" (diaria); el tooltip muestra el mes o el día completo. El Excel conserva las fechas reales.
+
 ## v192 — RIPTE sin meses en cero
 
 - El RIPTE mostraba caídas a $ 0 en 155 meses: la API de series de Datos Argentina devuelve null en muchos meses y `Number(null)` (= 0) pisaba el valor correcto del CSV oficial; además el snapshot guardado conservaba esos ceros. Ahora: la API sólo agrega valores positivos, la base es la serie incluida, `repairHistorical` reemplaza ceros guardados y recalcula el anual, y el navegador descarta cualquier valor ≤ 0 (completa con la serie incluida).
