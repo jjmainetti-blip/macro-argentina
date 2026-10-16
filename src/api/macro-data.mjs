@@ -3,6 +3,8 @@ import * as XLSX from 'xlsx';
 import { BUNDLED_SOURCES } from './bundled-history.mjs';
 import { TRADE_ANNUAL, INDUSTRY_BRIDGE, INDUSTRY_ANNUAL } from './trade-annual.mjs';
 import { FISCAL_BASE } from './fiscal-base.mjs';
+import { fiscalFromNews } from './fiscal-news.mjs';
+import { indecEmae, indecIpi, indecIsac, indecIca, indecPib, indecEph, bcraDaily, monthlyAvg, annualAvg } from './indec-official.mjs';
 import { autosLive, ipcCabaLive, povertyLive, cementLive, cameLive, scentiaLive } from './live-sources.mjs';
 import { cardStatus, CARDS, periodEndYm, todayAR, ymShift } from './freshness.mjs';
 import { EVENTS } from './calendar-data.mjs';
@@ -56,6 +58,8 @@ function growthFromMonthlyYtd(rows){const lv={};for(const r of rows){const k=Str
   for(const y of Object.keys(by).sort()){const p=String(+y-1);if(!by[p])continue;const ms=by[y].filter(m=>lv[`${p}-${m}`]!=null);if(!ms.length)continue;if(by[y].length===12&&by[p].length<12)continue;
     const a=ms.reduce((s,m)=>s+lv[`${y}-${m}`],0),b=ms.reduce((s,m)=>s+lv[`${p}-${m}`],0);out[y]=round(pct(a,b),1);}
   return out;}
+// v197: completa con el respaldo (Datos Argentina) sólo las claves que la fuente oficial no trae.
+function fillMissing(target,backup){for(const [k,v] of Object.entries(backup||{}))if(target[k]==null&&v!=null)target[k]=v;return target;}
 function growthFromAnnualLevels(levels){const out={},ys=Object.keys(levels).map(Number).sort((a,b)=>a-b);for(const y of ys)if(levels[y-1]!=null)out[y]=round(pct(levels[y],levels[y-1]),1);return out;}
 function yoyFromRows(rows){const levels={};for(const r of rows||[]){const k=String(r.date||'').slice(0,7);if(/^\d{4}-\d{2}$/.test(k)&&Number.isFinite(Number(r.value)))levels[k]=Number(r.value);}const out={};for(const [k,v] of Object.entries(levels)){const [y,m]=k.split('-');const prev=`${Number(y)-1}-${m}`;if(Number.isFinite(levels[prev]))out[k]=round(pct(v,levels[prev]),1);}return out;}
 // v113: algunas series de Datos Argentina (EMAE, ISAC) llegan como fracción (0,064 = 6,4%).
@@ -135,21 +139,26 @@ async function gdpHistorical(){
       if(Object.keys(best).length){Object.assign(annual,best);segments.push({query:q,range:`${Math.min(...Object.keys(best).map(Number))}–${Math.max(...Object.keys(best).map(Number))}`,sourceUrl:url})}
     }catch{}
   }
-  // The official INDEC 1980–2005 empalmed workbook is the authority for the gap if CSV discovery is incomplete.
-  if(Object.keys(annual).length<10)throw new Error('series históricas de PIB no disponibles en CSV');
-  const quarterlyYoy={};
-  try{
+  // v197: INDEC (sh_oferta_demanda, cuadro 1, precios de 2004) es la fuente primaria desde 2005; los CSV del
+  // catálogo de Datos Argentina quedan para los años anteriores y como respaldo.
+  const quarterlyYoy={};let official=null;
+  try{official=await indecPib(1);const g=growthFromAnnualLevels(official.annual);for(const [y,v] of Object.entries(g))annual[y]=v;
+    const Q=official.quarters;for(const k of Object.keys(Q)){const [y,q]=k.split('-Q');const pv=Q[`${+y-1}-Q${q}`];if(pv)quarterlyYoy[`${y}-T${q}`]=round(pct(Q[k],pv),1);}
+    segments.push({query:'INDEC — Oferta y demanda globales, cuadro 1 (precios de 2004)',range:`2005–${Object.keys(Q).sort().at(-1).replace('-Q','-T')}`,sourceUrl:official.url});
+  }catch(e){console.warn('PIB INDEC',e);}
+  if(Object.keys(annual).length<10)throw new Error('series históricas de PIB no disponibles');
+  if(!Object.keys(quarterlyYoy).length)try{
     const x=await seriesRows('6.2_PIBPM_2004_T_38',{start:'2020-01-01'});
     const qrows=x.rows.filter(r=>r?.date&&Number.isFinite(Number(r.value))).map(r=>[String(r.date).slice(0,10),Number(r.value)]).sort((a,b)=>a[0].localeCompare(b[0]));
     for(let i=4;i<qrows.length;i++){
       const [d,v]=qrows[i],[pd,pv]=qrows[i-4]; if(!pv)continue;
       const m=Number(d.slice(5,7)),qtr=Math.floor((m-1)/3)+1;
-      quarterlyYoy[`${d.slice(0,4)}-T${qtr}`]=round(pct(v,pv),1);
+      quarterlyYoy[`${d.slice(0,4)}-T${qtr}`]??=round(pct(v,pv),1);
     }
     if(Object.keys(quarterlyYoy).length)segments.push({query:'PIB trimestral a precios constantes, base 2004',range:'2020–presente',sourceUrl:x.url});
   }catch{}
-  Object.assign(quarterlyYoy,{'2025-T3':3.3,'2025-T4':2.1,'2026-T1':2.3,'2026-T2':2.0});
-  return {status:'ok',source:'INDEC / Datos Argentina — Cuentas Nacionales históricas',annual,quarterlyYoy,segments};
+  fillMissing(quarterlyYoy,{'2025-T3':3.3,'2025-T4':2.1,'2026-T1':2.3,'2026-T2':2.0});
+  return {status:'ok',source:official?'INDEC — Cuentas nacionales (oferta y demanda globales); años previos: series históricas INDEC vía Datos Argentina':'INDEC / Datos Argentina — Cuentas Nacionales históricas (respaldo)',...(official?{sourceUrl:official.url}:{}),annual,quarterlyYoy,segments};
 }
 
 async function packageById(id){const j=await get(`https://datos.gob.ar/api/3/action/package_show?id=${id}`,'json');return j?.result;}
@@ -206,23 +215,29 @@ async function addIndecNews(out,subject){
 async function industryHistorical(){
   const annual={}; const segments=[];
   try{const x=await seriesRows('12.1_E_2004_A_3',{start:'1994-01-01',end:'2015-12-31'});Object.assign(annual,growthFromAnnualLevels(annualFromRows(x.rows,'avg')));segments.push({range:'EMI hasta 2015',sourceUrl:x.url});}catch{}
-  let monthlyYoy={};try{const x=await seriesRows('453.1_SERIE_ORIGNAL_0_0_14_46',{start:'2016-01-01'});Object.assign(annual,growthFromMonthlyYtd(x.rows));monthlyYoy=yoyFromRows(x.rows);segments.push({range:'IPI desde 2016',sourceUrl:x.url});}catch{}
+  // v197: IPI manufacturero desde el cuadro de INDEC (primario); Datos Argentina sólo completa meses faltantes.
+  let monthlyYoy={},off=null;try{off=await indecIpi();const rows=Object.entries(off.level).map(([k,v])=>({date:k,value:v}));Object.assign(annual,growthFromMonthlyYtd(rows));monthlyYoy={...off.monthlyYoy};segments.push({range:'IPI desde 2016 (INDEC)',sourceUrl:off.url});}catch(e){console.warn('IPI INDEC',e);}
+  try{const x=await seriesRows('453.1_SERIE_ORIGNAL_0_0_14_46',{start:'2016-01-01'});fillMissing(annual,growthFromMonthlyYtd(x.rows));fillMissing(monthlyYoy,yoyFromRows(x.rows));if(!off)segments.push({range:'IPI desde 2016 (Datos Argentina, respaldo)',sourceUrl:x.url});}catch{}
   if(!Object.keys(annual).length&&!Object.keys(monthlyYoy).length)throw new Error('series industriales no disponibles');
   for(const [y,v] of Object.entries(INDUSTRY_ANNUAL))if(annual[y]==null)annual[y]=v;
   // v179: puente 2015–2016 (EMI termina en 2014; la primera variación del IPI es 2017) con el EMAE industria.
   try{const x=await seriesRows('11.1_VMASD_2004_A_23',{start:'2013-01-01',end:'2016-12-31'});const g=growthFromAnnualLevels(annualFromRows(x.rows,'avg'));for(const y of [2015,2016])if(annual[y]==null&&Number.isFinite(g[y]))annual[y]=g[y];}catch{}
   for(const [y,v] of Object.entries(INDUSTRY_BRIDGE))if(annual[y]==null)annual[y]=v;
   if(annual[2015]!=null)segments.push({range:'2015–2016: EMAE industria manufacturera (empalme)'});
-  let monthlySaMom;try{monthlySaMom=await saMomFromLevels('453.1_SERIE_DESEADA_0_0_24_58');}catch{}
-  return await addIndecNews({status:'ok',source:'INDEC / Datos Argentina — EMI + IPI manufacturero',annual,monthlyYoy,...(monthlySaMom?{monthlySaMom}:{}),segments},'[ií]ndice de producci[oó]n industrial manufacturero(?: \\(IPI manufacturero\\))?').then(o=>withCalendarDate(o,/manufacturero \(IPI\)/i));
+  let monthlySaMom=off&&Object.keys(off.monthlySaMom).length?{...off.monthlySaMom}:undefined;try{const b=await saMomFromLevels('453.1_SERIE_DESEADA_0_0_24_58');monthlySaMom=fillMissing(monthlySaMom||{},b);}catch{}
+  return await addIndecNews({status:'ok',source:off?'INDEC — IPI manufacturero (cuadros oficiales); EMI histórico':'INDEC / Datos Argentina — EMI + IPI manufacturero (respaldo)',...(off?{sourceUrl:off.url}:{}),annual,monthlyYoy,...(monthlySaMom?{monthlySaMom}:{}),segments},'[ií]ndice de producci[oó]n industrial manufacturero(?: \\(IPI manufacturero\\))?').then(o=>withCalendarDate(o,/manufacturero \(IPI\)/i));
 }
 async function unemploymentHistorical(){
-  const x=await seriesRows('45.1_ECTDT_0_A_33',{start:'2003-01-01'});
-  // Normalizar ANTES de redondear: 0.074 -> 7.4, no 0.1 -> 10.0.
-  const normalized=x.rows.map(r=>({...r,value:Math.abs(r.value)<=1?r.value*100:r.value}));
-  const annual=annualFromRows(normalized);
-  if(Object.keys(annual).length<15)throw new Error('serie anual EPH incompleta');
-  return {status:'ok',source:'INDEC — EPH continua, tasa anual normalizada a porcentaje',sourceUrl:x.url,annual};
+  // v197: EPH (cuadros de INDEC, promedio de los 4 trimestres) es la fuente primaria desde 2017; Datos Argentina
+  // completa los años anteriores (desde 2003) y hace de respaldo.
+  const annual={};let off=null,url=null;
+  try{off=await indecEph();Object.assign(annual,off.annual);url=off.url;}catch(e){console.warn('EPH INDEC',e);}
+  try{const x=await seriesRows('45.1_ECTDT_0_A_33',{start:'2003-01-01'});
+    // Normalizar ANTES de redondear: 0.074 -> 7.4, no 0.1 -> 10.0.
+    const normalized=x.rows.map(r=>({...r,value:Math.abs(r.value)<=1?r.value*100:r.value}));
+    fillMissing(annual,annualFromRows(normalized));url??=x.url;}catch(e){if(!off)throw e;}
+  if(Object.keys(annual).length<(off?5:15))throw new Error('serie anual EPH incompleta');
+  return {status:'ok',source:off?'INDEC — EPH continua (cuadros oficiales), promedio anual de las tasas trimestrales':'INDEC / Datos Argentina — EPH continua (respaldo)',sourceUrl:url,annual,...(off?{quarterly:off.quarterly}:{})};
 }
 function usCpiAnnual(){
   // BLS CPI-U, U.S. city average, all items, annual averages (1982-84=100).
@@ -261,20 +276,22 @@ async function tradeHistorical(){
   const est=new Set(TRADE_ANNUAL.estimated);
   for(const [y,v] of Object.entries(live(im))){imports[y]=v;est.delete(y);}
   for(const [y,v] of Object.entries(live(bal)))balance[y]=v;
+  // v197: ICA de INDEC (cuadro c1) primario para el último año completo y los meses recientes.
+  let ica=null;try{ica=await indecIca();for(const [y,v] of Object.entries(ica.annual.exports)){exports[y]=v;imports[y]=ica.annual.imports[y];balance[y]=ica.annual.balance[y];est.delete(y);}}catch(e){console.warn('ICA INDEC',e);}
   for(const y of Object.keys(exports)){if(imports[y]==null&&balance[y]!=null)imports[y]=round(exports[y]-balance[y],1);if(balance[y]==null&&imports[y]!=null)balance[y]=round(exports[y]-imports[y],1);}
   let real=null;
   try{const cpi=usCpiAnnual(),bls=await usCpiMonthly(),basePeriod=Object.keys(bls.monthly).sort().at(-1),base=bls.monthly[basePeriod],rx={},ri={},rb={};for(const y of Object.keys(exports)){if(!cpi[y])continue;const f=base/cpi[y];rx[y]=round(exports[y]*f,1);if(imports[y]!=null)ri[y]=round(imports[y]*f,1);if(balance[y]!=null)rb[y]=round(balance[y]*f,1);}real={basePeriod,baseIndex:base,exports:rx,imports:ri,balance:rb};}catch{}
   // Serie mensual ICA. La API histórica puede quedar rezagada; completamos el tramo reciente
   // con las cifras mensuales publicadas por INDEC, sin interpolar observaciones.
-  let monthlyBalance={};
-  try{const m=await seriesRows('74.3_ISC_0_M_19',{start:'2021-01-01'});for(const r of m.rows){const k=String(r.date).slice(0,7);if(/^\d{4}-(0[1-9]|1[0-2])$/.test(k))monthlyBalance[k]=round(r.value,1);}}catch{}
+  let monthlyBalance={...(ica?.monthlyBalance||{})};
+  try{const m=await seriesRows('74.3_ISC_0_M_19',{start:'2021-01-01'});for(const r of m.rows){const k=String(r.date).slice(0,7);if(/^\d{4}-(0[1-9]|1[0-2])$/.test(k))monthlyBalance[k]??=round(r.value,1);}}catch{}
   const indecRecent={
     '2024-01':797,'2024-02':1432,'2024-03':2160,'2024-04':1807,'2024-05':2654,'2024-06':1880,'2024-07':1459,'2024-08':1875,'2024-09':982,'2024-10':912,'2024-11':1277,'2024-12':1682,
     '2025-01':162,'2025-02':275,'2025-03':623,'2025-04':214,'2025-05':607,'2025-06':879,'2025-07':907,'2025-08':1402,
     '2026-07':2115,'2026-08':2187
   };
-  Object.assign(monthlyBalance,indecRecent);
-  return {status:'ok',source:'INDEC — Intercambio Comercial Argentino (ICA); CPI-U BLS para USD constantes',sourceUrl:'https://www.indec.gob.ar/indec/web/Nivel4-Tema-3-2-40',balance,exports,imports,real,monthlyBalance,estimatedImports:[...est].sort()};
+  fillMissing(monthlyBalance,indecRecent);
+  return {status:'ok',source:'INDEC — Intercambio Comercial Argentino (ICA, cuadros oficiales; Datos Argentina de respaldo); CPI-U BLS para USD constantes',sourceUrl:ica?.url||'https://www.indec.gob.ar/indec/web/Nivel4-Tema-3-2-40',balance,exports,imports,real,monthlyBalance,estimatedImports:[...est].sort()};
 }
 
 function annualLastGeneric(rows){
@@ -354,7 +371,10 @@ async function financialHistorical(){
     result.latest.bna=current;
   }catch(e){errors.push('dólar oficial BNA: '+e.message)}
 
-  try{const x=await seriesRows('89.1_TIPF35D_0_0_35',{start:'1990-01-01'});const rows=x.rows.map(r=>({fecha:r.date,valor:r.value}));result.interestRate.nominal=annualAvgGeneric(rows);for(const [y,i] of Object.entries(result.interestRate.nominal)){const pi=dashboardInflationAnnual[y];if(pi==null)continue;result.interestRate.real[y]=round(((1+i/100)/(1+pi/100)-1)*100,2);}result.interestRate.sourceUrl=x.url;if(Object.keys(result.interestRate.nominal).length<10)throw new Error('cobertura tasa insuficiente');}catch(e){errors.push('tasa: '+e.message)}
+  // v197: BCRA (API de Estadísticas, var. 12: depósitos a plazo fijo a 30 días, % n.a.) primario; Datos Argentina de respaldo.
+  try{let bc={},bcUrl=null;try{bc=annualAvg(await bcraDaily(12,'1990-01-01'));bcUrl='https://api.bcra.gob.ar/estadisticas/v4.0/monetarias/12';}catch(e){errors.push('tasa BCRA: '+e.message);}
+    let x=null;try{x=await seriesRows('89.1_TIPF35D_0_0_35',{start:'1990-01-01'});}catch(e){if(!Object.keys(bc).length)throw e;}
+    result.interestRate.nominal=fillMissing({...bc},x?annualAvgGeneric(x.rows.map(r=>({fecha:r.date,valor:r.value}))):{});result.interestRate.source=bcUrl?'BCRA — tasa de depósitos a plazo fijo a 30 días (API de Estadísticas)':'Datos Argentina (respaldo)';x={url:bcUrl||x.url};for(const [y,i] of Object.entries(result.interestRate.nominal)){const pi=dashboardInflationAnnual[y];if(pi==null)continue;result.interestRate.real[y]=round(((1+i/100)/(1+pi/100)-1)*100,2);}result.interestRate.sourceUrl=x.url;if(Object.keys(result.interestRate.nominal).length<10)throw new Error('cobertura tasa insuficiente');}catch(e){errors.push('tasa: '+e.message)}
   result.errors=errors; if(!Object.keys(result.countryRisk).length&&!Object.keys(result.mervalUsdCcl).length&&!Object.keys(result.freeDollar.nominal).length&&!Object.keys(result.interestRate.nominal).length)throw new Error(errors.join('; ')||'sin series financieras');
   return result;
 }
@@ -532,14 +552,14 @@ export function parseArcaRelease(text,now=new Date()){
 }
 async function arca(){
   const history={'2025-09':20.2,'2025-10':26.5,'2025-11':19.7,'2025-12':27.0,'2026-01':22.0,'2026-02':20.1,'2026-03':26.2,'2026-04':27.2,'2026-05':35.6,'2026-06':23.7,'2026-07':35.1,'2026-08':33.5,'2026-09':38.3};
-  try{const x=await seriesRows('142.3_TOTAL_2001_M_26',{start:'2020-01-01'});const levels={};for(const r of x.rows){const d=String(r.date).slice(0,7);if(/^\d{4}-\d{2}$/.test(d))levels[d]=r.value;}for(const [d,v] of Object.entries(levels)){const [y,m]=d.split('-');const prev=`${Number(y)-1}-${m}`;if(Number.isFinite(levels[prev]))history[d]=round(pct(v,levels[prev]),1);}}catch{}
+  try{const x=await seriesRows('142.3_TOTAL_2001_M_26',{start:'2020-01-01'});const levels={};for(const r of x.rows){const d=String(r.date).slice(0,7);if(/^\d{4}-\d{2}$/.test(d))levels[d]=r.value;}for(const [d,v] of Object.entries(levels)){const [y,m]=d.split('-');const prev=`${Number(y)-1}-${m}`;if(Number.isFinite(levels[prev]))history[d]??=round(pct(v,levels[prev]),1);}}catch{} // v197: DA sólo completa
   try{
     const x=await bestCsv('sspm-recursos-tributarios-totales-por-tributo',r=>/mensual/i.test(`${r.name||''} ${r.description||''}`)?10:0);
     const rows=parseCsv(x.text),h=rows[0].map(norm),dc=h.findIndex(v=>/indice_tiempo|fecha|periodo/.test(v));
     let vc=h.findIndex(v=>/^total_recaudacion$|^total$|recursos_tributarios_totales/.test(v));
     if(vc<0)vc=h.findIndex(v=>/total/.test(v)&&!/iva|ganancias|seguridad|aduan/.test(v));
     const levels={}; if(dc>=0&&vc>=0)for(const r of rows.slice(1)){const d=String(r[dc]||'').slice(0,7),v=numberAR(r[vc]);if(/^\d{4}-\d{2}$/.test(d)&&Number.isFinite(v))levels[d]=v;}
-    for(const [d,v] of Object.entries(levels)){const y=Number(d.slice(0,4)),prev=`${y-1}${d.slice(4)}`;if(levels[prev])history[d]=round(pct(v,levels[prev]),1);}
+    for(const [d,v] of Object.entries(levels)){const y=Number(d.slice(0,4)),prev=`${y-1}${d.slice(4)}`;if(levels[prev])history[d]??=round(pct(v,levels[prev]),1);}
   }catch{}
   // v124: ARCA publica cada mes una novedad NUEVA ("Recaudación tributaria de <mes>", con otro id).
   // Antes se leía siempre la misma página (id fija), por eso el sitio quedaba en el mes anterior.
@@ -594,7 +614,7 @@ async function icg(){
       }catch{}
     }
     if(!bestHistory||bestCount<100)throw new Error(`no se encontró recurso mensual completo del ICG (máximo: ${bestCount} meses)`);
-    Object.assign(history,bestHistory);
+    fillMissing(history,bestHistory); // v197: los meses verificados contra UTDT tienen prioridad
     historicalCount=Object.keys(history).length;
     if(historicalCount<100)throw new Error(`histórico ICG incompleto: ${historicalCount} observaciones`);
   }catch(e){historicalError=String(e?.message||e);}
@@ -857,24 +877,29 @@ async function calendar(){
 }
 
 async function isacHistorical(){
+  // v197: cuadro oficial de INDEC primario; Datos Argentina completa los meses que falten.
+  let off=null;try{off=await indecIsac();}catch(e){console.warn('ISAC INDEC',e);}
   const monthly={}; let sourceUrl='';
   let fromApi=false;try{const x=await seriesRows('33.2_I_2004_M_4',{start:'2020-01-01'});sourceUrl=x.url;for(const r of x.rows){const k=String(r.date).slice(0,7);if(/^\d{4}-\d{2}$/.test(k)&&Number.isFinite(Number(r.value)))monthly[k]=Number(r.value)*100;}fromApi=Object.keys(monthly).length>=24;}catch{}  // la API entrega fracción (0,045 = 4,5%)
   if(Object.keys(monthly).length<24){
     try{const x=await bestCsv('sspm-indicador-sintetico-actividad-construccion-isac-base-2004',r=>/valores mensuales|nivel general|isac/i.test(`${r.name||''} ${r.description||''}`)?10:0);sourceUrl=x.url;const rows=parseCsv(x.text),h=rows[0].map(norm),dc=h.findIndex(v=>/indice_tiempo|fecha|periodo/.test(v)),vc=h.findIndex(v=>/isac_variacion_interanual/.test(v));if(dc>=0&&vc>=0)for(const r of rows.slice(1)){const d=String(r[dc]||'').slice(0,7),v=numberAR(r[vc]);if(/^\d{4}-\d{2}$/.test(d)&&Number.isFinite(v))monthly[d]=v;}}catch{}
   }
-  if(!Object.keys(monthly).length)throw new Error('serie ISAC interanual no disponible');
+  if(!Object.keys(monthly).length&&!off)throw new Error('serie ISAC interanual no disponible');
   const pctMonthly=fromApi?monthly:fractionMapToPct(monthly);for(const k of Object.keys(pctMonthly))monthly[k]=round(Number(pctMonthly[k]),1)+0;
   let monthlySaMom;try{monthlySaMom=await saMomFromLevels('33.2_ISAC_SIN_EDAD_0_M_23_56');}catch{}
-  return await addIndecNews({status:'ok',source:'INDEC / Datos Argentina — ISAC',sourceUrl,monthlyYoy:monthly,...(monthlySaMom?{monthlySaMom}:{})},'indicador sint[eé]tico de la actividad de la construcci[oó]n(?: \\(ISAC\\))?').then(o=>withCalendarDate(o,/construcci[oó]n \(ISAC\)/i));
+  if(off){Object.assign(monthly,off.monthlyYoy);monthlySaMom={...(monthlySaMom||{}),...off.monthlySaMom};sourceUrl=off.url;}
+  return await addIndecNews({status:'ok',source:off?'INDEC — ISAC (cuadros oficiales; Datos Argentina de respaldo)':'INDEC / Datos Argentina — ISAC (respaldo)',sourceUrl,monthlyYoy:monthly,...(monthlySaMom?{monthlySaMom}:{})},'indicador sint[eé]tico de la actividad de la construcci[oó]n(?: \\(ISAC\\))?').then(o=>withCalendarDate(o,/construcci[oó]n \(ISAC\)/i));
 }
 
 async function emaeHistorical(){
   // v114: la tarjeta muestra la variación mensual desestacionalizada (143.3_ICE_SER_VM_2004_A_34) y, abajo, la interanual.
   const [yoyR,saR]=await Promise.allSettled([seriesRows('143.3_ICE_SERVIA_2004_A_25',{start:'2018-01-01'}),seriesRows('143.3_ICE_SER_VM_2004_A_34',{start:'2015-01-01'})]);
   const toPct=rows=>{const m={};for(const r of rows){const k=String(r.date).slice(0,7);if(/^\d{4}-\d{2}$/.test(k)&&Number.isFinite(Number(r.value)))m[k]=Number(r.value);}const p=fractionMapToPct(m);for(const k of Object.keys(p))p[k]=round(Number(p[k]),1)+0;return p;};
-  const out={status:'ok',source:'INDEC / Datos Argentina — EMAE'};
+  const out={status:'ok',source:'INDEC / Datos Argentina — EMAE (respaldo)'};
   if(yoyR.status==='fulfilled'){out.monthlyYoy=toPct(yoyR.value.rows);out.sourceUrl=yoyR.value.url;}
   if(saR.status==='fulfilled')out.monthlySaMom=toPct(saR.value.rows);
+  // v197: cuadro oficial de INDEC (sh_emae_mensual_base2004) primario; Datos Argentina sólo completa.
+  try{const off=await indecEmae();out.monthlyYoy={...(out.monthlyYoy||{}),...Object.fromEntries(Object.entries(off.monthlyYoy).filter(([k])=>k>='2018-01'))};out.monthlySaMom={...(out.monthlySaMom||{}),...Object.fromEntries(Object.entries(off.monthlySaMom).filter(([k])=>k>='2015-01'))};out.sourceUrl=off.url;out.source='INDEC — EMAE (cuadros oficiales; Datos Argentina de respaldo)';}catch(e){console.warn('EMAE INDEC',e);}
   if(!out.monthlyYoy&&!out.monthlySaMom)throw new Error('series EMAE no disponibles');
   return out;
 }
@@ -955,9 +980,11 @@ async function immCreditSaMom(){
   return out;
 }
 async function creditHistorical(){
-  const [lv,imm]=await Promise.allSettled([seriesRows('91.1_PEFPC_0_0_35',{start:'2019-01-01'}),immCreditSaMom()]);
+  // v197: BCRA (API de Estadísticas, var. 26: préstamos al sector privado, promedio mensual) primario; Datos Argentina de respaldo.
+  const [bc,lv,imm]=await Promise.allSettled([bcraDaily(26,'2018-01-01'),seriesRows('91.1_PEFPC_0_0_35',{start:'2019-01-01'}),immCreditSaMom()]);
   const out={status:'ok',source:'BCRA — préstamos al sector privado'};
-  if(lv.status==='fulfilled'){out.monthlyYoy=yoyFromRows(lv.value.rows);out.sourceUrl=lv.value.url;}
+  if(bc.status==='fulfilled'){const m=monthlyAvg(bc.value),last=Object.keys(bc.value).sort().at(-1);if(last&&Number(last.slice(8))<20)delete m[last.slice(0,7)];/* mes en curso incompleto */out.monthlyYoy=yoyFromRows(Object.entries(m).map(([date,value])=>({date,value})));out.sourceUrl='https://api.bcra.gob.ar/estadisticas/v4.0/monetarias/26';}
+  if(lv.status==='fulfilled'){out.monthlyYoy=fillMissing(out.monthlyYoy||{},yoyFromRows(lv.value.rows));out.sourceUrl??=lv.value.url;}
   if(imm.status==='fulfilled'&&Object.keys(imm.value).length)out.monthlySaRealMom=imm.value;
   if(!out.monthlyYoy&&!out.monthlySaRealMom)throw new Error('crédito sin datos');
   return out;
@@ -1017,20 +1044,27 @@ async function arrearsHistorical(){
 async function fiscalPctGdp(){
   // v187: desde 2021; base incluida (fiscal-base.mjs) + lo que devuelva la API. Financiero = primario − intereses
   // cuando la serie de resultado financiero viene sin el mes.
-  const [pr,fr,ir,gr]=await Promise.allSettled([
+  const [pr,fr,ir,gr,og]=await Promise.allSettled([
     seriesRows('452.3_RESULTADO_RIO_0_M_18_54',{start:'2021-01-01'}),
     seriesRows('452.3_RESULTADO_ERO_0_M_20_25',{start:'2021-01-01'}),
     seriesRows('452.3_INTERESES_TOS_0_M_15_62',{start:'2021-01-01'}),
-    seriesRows('4.4_OGP_2004_T_17',{start:'2020-01-01'})]);
+    seriesRows('4.4_OGP_2004_T_17',{start:'2020-01-01'}),indecPib(8)]);
   const toMap=x=>x.status==='fulfilled'?Object.fromEntries(x.value.rows.map(r=>[String(r.date).slice(0,7),Number(r.value)]).filter(([k,v])=>/^\d{4}-\d{2}$/.test(k)&&Number.isFinite(v))):{};
-  const P={...FISCAL_BASE.primary,...toMap(pr)},I={...FISCAL_BASE.interest,...toMap(ir)},Q={...FISCAL_BASE.gdpQ,...toMap(gr)},F=toMap(fr);
-  for(const k of Object.keys(P))if(!Number.isFinite(F[k])&&Number.isFinite(I[k]))F[k]=P[k]-I[k];
+  // v197: prioridad oficial — comunicado de Hacienda > IMIG (base incluida, Secretaría de Hacienda) > Datos Argentina;
+  // PIB nominal: cuadro 8 de INDEC > base incluida > Datos Argentina.
+  const offQ={};if(og.status==='fulfilled')for(const [k,v] of Object.entries(og.value.quarters)){const [y,q]=k.split('-Q');offQ[`${y}-${String(q*3-2).padStart(2,'0')}`]=v;}
+  const P=fillMissing({...FISCAL_BASE.primary},toMap(pr)),I=fillMissing({...FISCAL_BASE.interest},toMap(ir)),Q=fillMissing({...FISCAL_BASE.gdpQ,...offQ},toMap(gr)),F=toMap(fr);
+  // v196: el mes recién publicado (comunicado de Hacienda) antes de que llegue a Datos Argentina.
+  let news={};try{news=await fiscalFromNews();}catch(e){console.warn('fiscal comunicado',e);}
+  for(const [k,n] of Object.entries(news)){P[k]=n.primary;I[k]=n.interest;F[k]=n.financial;}
+  // Financiero = primario − intereses (identidad del IMIG); la serie de Datos Argentina sólo cubre lo que falte.
+  for(const k of Object.keys(P))if(news[k]==null&&Number.isFinite(I[k])&&Number.isFinite(P[k]))F[k]=P[k]-I[k];
   const qm=['01','04','07','10'];
   const gdpYear=y=>{const qs=qm.map(m=>Q[`${y}-${m}`]);if(qs.every(Number.isFinite))return qs.reduce((a,b)=>a+b,0)/4;const prevYear=qm.map(m=>Q[`${y-1}-${m}`]);if(!prevYear.every(Number.isFinite))return null;const base=prevYear.reduce((a,b)=>a+b,0)/4;const idx=qs.map((v,i)=>Number.isFinite(v)?i:-1).filter(i=>i>=0);if(!idx.length)return null;return base*idx.reduce((a,i)=>a+qs[i],0)/idx.reduce((a,i)=>a+prevYear[i],0);};
   const primary={},financial={};const years=[...new Set(Object.keys(P).map(k=>Number(k.slice(0,4))))].sort();
   for(const y of years){const g=gdpYear(y);if(!g)continue;let cp=0,cf=0;for(let m=1;m<=12;m++){const k=`${y}-${String(m).padStart(2,'0')}`;if(!Number.isFinite(P[k])||!Number.isFinite(F[k]))break;cp+=P[k];cf+=F[k];primary[k]=round(cp/g*100,2);financial[k]=round(cf/g*100,2);}}
   const last=Object.keys(primary).sort().at(-1);if(!last)throw new Error('resultado fiscal sin datos');
-  return {period:periodEs(last),source:'Ministerio de Economía — IMIG; PIB nominal INDEC',sourceUrl:pr.status==='fulfilled'?pr.value.url:'https://datos.gob.ar/series/api/series/?ids=452.3_RESULTADO_RIO_0_M_18_54',historyPctGDP:{primary,financial}};
+  const nl=news[last];return {period:periodEs(last),...(nl?{newsSource:{ym:last,published:nl.published,url:nl.url}}:{}),source:'Secretaría de Hacienda — IMIG y comunicados mensuales; PIB nominal INDEC (Datos Argentina de respaldo)',sourceUrl:nl?.url||'https://www.argentina.gob.ar/economia/sechacienda/informacion-fiscal',historyPctGDP:{primary,financial}};
 }
 // v113: esta función faltaba y hacía fallar TODO /api/macro-data (ReferenceError).
 // Devuelve sólo lo que puede refrescarse en vivo; el resto proviene del snapshot incluido (bundled-history.mjs).

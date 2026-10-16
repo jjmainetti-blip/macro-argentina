@@ -389,6 +389,21 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 - `public/reserves-components.json`: swap con China (CNY y tipo de cambio), BIS y otros pasivos de corto plazo, SEDESA, oro (toneladas y precio), con notas y fuentes. Actualizar `through` y los componentes cuando cambien (p. ej., pagos del BIS o el swap).
 - `/api/status` → `reserves`: cuántos meses del FMI ya se cargaron y el último error.
 
+## v197 — Fuente oficial primaria en todas las series (Datos Argentina como respaldo)
+- Nuevo módulo `src/api/indec-official.mjs`: descubre el archivo vigente en la página del tema de INDEC (`indec.gob.ar/Nivel4/Tema/a/b/c`, los nombres cambian con cada informe) y lee los cuadros oficiales con SheetJS. Si falla el descubrimiento prueba los nombres conocidos.
+- EMAE (`sh_emae_mensual_base2004.xls`), IPI manufacturero (`sh_ipi_manufacturero_AAAA.xls`), ISAC (`sh_isac_AAAA.xls`): interanual y variación mensual s.e. del cuadro oficial; Datos Argentina sólo completa meses faltantes.
+- Comercio exterior: ICA (`ica_cuadros_DD_MM_AA.xls`, cuadro c1) primario para los meses recientes y el último año completo, también en `/api/trade-monthly`; Datos Argentina completa el resto.
+- PIB: `sh_oferta_demanda_MM_AA.xls` (cuadro 1, precios de 2004) para el crecimiento anual desde 2005 y las variaciones trimestrales; los catálogos de Datos Argentina quedan para los años previos. El PIB nominal del resultado fiscal sale del cuadro 8.
+- Desempleo: EPH (`cuadros_tasas_indicadores_eph_MM_AA.xls`, cuadro 1.1), promedio anual de las tasas trimestrales desde 2017; Datos Argentina para 2003–2016 y respaldo.
+- Tasa de interés: API del BCRA (var. 12, plazo fijo a 30 días). Crédito: API del BCRA (var. 26, préstamos al sector privado, promedio mensual).
+- Resultado fiscal: comunicado de Hacienda > IMIG (base incluida) > Datos Argentina; financiero = primario − intereses.
+- ARCA e ICG: los meses verificados en la fuente oficial ya no son pisados por Datos Argentina.
+- Siguen en Datos Argentina sólo como respaldo o tramos históricos cerrados: EMI 1994–2015, PIB 1935–2004, RIPTE (respaldo), mora (el anexo del BCRA tiene prioridad), IPC CABA (base verificada contra IDECBA + informe IDECBA).
+
+## v196 — Resultado fiscal: el mes nuevo el mismo día
+
+- El resultado fiscal sólo se leía de Datos Argentina, que incorpora el mes varios días después del comunicado de Economía (septiembre 2026 se publicó el 16/10 y Datos Argentina seguía en agosto). Nuevo `src/api/fiscal-news.mjs`: lee los comunicados de Hacienda (argentina.gob.ar/economia/sechacienda/noticias), toma el resultado financiero y el primario del mes (los intereses por diferencia) y los agrega si la serie todavía no los tiene. Cuando Datos Argentina lo publica, su dato manda. Verificado contra los comunicados de enero, junio, agosto y septiembre de 2026 y diciembre de 2024.
+
 ## v195 — % del PIB y resultado fiscal histórico
 
 - Balanza comercial, Exportaciones e Importaciones: tercera opción "% del PIB" (junto a USD constantes y corrientes), sobre el PIB en USD corrientes del Banco Mundial (1960–2025, en `trade-annual.json` → `gdpUsd`).
