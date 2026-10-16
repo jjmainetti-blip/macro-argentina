@@ -709,8 +709,11 @@ function applyHistorySources(S){
     if(srcOk(S.salary)){
       for(const k of Object.keys(salaryRipte))delete salaryRipte[k];
       for(const k of Object.keys(salaryRipteMonthly))delete salaryRipteMonthly[k];
-      Object.assign(salaryRipte,S.salary.annual||{});
-      Object.assign(salaryRipteMonthly,S.salary.monthly||{});
+      // v192: un salario nunca es 0: meses en 0/null (Datos Argentina) se descartan y se completan con la serie incluida.
+      const pos=o=>Object.fromEntries(Object.entries(o||{}).filter(([,v])=>Number(v)>0).map(([k,v])=>[k,Number(v)]));
+      const bm=pos(bundledKpiSources?.salary?.monthly),am=pos(S.salary.monthly);
+      Object.assign(salaryRipteMonthly,bm,am);
+      {const an={};for(const k of Object.keys(salaryRipteMonthly).sort())an[k.slice(0,4)]=salaryRipteMonthly[k];Object.assign(salaryRipte,an);}
       applySalaryMode();
       const n=Object.keys(salaryRipteMonthly).length,last=Object.keys(salaryRipteMonthly).sort().at(-1);
       const diag=document.getElementById('ripteDiagnostic');

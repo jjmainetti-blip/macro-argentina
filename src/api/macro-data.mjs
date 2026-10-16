@@ -700,20 +700,20 @@ async function salaryRipte(){
   // Serie oficial Datos Argentina: mensual desde julio de 1994. Se completa con la publicación vigente de Seguridad Social.
   const seriesUrl=`https://apis.datos.gob.ar/series/api/series/?ids=158.1_REPTE_0_0_5&start_date=1994-07-01&end_date=${new Date().getUTCFullYear()+1}-12-31&limit=1000&sort=desc&format=json&metadata=none`;
   const officialUrl='https://www.argentina.gob.ar/node/201033';
-  const monthly={};
+  const monthly={...(BUNDLED_SOURCES.salary?.monthly||{})}; // v192: base incluida; las fuentes sólo agregan o corrigen meses
   // Recurso CSV oficial completo (1994+). Es la vía primaria porque la API de series puede devolver ventanas parciales.
   const csvUrl='https://infra.datos.gob.ar/catalog/sspm/dataset/158/distribution/158.1/download/remuneracion-imponible-promedio-trabajadores-estables-ripte-total-pais-pesos-serie-mensual.csv';
   try{
     const rows=parseCsv(await get(csvUrl,'text'));
     const h=(rows[0]||[]).map(norm),dc=h.findIndex(x=>/indice_tiempo|fecha|periodo/.test(x)),vc=h.findIndex(x=>/^ripte$|repte/.test(x));
-    if(dc>=0&&vc>=0)for(const row of rows.slice(1)){const ym=String(row[dc]||'').slice(0,7),v=numberAR(row[vc]);if(/^\d{4}-\d{2}$/.test(ym)&&Number.isFinite(v)&&ym>='1994-07')monthly[ym]=v;}
+    if(dc>=0&&vc>=0)for(const row of rows.slice(1)){const ym=String(row[dc]||'').slice(0,7),v=numberAR(row[vc]);if(/^\d{4}-\d{2}$/.test(ym)&&Number.isFinite(v)&&v>0&&ym>='1994-07')monthly[ym]=v;}
   }catch(e){}
   // Fallback/complemento: API oficial de series.
   try{
     const j=JSON.parse(await get(seriesUrl,'text'));
     for(const row of (j.data||[])){
-      const ym=String(row?.[0]||'').slice(0,7),v=Number(row?.[1]);
-      if(/^\d{4}-\d{2}$/.test(ym)&&Number.isFinite(v)&&ym>='1994-07')monthly[ym]=v;
+      const ym=String(row?.[0]||'').slice(0,7),v=row?.[1]==null||row?.[1]===''?NaN:Number(row?.[1]); // v192: Datos Argentina manda null en meses faltantes (antes pisaba el CSV con 0)
+      if(/^\d{4}-\d{2}$/.test(ym)&&Number.isFinite(v)&&v>0&&ym>='1994-07')monthly[ym]=v;
     }
   }catch(e){}
   // La página oficial es la autoridad para los meses más recientes y además evita depender de que el catálogo replique inmediatamente la publicación.
@@ -1052,6 +1052,11 @@ function isPlainObject(v){return !!v&&typeof v==='object'&&!Array.isArray(v);}
 // serie anual incluida y reemplaza en comercio exterior los años en 0 o faltantes por la tabla anual completa.
 function repairHistorical(S){
   const I=S?.industryHistorical;if(I&&typeof I==='object'){I.annual={...(I.annual||{})};for(const [y,v] of Object.entries(INDUSTRY_ANNUAL))if(!Number.isFinite(Number(I.annual[y])))I.annual[y]=v;}
+  // v192: RIPTE guardado con meses en 0 (null de Datos Argentina): se reemplazan por la serie incluida y se recalcula el anual (último mes de cada año).
+  const R=S?.salary;if(R&&typeof R==='object'&&R.monthly){const B=BUNDLED_SOURCES.salary?.monthly||{},m={};let bad=false;
+    for(const [k,v] of Object.entries(R.monthly)){if(Number(v)>0)m[k]=Number(v);else{bad=true;if(Number(B[k])>0)m[k]=Number(B[k]);}}
+    for(const [k,v] of Object.entries(B))if(m[k]==null&&Number(v)>0){m[k]=Number(v);bad=true;}
+    if(bad){R.monthly=Object.fromEntries(Object.entries(m).sort(([a],[b])=>a.localeCompare(b)));const an={};for(const [k,v] of Object.entries(R.monthly))an[k.slice(0,4)]=v;R.annual=an;}}
   const T=S?.tradeHistorical;if(T&&typeof T==='object'){let fixed=false;
     for(const k of ['exports','imports','balance']){T[k]={...(T[k]||{})};for(const [y,v] of Object.entries(TRADE_ANNUAL[k])){const c=Number(T[k][y]);if(!Number.isFinite(c)||c===0){T[k][y]=v;fixed=true;}}}
     if(fixed&&T.real?.baseIndex){const cpi=usCpiAnnual(),b=T.real.baseIndex;for(const k of ['exports','imports','balance']){T.real[k]={...(T.real[k]||{})};for(const y of Object.keys(T[k]))if(cpi[y])T.real[k][y]=round(T[k][y]*b/cpi[y],1);}}}

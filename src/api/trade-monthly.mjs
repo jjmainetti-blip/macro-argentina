@@ -11,7 +11,7 @@ export default async function tradeMonthly(){
     if(!r.ok)throw new Error(`Series API ${r.status}`);
     const j=await r.json(); const monthly={};
     for(const row of (j?.data||[])){
-      const k=String(row?.[0]||'').slice(0,7),v=Number(row?.[1]);
+      const k=String(row?.[0]||'').slice(0,7),v=row?.[1]==null||row?.[1]===''?NaN:Number(row?.[1]); // v192: null ≠ 0
       if(/^\d{4}-(0[1-9]|1[0-2])$/.test(k)&&Number.isFinite(v))monthly[k]=Number(v.toFixed(2));
     }
     const keys=Object.keys(monthly).sort().slice(-60); const data=Object.fromEntries(keys.map(k=>[k,monthly[k]]));

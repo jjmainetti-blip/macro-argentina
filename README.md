@@ -389,6 +389,11 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 - `public/reserves-components.json`: swap con China (CNY y tipo de cambio), BIS y otros pasivos de corto plazo, SEDESA, oro (toneladas y precio), con notas y fuentes. Actualizar `through` y los componentes cuando cambien (p. ej., pagos del BIS o el swap).
 - `/api/status` → `reserves`: cuántos meses del FMI ya se cargaron y el último error.
 
+## v192 — RIPTE sin meses en cero
+
+- El RIPTE mostraba caídas a $ 0 en 155 meses: la API de series de Datos Argentina devuelve null en muchos meses y `Number(null)` (= 0) pisaba el valor correcto del CSV oficial; además el snapshot guardado conservaba esos ceros. Ahora: la API sólo agrega valores positivos, la base es la serie incluida, `repairHistorical` reemplaza ceros guardados y recalcula el anual, y el navegador descarta cualquier valor ≤ 0 (completa con la serie incluida).
+- Mismo arreglo de null en la serie mensual de balanza comercial (`trade-monthly.mjs`).
+
 ## v191 — Proyecciones REM también con Desde/Hasta
 
 - PIB e Inflación: al elegir un período con los selectores Desde/Hasta, las proyecciones/expectativas del REM se siguen mostrando siempre que "Hasta" sea el último dato observado (antes se ocultaban con cualquier período personalizado). Si "Hasta" es anterior, no se agregan.
