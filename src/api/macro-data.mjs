@@ -1,4 +1,4 @@
-import { latestRelease } from '../../public/releases.js';
+import { cardPublication } from '../../public/releases.js';
 import * as XLSX from 'xlsx';
 import { BUNDLED_SOURCES } from './bundled-history.mjs';
 import { TRADE_ANNUAL, INDUSTRY_BRIDGE, INDUSTRY_ANNUAL } from './trade-annual.mjs';
@@ -1214,16 +1214,31 @@ export const GROUPS={
 // tanto en el snapshot guardado como en la línea de base, y se queda con el más nuevo.
 // v134 · "Último dato publicado" para la portada: se calcula con la misma función del navegador
 // (public/releases.js) sobre los snapshots guardados y se guarda chico en KV (release:latest).
-const RELEASE_KEY='release:latest';
+const RELEASE_KEY='release:latest:v198';
+const CARD_ORDER=[['ipi','IPI manufacturero','INDEC'],['isac','ISAC construcción','INDEC'],['cement','Despachos de cemento','AFCP'],['came','Ventas minoristas pyme','CAME'],['super','Consumo en supermercados','INDEC'],['scentia','Consumo masivo','Scentia'],['arca','Recaudación','ARCA'],['autos','Patentamientos 0 km','ACARA'],['bop','Balanza de pagos','INDEC'],['icg','Confianza gobierno','UTDT'],['ila','Índice Líder (ILA)','CICEc'],['poverty','Pobreza','INDEC'],['iga','IGA','OJF'],['emae','EMAE','INDEC'],['credit','Crédito privado','BCRA'],['arrears','Mora bancaria','BCRA'],['trade','Balanza comercial','INDEC'],['fiscal','Resultado fiscal','Economía'],['ipcCaba','Inflación CABA','IDECBA'],['ipc','Inflación nacional','INDEC']];
+const MES_CORTO=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+export function topCardRelease(R,seen={}){
+  const rows=[];
+  CARD_ORDER.forEach(([key,name,agency],order)=>{const c=CARDS.find(x=>x.key===key);if(!c)return;let p=null;try{p=c.latest(R);}catch{}const ym=p?periodEndYm(p):null;if(!ym)return;
+    const pub=cardPublication(key,ym,R,seen);if(!pub)return;rows.push({key,name,agency,order,ym,period:p,pub});});
+  rows.sort((a,b)=>b.pub.date.localeCompare(a.pub.date)||b.ym.localeCompare(a.ym)||a.order-b.order);
+  const t=rows[0];if(!t)return null;
+  const per=/^\d{4}-\d{2}$/.test(t.period)?`${MES_CORTO[+t.period.slice(5)-1]} ${t.period.slice(0,4)}`:String(t.period).replace(/^(\d{4})-Q([1-4])$/,'$2T $1').replace(/^(\d{4})-S([12])$/,'$2S $1');
+  const [y,m,d]=t.pub.date.split('-');
+  return {title:`${t.name} · ${t.agency}`,value:'',date:t.pub.basis==='habitual'?`Período ${per}`:`Publicado ${+d} ${MES_CORTO[+m-1]} ${y} · período ${per}`,sortKey:t.pub.date,key:t.key,fromGrid:true};
+}
 let RELEASE_MEMO=null;
 export async function latestReleaseFor(env,ctx=null,opts={}){
   if(!opts.force&&RELEASE_MEMO&&Date.now()-RELEASE_MEMO.at<60000)return RELEASE_MEMO.value;
   let cached=null;
   if(!opts.force){try{const r=await env?.MACRO_STORE?.getWithMetadata?.(RELEASE_KEY,'json');if(r?.value){cached=r.value;if(Date.now()-(r.metadata?.savedAt||0)<10*60*1000){RELEASE_MEMO={at:Date.now(),value:cached};return cached;}}}catch{}}
   const compute=async()=>{
-    const R={};for(const n of ['ipc','ipcCaba','arca','salary','icg','autos','rem','bopHistorical','activityPulse','came','industryHistorical','isacHistorical','supermarkets','scentia'])if(BUNDLED_SOURCES[n])R[n]=BUNDLED_SOURCES[n];
-    for(const g of ['core','external','activity','history']){const snap=await readSnapshot(env,g);for(const n of ['ipc','ipcCaba','arca','salary','icg','autos','rem','bopHistorical','activityPulse','came','industryHistorical','isacHistorical','supermarkets','scentia'])if(snap?.sources?.[n])R[n]=snap.sources[n];}
-    const value=latestRelease(R);
+    // v198: el "Último dato publicado" es la primera tarjeta del tablero (el mismo orden que usa el navegador:
+    // fecha de publicación, después período más nuevo y orden original). El valor lo completa el navegador.
+    const R={...BUNDLED_SOURCES};
+    for(const g of Object.keys(GROUPS)){const snap=await readSnapshot(env,g);if(snap?.sources)Object.assign(R,snap.sources);}
+    let seen={};try{seen=await cardsSeen(env);}catch{}
+    const value=topCardRelease(R,seen);
     if(value){RELEASE_MEMO={at:Date.now(),value};if(env?.MACRO_STORE?.put&&(!cached||JSON.stringify(cached)!==JSON.stringify(value)||opts.force)){try{await env.MACRO_STORE.put(RELEASE_KEY,JSON.stringify(value),{metadata:{savedAt:Date.now()}});}catch{}}}
     return value;
   };

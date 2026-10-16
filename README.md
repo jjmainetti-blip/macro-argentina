@@ -389,6 +389,12 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 - `public/reserves-components.json`: swap con China (CNY y tipo de cambio), BIS y otros pasivos de corto plazo, SEDESA, oro (toneladas y precio), con notas y fuentes. Actualizar `through` y los componentes cuando cambien (p. ej., pagos del BIS o el swap).
 - `/api/status` → `reserves`: cuántos meses del FMI ya se cargaron y el último error.
 
+## v198 — "Último dato publicado" = la primera tarjeta del tablero
+- El recuadro de la portada ya no usa una lista propia de publicaciones (que no incluía, por ejemplo, el resultado fiscal ni la mora y por eso seguía mostrando la inflación): muestra la primera tarjeta de Pulso económico, que ya está ordenado por fecha de publicación.
+- Navegador: `releaseFromGrid()` toma nombre, organismo, valor, período y fecha de publicación de esa tarjeta cada vez que se reordena el tablero; ninguna otra fuente puede pisarlo.
+- Worker: `topCardRelease()` replica el mismo orden (fecha de publicación → período → orden original) para escribir título y fecha en el HTML desde el primer instante (KV `release:latest:v198`).
+- `cardPublication`: una fecha "habitual" futura se acota a hoy (el dato ya está, así que se publicó antes).
+
 ## v197 — Fuente oficial primaria en todas las series (Datos Argentina como respaldo)
 - Nuevo módulo `src/api/indec-official.mjs`: descubre el archivo vigente en la página del tema de INDEC (`indec.gob.ar/Nivel4/Tema/a/b/c`, los nombres cambian con cada informe) y lee los cuadros oficiales con SheetJS. Si falla el descubrimiento prueba los nombres conocidos.
 - EMAE (`sh_emae_mensual_base2004.xls`), IPI manufacturero (`sh_ipi_manufacturero_AAAA.xls`), ISAC (`sh_isac_AAAA.xls`): interanual y variación mensual s.e. del cuadro oficial; Datos Argentina sólo completa meses faltantes.

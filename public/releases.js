@@ -114,7 +114,9 @@ export function cardPublication(key, ymEnd, S = {}, seen = {}) {
   if (exact) return { date: exact, basis: 'fuente' };
   const sn = seen?.[key]; if (sn && sn.ym === ymEnd && ok(sn.date)) return { date: ok(sn.date), basis: 'detectado' };
   const r = PUB_RULES[key]; if (!r) return null;
-  return { date: `${ymShift(ymEnd, r[0])}-${String(r[1]).padStart(2, '0')}`, basis: 'habitual' };
+  // v198: si el dato ya está pero la fecha habitual todavía no llegó, se publicó antes: a lo sumo, hoy.
+  const hab = `${ymShift(ymEnd, r[0])}-${String(r[1]).padStart(2, '0')}`, today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Argentina/Buenos_Aires', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+  return { date: hab > today ? today : hab, basis: 'habitual' };
 }
 export function latestRelease(R) { return pickLatest(buildReleases(R)); }
 if (typeof window !== 'undefined') window.MacroReleases = { buildReleases, pickLatest, latestRelease, cardPublication, PUB_RULES };

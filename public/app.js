@@ -611,19 +611,36 @@ function releaseSortKey(raw){
 // v134: "Último dato publicado" se calcula con public/releases.js (la misma función que usa el Worker para
 // escribirlo en el HTML). Sólo se reemplaza por una publicación de igual o mayor fecha: nunca retrocede.
 let releaseShown=null;
-function showLatestRelease(x){
+function showLatestRelease(x,force=false){
   if(!x||!x.sortKey)return;
+  // v198: el recuadro muestra la primera tarjeta del tablero; una vez fijado así, sólo lo cambia el tablero.
+  if(!force&&releaseShown?.fromGrid&&!x.fromGrid)return;
+  if(force){releaseShown=null;}
   // A igual fecha sólo se reemplaza por la misma publicación o por un conjunto que la incluya (p. ej. IPI → IPI y ISAC).
   const covers=(a,b)=>a.title===b.title||(a.items||[a.title]).every(t=>(b.items||[b.title]).some(u=>u.startsWith(t.split(' · ')[0])));
   if(releaseShown&&(x.sortKey<releaseShown.sortKey||(x.sortKey===releaseShown.sortKey&&!covers(releaseShown,x))))return;
   releaseShown=x;
   const t=document.getElementById('latestReleaseTitle'),v=document.getElementById('latestReleaseValue'),d=document.getElementById('latestReleaseDate');
-  if(t)t.textContent=x.title;if(v)v.textContent=x.value;if(d)d.textContent=x.date;
+  if(t)t.textContent=x.title;if(v&&x.value)v.textContent=x.value;if(d)d.textContent=x.date;
   try{localStorage.setItem('macroLatestRelease',JSON.stringify(x));}catch{}
 }
 (()=>{let c=null;try{c=JSON.parse(localStorage.getItem('macroLatestRelease')||'null');}catch{}
-  const s=window.__LATEST_RELEASE__;if(s)showLatestRelease(s);if(c&&c.sortKey)showLatestRelease(c);
-  if(!releaseShown&&window.MacroReleases)showLatestRelease(window.MacroReleases.latestRelease({}));})();
+  // v198: el Worker manda la primera tarjeta (título y fecha); el valor guardado se reutiliza si es la misma.
+  const s=window.__LATEST_RELEASE__;
+  if(s&&s.fromGrid){showLatestRelease(c&&c.fromGrid&&c.title===s.title&&c.sortKey===s.sortKey?c:s,true);}
+  else if(c&&c.fromGrid)showLatestRelease(c,true);})();
+// v198 · "Último dato publicado" = la primera tarjeta del tablero (ya ordenado por fecha de publicación).
+function releaseFromGrid(){
+  const c=document.querySelector('#kpiGrid .kpi[data-kpi]');if(!c||!c.dataset.pub)return null;
+  const txt=sel=>(c.querySelector(sel)?.textContent||'').trim();
+  const name=txt('.kpi-top span'),agency=txt('.kpi-top b'),val=txt('[data-value]'),per=txt('[data-period]');
+  const [plabel,...meas]=per.split(' · '),det=c.querySelector('[data-detail]');
+  let value;
+  if(c.dataset.kpi==='fiscal')value=`${val} del PIB (acumulado)`;
+  else value=[`${val}${meas.length?` ${meas.join(' · ')}`:''}`,det&&!det.classList.contains('sr-only')?det.textContent.trim():''].filter(Boolean).join(' · ');
+  const date=c.dataset.pubBasis==='habitual'?`Período ${plabel}`:`Publicado ${displayDay(c.dataset.pub)} · período ${plabel}`;
+  return {title:agency?`${name} · ${agency}`:name,value,date,sortKey:c.dataset.pub,key:c.dataset.kpi,fromGrid:true};
+}
 let marketsFastLoaded=false;
 function paintMarkets(L){
   if(!L)return;
@@ -793,7 +810,7 @@ function applyHistorySources(S){
 function moneyMillionsToBillions(m){const v=Number(m);if(!Number.isFinite(v))return '';return v>=1e6?`$ ${new Intl.NumberFormat('es-AR',{minimumFractionDigits:1,maximumFractionDigits:1}).format(v/1e6)} billones`:`$ ${new Intl.NumberFormat('es-AR',{maximumFractionDigits:0}).format(v)} millones`;}
 function applyReleases(S){
     if(S.salary?.status==='ok'&&currentSeries==='salary'&&window.Chart)safeApply('salaryRender',()=>renderHistory('salary'));
-    if(window.MacroReleases)showLatestRelease(window.MacroReleases.latestRelease(kpiSourceCache||{}));
+    // v198: el recuadro "Último dato publicado" lo fija sortKpiGrid() con la primera tarjeta.
 }
 // v141 · Evolución de las expectativas del REM: últimos 5 relevamientos (líneas) contra el dato oficial (barras).
 function remSurveyList(S){const all={...(bundledKpiSources?.rem?.surveys||{}),...(S?.rem?.surveys||{})};return Object.keys(all).filter(k=>/^\d{4}-\d{2}$/.test(k)).sort().map(k=>({k,e:all[k]}));}
@@ -1256,7 +1273,8 @@ function setKpiSignal(card,level,why){if(!card)return;let el=card.querySelector(
 function sortKpiGrid(){const grid=document.getElementById('kpiGrid');if(!grid)return;const cards=[...grid.querySelectorAll('.kpi[data-kpi]')];
   // v138: por fecha de publicación (la más reciente primero); a igual fecha, período más nuevo y orden original.
   cards.sort((a,b)=>String(b.dataset.pub||'').localeCompare(String(a.dataset.pub||''))||String(b.dataset.ym||'').localeCompare(String(a.dataset.ym||''))||Number(a.dataset.order)-Number(b.dataset.order));
-  for(const c of cards)grid.appendChild(c);}
+  for(const c of cards)grid.appendChild(c);
+  try{const r=releaseFromGrid();if(r)showLatestRelease(r,true);}catch(e){console.warn('último dato',e);}}
 function bopQuarterLabel(k){const m=String(k).match(/^(\d{4})-Q([1-4])$/);return m?`${m[2]}T ${m[1]}`:String(k);}
 // v126: índice de IPC para deflactar la recaudación. Si INDEC todavía no publicó el mes, se extiende
 // el último índice publicado con la inflación mensual esperada por el REM (mediana), hasta 2 meses.
