@@ -389,6 +389,19 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 - `public/reserves-components.json`: swap con China (CNY y tipo de cambio), BIS y otros pasivos de corto plazo, SEDESA, oro (toneladas y precio), con notas y fuentes. Actualizar `through` y los componentes cuando cambien (p. ej., pagos del BIS o el swap).
 - `/api/status` → `reserves`: cuántos meses del FMI ya se cargaron y el último error.
 
+## v195 — % del PIB y resultado fiscal histórico
+
+- Balanza comercial, Exportaciones e Importaciones: tercera opción "% del PIB" (junto a USD constantes y corrientes), sobre el PIB en USD corrientes del Banco Mundial (1960–2025, en `trade-annual.json` → `gdpUsd`).
+- Balanza de pagos: selector "USD / % del PIB" (anual; en trimestral queda en USD). También en la vista de componentes.
+- Nueva serie "Resultado fiscal" (Primario / Financiero) como % del PIB: Sector Público Nacional no financiero, base caja — Esquema AIF del Ministerio de Economía (primario 1993+, financiero 2007+; 2021+ coincide con el IMIG) sobre PIB nominal en pesos (`gdpLcu`). El año en curso se agrega como barra clara con el acumulado a la fecha (mismo dato que la tarjeta). Datos en `trade-annual.json` → `fiscalSpn`.
+- En % del PIB el resumen muestra el promedio del período y los años con superávit (o los p.p. de cambio para exportaciones e importaciones).
+
+## v194 — Balanza de pagos en Series históricas
+
+- Nueva serie "Balanza de pagos": saldo de la cuenta corriente en millones de USD corrientes, en barras verdes (superávit) y rojas (déficit). Anual 1881–2025: 1881–2005 serie histórica MECON/BCRA (Datos Argentina 335.1, incluida en `trade-annual.json` como `bopCA`) y desde 2006 INDEC (MBP6, suma de los cuatro trimestres de `bopHistorical`); el empalme se aclara en la metodología.
+- Selectores: "Cuenta corriente / Componentes" y "Anual / Trimestral" (desde 2006). Componentes: barras apiladas de bienes, servicios, ingreso primario e ingreso secundario con la cuenta corriente como línea. Trimestres rotulados "2T 2026".
+- Resumen: saldo acumulado del período y el último dato (superávit/déficit). Funciona con 20 años por defecto, Desde/Hasta y la barra Exportar (Excel con una columna por componente).
+
 ## v193 — Dólar: fechas con el formato del sitio
 
 - Gráfico del dólar: el eje horizontal muestra "jul 2021" en frecuencia mensual y diaria, y el año en anual (antes "2021-07-28"). La variación del período usa "dic 2016–sep 2026" (mensual), "2021–2026" (anual) o "30 sep 2021 – 30 sep 2026" (diaria); el tooltip muestra el mes o el día completo. El Excel conserva las fechas reales.
