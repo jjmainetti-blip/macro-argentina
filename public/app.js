@@ -13,13 +13,15 @@ const money2 = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'AR
 
 // Inflación anual. Al iniciar, contiene el tramo de respaldo 2007+.
 // La API interna agrega automáticamente el IPC histórico oficial INDEC (1943–2006).
-// Criterio editorial: INDEC hasta 2006 → San Luis 2007–2015 → transición 2016 → INDEC nacional 2017+.
+// Criterio único (v200): INDEC histórico hasta dic-2006 → IPC San Luis ene-2007–dic-2016 → INDEC nacional desde ene-2017.
+// Esta tabla es la misma cadena (dic/dic) que arma el gráfico; sólo se ve hasta que carga la serie mensual.
 const inflation = {
-  1944:-0.3,1945:19.9,1946:17.6,1947:13.6,1948:13.1,1949:31.0,1950:15.6,1951:36.7,1952:38.8,1953:4.0,1954:3.8,1955:12.3,1956:13.4,1957:27.7,1958:22.5,1959:113.7,
-  1960:27.3,1961:13.5,1962:28.1,1963:24.0,1964:22.2,1965:28.6,1966:31.9,1967:29.2,1968:16.2,1969:7.6,1970:13.6,1971:34.7,1972:58.5,1973:60.3,
-  1974:24.2,1975:182.8,1976:444.0,1977:176.0,1978:175.5,1979:159.5,1980:100.8,1981:104.5,1982:164.8,1983:343.8,1984:626.7,1985:672.2,1986:90.1,1987:131.3,1988:343.0,1989:3079.5,1990:2314.0,
-  1991:171.7,1992:24.9,1993:10.6,1994:4.2,1995:3.4,1996:0.2,1997:0.5,1998:0.9,1999:-1.2,2000:-0.9,2001:-1.1,2002:40.9,2003:3.7,2004:6.1,2005:12.3,2006:9.8,
-  2007:12.6,2008:22.6,2009:18.5,2010:27.0,2011:23.3,2012:23.0,2013:31.9,2014:39.0,2015:31.6,2016:40.9,2017:24.8,2018:47.6,2019:53.8,2020:36.1,2021:50.9,2022:94.8,2023:211.4,2024:117.8,2025:31.5
+  1944:3.9,1945:22.6,1946:18.7,1947:14.9,1948:18.9,1949:33.7,1950:22.1,1951:50.2,1952:19.1,1953:-0.7,1954:16.0,1955:7.5,1956:16.7,1957:25.6,1958:50.7,1959:101.6,
+  1960:18.5,1961:16.4,1962:30.7,1963:23.8,1964:18.1,1965:38.2,1966:29.9,1967:27.3,1968:9.6,1969:6.7,1970:21.7,1971:39.1,1972:64.1,1973:43.8,1974:40.1,1975:335.0,
+  1976:347.6,1977:160.4,1978:169.8,1979:139.7,1980:87.6,1981:131.3,1982:209.7,1983:433.7,1984:688.0,1985:385.4,1986:81.9,1987:174.8,1988:387.7,1989:4923.4,1990:1343.9,1991:84.0,
+  1992:17.5,1993:7.4,1994:3.9,1995:1.6,1996:0.1,1997:0.3,1998:0.7,1999:-1.8,2000:-0.7,2001:-1.5,2002:41.0,2003:3.7,2004:6.1,2005:12.3,2006:9.8,2007:21.5,
+  2008:20.6,2009:18.5,2010:27.0,2011:23.3,2012:23.0,2013:31.9,2014:39.0,2015:31.6,2016:31.4,2017:24.8,2018:47.6,2019:53.8,2020:36.1,2021:50.9,2022:94.8,2023:211.4,
+  2024:117.8,2025:31.5
 };
 
 // Variación anual real del PIB (aprox. para herramienta demostrativa; validar antes de uso productivo).
@@ -179,7 +181,17 @@ function rebuildAnnualInflation(){
     }
   }
 }
+// v199: el IPC mensual 1943–2016 viene en un archivo del sitio (variaciones mensuales completas). Datos Argentina
+// devolvía esas series con meses en null (o vacías), y el gráfico/selector saltaban, p. ej., de ene 1995 a ene 2017.
+function levelsFromMom(seg){if(!seg?.start||!Array.isArray(seg.mom))return [];let [y,m]=seg.start.split('-').map(Number);m--;if(m<1){m=12;y--;}
+  let lv=100;const rows=[{date:`${y}-${String(m).padStart(2,'0')}`,value:lv}];
+  for(const r of seg.mom){m++;if(m>12){m=1;y++;}lv*=1+Number(r)/100;rows.push({date:`${y}-${String(m).padStart(2,'0')}`,value:lv});}return rows;}
+// Completa: si el respaldo (Datos Argentina) cubre todos los meses del tramo, igual manda el archivo; sólo se usa si falta.
+const fullRows=(primary,backup)=>primary.length?primary:backup;
 async function loadPublicHistorical(){
+  const ipcHistP=fetch('/ipc-history.json?v=199').then(r=>{if(!r.ok)throw new Error('ipc-history '+r.status);return r.json();}).catch(()=>null);
+  // El tramo 1943–2016 no espera a Datos Argentina (que puede tardar ~30 s).
+  ipcHistP.then(H=>{if(!H||ipcRawRows)return;ipcRawRows={h:levelsFromMom(H.hist),s:levelsFromMom(H.sanLuis),n:[]};rebuildInflationFromSources();try{if(window.Chart&&currentSeries==='inflation')renderHistory(currentSeries);}catch{}});
   const results=await Promise.allSettled([
     publicSeries('178.1_NL_GENERAL_0_0_13',{start_date:'1943-01-01',end_date:'2006-12-31'}),
     publicSeries('197.1_NIVEL_GENERAL_2014_0_13',{start_date:'2006-12-01',end_date:'2016-12-31'}),
@@ -195,7 +207,8 @@ async function loadPublicHistorical(){
     fetch('/trade-annual.json?v=195').then(r=>{if(!r.ok)throw new Error('trade-annual '+r.status);return r.json();}),
   ]);
   const [histIpc,slIpc,natIpc,gdpR,emiR,ipiR,unempR,wbUnempR,wbGdpR,tradeR]=results;
-  ipcRawRows={h:histIpc.status==='fulfilled'?histIpc.value:[],s:slIpc.status==='fulfilled'?slIpc.value:[],n:natIpc.status==='fulfilled'?natIpc.value:[]};
+  const ipcHist=await ipcHistP;
+  ipcRawRows={h:fullRows(levelsFromMom(ipcHist?.hist),histIpc.status==='fulfilled'?histIpc.value:[]),s:fullRows(levelsFromMom(ipcHist?.sanLuis),slIpc.status==='fulfilled'?slIpc.value:[]),n:natIpc.status==='fulfilled'?natIpc.value:[]};
   rebuildInflationFromSources();
   if(gdpR.status==='fulfilled')Object.assign(gdpGrowth,growthObject(annualObject(gdpR.value)));
   // 1961+ usa una serie anual continua de crecimiento real para evitar huecos entre bases históricas.
@@ -292,8 +305,8 @@ const seriesConfig = {
   imports:{title:'Importaciones',subtitle:'Total anual · millones de USD constantes al último CPI-U',source:'INDEC + BLS',data:importsSeries,note:'<strong>Metodología:</strong> importaciones anuales deflactadas por CPI-U de EE.UU., expresadas por defecto en dólares constantes al último CPI-U disponible. Cuando INDEC no publica el año en la serie histórica, se toma exportaciones − saldo; en 17 años anteriores a 1991 sin ninguno de los dos datos se usan las importaciones del balance de pagos llevadas a CIF (≈ +8,6%).'},
   countryRisk:{title:'Riesgo país',subtitle:'EMBI Argentina · diario · puntos básicos',source:'J.P. Morgan vía republicadores trazables',data:countryRisk,note:'<strong>Metodología:</strong> EMBI Argentina (J.P. Morgan) en puntos básicos, dato diario hasta el último cierre disponible. Se conserva la serie comparable desde enero de 1999; no se empalma hacia atrás con spreads de bonos de definición diferente.'},
   mervalUsd:{title:'Merval en USD constantes',subtitle:'S&P Merval en USD constantes (TCR) · diario',source:'BYMA vía zion.ar · BCRA (A3500) · ArgentinaDatos · BLS (CPI-U)',data:mervalUsdDaily,note:'<strong>Metodología:</strong> Merval diario desde octubre de 1996. En USD: 1996–2001 a 1 peso = 1 USD (convertibilidad); enero–marzo de 2002 sin tipo de cambio diario (hueco); marzo 2002–2010 dividido por el dólar mayorista A3500 del BCRA; 2011–2012 por el dólar libre como aproximación al CCL; desde 2013 Merval CCL. <b>USD constantes (TCR)</b>: el valor en dólares se ajusta por la inflación de EE.UU. (CPI-U) al último mes disponible. En 2019 el índice pasó a S&P Merval.'},
-  freeDollar:{title:'Dólar libre',subtitle:'Venta · ARS constantes al último IPC por USD',source:'ArgentinaDatos / DolarApi + IPC compuesto',data:freeDollarReal,note:'<strong>Metodología:</strong> dólar blue/libre, punta vendedora, cierre anual. En modo real se expresa en pesos constantes al último IPC disponible usando la misma cadena de IPC del dashboard. No se empalma con mercados libres/paralelos históricos de regímenes cambiarios distintos.'},
-  interestRate:{title:'Tasa de interés',subtitle:'Plazo fijo 30 días · tasa real anual · %',source:'BCRA (Datos Argentina de respaldo)',data:interestReal,note:'<strong>Metodología:</strong> tasa de depósitos a plazo fijo a 30 días (BCRA, API de Estadísticas), promedio anual. La tasa real se calcula exactamente con Fisher: (1+i)/(1+π)−1, usando la inflación anual compatible con el IPC compuesto del dashboard.'},
+  freeDollar:{title:'Dólar libre',subtitle:'Venta · ARS constantes al último IPC por USD',source:'ArgentinaDatos / DolarApi + IPC compuesto',data:freeDollarReal,note:'<strong>Metodología:</strong> dólar blue/libre, punta vendedora, cierre anual. En modo real se expresa en pesos constantes al último IPC disponible con la misma cadena mensual del IPC del sitio: cada dato se deflacta con el índice de su mismo período (cierre de año → diciembre). No se empalma con mercados libres/paralelos históricos de regímenes cambiarios distintos.'},
+  interestRate:{title:'Tasa de interés',subtitle:'Plazo fijo 30 días · tasa real anual · %',source:'BCRA (Datos Argentina de respaldo)',data:interestReal,note:'<strong>Metodología:</strong> tasa de depósitos a plazo fijo a 30 días (BCRA, API de Estadísticas), promedio anual. La tasa real es el rendimiento de renovar el plazo fijo cada mes del año (TNA del mes × 30/365) frente a la inflación de esos mismos meses, con la misma cadena mensual del IPC del sitio. Si faltan meses de tasa, se usa Fisher con la tasa y la inflación promedio del año.'},
   fiscalH:{title:'Resultado fiscal',subtitle:'% del PIB',source:'Ministerio de Economía (Esquema AIF e IMIG) · PIB: INDEC / Banco Mundial',data:{},note:'<strong>Metodología:</strong> resultado del Sector Público Nacional no financiero, base caja (Esquema Ahorro-Inversión-Financiamiento; desde 2021, IMIG), como % del PIB nominal anual. El resultado primario excluye los intereses de la deuda; el financiero los incluye (disponible desde 2007). El año en curso muestra el acumulado a la fecha sobre el PIB estimado del año, igual que la tarjeta de Pulso económico. Los cambios de metodología (1993–2006, 2007–2014, 2017) se respetan tal como los publica el Ministerio de Economía.'},
   bop:{title:'Balanza de pagos',subtitle:'Saldo de la cuenta corriente · millones de USD corrientes',source:'INDEC (2006+) · MECON / BCRA (1881–2005)',data:{},note:'<strong>Metodología:</strong> saldo de la cuenta corriente del balance de pagos (bienes + servicios + ingreso primario + ingreso secundario), en millones de USD corrientes. Desde 2006, INDEC (sexta edición del Manual de Balanza de Pagos), sumando los cuatro trimestres; 1881–2005, serie histórica de MECON/BCRA con la metodología anterior, por lo que el empalme de 2006 implica un cambio de criterio. La vista de componentes y la trimestral están disponibles desde 2006.'},
   salary:{title:'Salario promedio (RIPTE)',subtitle:'Remuneración imponible promedio de trabajadores estables · ARS',source:'Secretaría de Seguridad Social',data:salaryRipte,note:'<strong>Cobertura:</strong> RIPTE mide la remuneración imponible promedio de trabajadores estables registrados con al menos 13 meses continuos bajo las condiciones del SIPA. No representa el salario promedio de toda la población ocupada.'}

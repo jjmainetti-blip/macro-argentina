@@ -8,6 +8,7 @@ import { indecEmae, indecIpi, indecIsac, indecIca, indecPib, indecEph, bcraDaily
 import { autosLive, ipcCabaLive, povertyLive, cementLive, cameLive, scentiaLive } from './live-sources.mjs';
 import { cardStatus, CARDS, periodEndYm, todayAR, ymShift } from './freshness.mjs';
 import { EVENTS } from './calendar-data.mjs';
+import { ipcMonthlyChain, ipcAnnualAvg, ipcAnnualAvgInflation } from './ipc-chain.mjs';
 /* Macrodatos (antes Macro Argentina) v8 — stable server-side data contract.
    Each adapter fails independently. The browser keeps its bundled last-known value
    when a source is temporarily unavailable or changes format. */
@@ -245,7 +246,10 @@ function usCpiAnnual(){
   return {1913:9.9,1914:10.0,1915:10.1,1916:10.9,1917:12.8,1918:15.1,1919:17.3,1920:20.0,1921:17.9,1922:16.8,1923:17.1,1924:17.1,1925:17.5,1926:17.7,1927:17.4,1928:17.1,1929:17.1,1930:16.7,1931:15.2,1932:13.7,1933:13.0,1934:13.4,1935:13.7,1936:13.9,1937:14.4,1938:14.1,1939:13.9,1940:14.0,1941:14.7,1942:16.3,1943:17.3,1944:17.6,1945:18.0,1946:19.5,1947:22.3,1948:24.1,1949:23.8,1950:24.1,1951:26.0,1952:26.5,1953:26.7,1954:26.9,1955:26.8,1956:27.2,1957:28.1,1958:28.9,1959:29.1,1960:29.6,1961:29.9,1962:30.2,1963:30.6,1964:31.0,1965:31.5,1966:32.4,1967:33.4,1968:34.8,1969:36.7,1970:38.8,1971:40.5,1972:41.8,1973:44.4,1974:49.3,1975:53.8,1976:56.9,1977:60.6,1978:65.2,1979:72.6,1980:82.4,1981:90.9,1982:96.5,1983:99.6,1984:103.9,1985:107.6,1986:109.6,1987:113.6,1988:118.3,1989:124.0,1990:130.7,1991:136.2,1992:140.3,1993:144.5,1994:148.2,1995:152.4,1996:156.9,1997:160.5,1998:163.0,1999:166.6,2000:172.2,2001:177.1,2002:179.9,2003:184.0,2004:188.9,2005:195.3,2006:201.6,2007:207.342,2008:215.303,2009:214.537,2010:218.056,2011:224.939,2012:229.594,2013:232.957,2014:236.736,2015:237.017,2016:240.007,2017:245.12,2018:251.107,2019:255.657,2020:258.811,2021:270.97,2022:292.655,2023:304.702,2024:313.689,2025:321.943};
 }
 
-async function usCpiMonthly(){
+// v201: memo de 10 min (lo usan el deflactor y el TCR en la misma corrida).
+let US_CPI_MEMO=null;
+async function usCpiMonthly(){if(US_CPI_MEMO&&Date.now()-US_CPI_MEMO.at<600000)return US_CPI_MEMO.p;const p=usCpiMonthlyRaw();US_CPI_MEMO={at:Date.now(),p};p.catch(()=>{US_CPI_MEMO=null;});return p;}
+async function usCpiMonthlyRaw(){
   // BLS CPI-U All items, U.S. city average, not seasonally adjusted (CUUR0000SA0).
   // Public API supports a 20-year window without a key; 2007-current covers the modern FX series.
   const end=new Date().getFullYear(), start=Math.max(2024,end-2);
@@ -307,14 +311,11 @@ function findObservations(x){
   if(Array.isArray(x)&&x.length&&x.some(r=>r&&typeof r==='object'&&('fecha'in r||'date'in r||'fechaHora'in r)&&('valor'in r||'value'in r||'venta'in r||'compra'in r)))return x;
   if(x&&typeof x==='object')for(const v of Object.values(x)){const a=findObservations(v);if(a?.length)return a;} return [];
 }
-const dashboardInflationAnnual={
-  1944:-0.3,1945:19.9,1946:17.6,1947:13.6,1948:13.1,1949:31.0,1950:15.6,1951:36.7,1952:38.8,1953:4.0,1954:3.8,1955:12.3,1956:13.4,1957:27.7,1958:22.5,1959:113.7,
-  1960:27.3,1961:13.5,1962:28.1,1963:24.0,1964:22.2,1965:28.6,1966:31.9,1967:29.2,1968:16.2,1969:7.6,1970:13.6,1971:34.7,1972:58.5,1973:60.3,
-  1974:24.2,1975:182.8,1976:444.0,1977:176.0,1978:175.5,1979:159.5,1980:100.8,1981:104.5,1982:164.8,1983:343.8,1984:626.7,1985:672.2,1986:90.1,1987:131.3,1988:343.0,1989:3079.5,1990:2314.0,
-  1991:171.7,1992:24.9,1993:10.6,1994:4.2,1995:3.4,1996:0.2,1997:0.5,1998:0.9,1999:-1.2,2000:-0.9,2001:-1.1,2002:40.9,2003:3.7,2004:6.1,2005:12.3,2006:9.8,
-  2007:12.6,2008:22.6,2009:18.5,2010:27.0,2011:23.3,2012:23.0,2013:31.9,2014:39.0,2015:31.6,2016:40.9,2017:24.8,2018:47.6,2019:53.8,2020:36.1,2021:50.9,2022:94.8,2023:211.4,2024:117.8,2025:31.5
-};
-function arsDeflatorTo2025(){let idx={2001:100};for(let y=2002;y<=2025;y++)idx[y]=idx[y-1]*(1+dashboardInflationAnnual[y]/100);const base=idx[2025],f={};for(const [y,v] of Object.entries(idx))if(+y>=2002)f[y]=base/v;return f;}
+// v201 · Inflación anual = variación del índice PROMEDIO del año, calculada con la cadena mensual única del sitio
+// (ipc-chain.mjs: INDEC histórico ≤2006 → San Luis 2007–2016 → INDEC nacional 2017+). Ya no hay tabla aparte.
+const IPC_CHAIN_BUNDLED=ipcMonthlyChain(BUNDLED_SOURCES.ipc?.monthly||[]);
+const dashboardInflationAnnual=ipcAnnualAvgInflation(IPC_CHAIN_BUNDLED);
+async function liveIpcChain(){try{return ipcMonthlyChain((await ipc()).monthly||[]);}catch{return IPC_CHAIN_BUNDLED;}}
 function latestGeneric(rows){const a=(rows||[]).map(r=>({date:String(r.fecha||r.date||r.fechaHora||''),value:Number(r.valor??r.value??r.venta)})).filter(x=>x.date&&Number.isFinite(x.value)).sort((a,b)=>a.date.localeCompare(b.date));return a.at(-1)||null;}
 function latestWithChange(rows){const a=(rows||[]).map(r=>({date:String(r.fecha||r.date||r.fechaHora||''),value:Number(r.valor??r.value??r.venta)})).filter(x=>x.date&&Number.isFinite(x.value)).sort((a,b)=>a.date.localeCompare(b.date));const cur=a.at(-1),prev=a.at(-2);return cur?{...cur,previous:prev?.value??null,changePct:prev&&prev.value?round((cur.value/prev.value-1)*100,2):null}:null;}
 async function financialHistorical(){
@@ -351,7 +352,7 @@ async function financialHistorical(){
   }catch(e){errors.push('riesgo país: '+e.message)}
   try{const j=await get('https://zion.ar/api/v1/indicators/merval-usd-ccl/history?limit=100000','json');const rows=findObservations(j);result.mervalUsdCcl=annualLastGeneric(rows);result.daily.mervalUsd=recentDaily(rows,['value','valor']);result.latest.mervalUsd=latestWithChange(rows);for(const y of Object.keys(result.mervalUsdCcl))if(+y<2013)delete result.mervalUsdCcl[y];if(Object.keys(result.mervalUsdCcl).length<10)throw new Error('cobertura Merval USD CCL insuficiente');}catch(e){errors.push('Merval USD CCL: '+e.message)}
   try{const j=await get('https://zion.ar/api/v1/indicators/merval/history?limit=100000','json');const rows=findObservations(j);result.mervalPoints=annualLastGeneric(rows);result.daily.mervalPoints=recentDaily(rows,['value','valor']);result.latest.merval=latestWithChange(rows);if(!result.latest.merval)throw new Error('sin observaciones');}catch(e){errors.push('Merval puntos: '+e.message)}
-  try{const j=await get('https://api.argentinadatos.com/v1/cotizaciones/dolares/blue','json');result.freeDollar.nominal=annualLastGeneric(j);const def=arsDeflatorTo2025();for(const [y,v] of Object.entries(result.freeDollar.nominal)){if(+y<2011||!def[y])continue;result.freeDollar.real[y]=round(v*def[y],2);}if(Object.keys(result.freeDollar.nominal).length<10)throw new Error('cobertura dólar blue insuficiente');}catch(e){errors.push('dólar libre histórico: '+e.message)}
+  try{const j=await get('https://api.argentinadatos.com/v1/cotizaciones/dolares/blue','json');result.freeDollar.nominal=annualLastGeneric(j);/* v201: cierre de año → índice de diciembre (o del último mes del año en curso) */const M=await liveIpcChain(),lastK=Object.keys(M).at(-1);for(const [y,v] of Object.entries(result.freeDollar.nominal)){const k=M[`${y}-12`]?`${y}-12`:(lastK.startsWith(`${y}-`)?lastK:null);if(+y<2011||!k)continue;result.freeDollar.real[y]=round(v*M[lastK]/M[k],2);}result.freeDollar.basePeriod=lastK;if(Object.keys(result.freeDollar.nominal).length<10)throw new Error('cobertura dólar blue insuficiente');}catch(e){errors.push('dólar libre histórico: '+e.message)}
   try{const j=await get('https://api.argentinadatos.com/v1/cotizaciones/dolares/bolsa','json');result.latest.dollar=latestWithChange(j);if(!result.latest.dollar)throw new Error('sin observaciones MEP');}catch(e){errors.push('dólar MEP portada: '+e.message)}
 
   try{
@@ -372,9 +373,16 @@ async function financialHistorical(){
   }catch(e){errors.push('dólar oficial BNA: '+e.message)}
 
   // v197: BCRA (API de Estadísticas, var. 12: depósitos a plazo fijo a 30 días, % n.a.) primario; Datos Argentina de respaldo.
-  try{let bc={},bcUrl=null;try{bc=annualAvg(await bcraDaily(12,'1990-01-01'));bcUrl='https://api.bcra.gob.ar/estadisticas/v4.0/monetarias/12';}catch(e){errors.push('tasa BCRA: '+e.message);}
+  // v201: tasa real = rendimiento de renovar el plazo fijo a 30 días cada mes del año (TNA del mes × 30/365) contra la
+  // inflación de esos mismos meses (cadena mensual del IPC): ∏(1+i_m)/∏(1+π_m) − 1. Si al año le faltan meses de tasa,
+  // se usa Fisher con la tasa promedio y la inflación promedio del año.
+  try{let bc={},bcUrl=null,bcM={};try{const d=await bcraDaily(12,'1990-01-01');bc=annualAvg(d);bcM=monthlyAvg(d);bcUrl='https://api.bcra.gob.ar/estadisticas/v4.0/monetarias/12';}catch(e){errors.push('tasa BCRA: '+e.message);}
     let x=null;try{x=await seriesRows('89.1_TIPF35D_0_0_35',{start:'1990-01-01'});}catch(e){if(!Object.keys(bc).length)throw e;}
-    result.interestRate.nominal=fillMissing({...bc},x?annualAvgGeneric(x.rows.map(r=>({fecha:r.date,valor:r.value}))):{});result.interestRate.source=bcUrl?'BCRA — tasa de depósitos a plazo fijo a 30 días (API de Estadísticas)':'Datos Argentina (respaldo)';x={url:bcUrl||x.url};for(const [y,i] of Object.entries(result.interestRate.nominal)){const pi=dashboardInflationAnnual[y];if(pi==null)continue;result.interestRate.real[y]=round(((1+i/100)/(1+pi/100)-1)*100,2);}result.interestRate.sourceUrl=x.url;if(Object.keys(result.interestRate.nominal).length<10)throw new Error('cobertura tasa insuficiente');}catch(e){errors.push('tasa: '+e.message)}
+    result.interestRate.nominal=fillMissing({...bc},x?annualAvgGeneric(x.rows.map(r=>({fecha:r.date,valor:r.value}))):{});result.interestRate.source=bcUrl?'BCRA — tasa de depósitos a plazo fijo a 30 días (API de Estadísticas)':'Datos Argentina (respaldo)';x={url:bcUrl||x.url};const IM=await liveIpcChain(),INF=ipcAnnualAvgInflation(IM);
+    for(const [y,i] of Object.entries(result.interestRate.nominal)){let g=1,ok=true;
+      for(let m=1;m<=12;m++){const k=`${y}-${String(m).padStart(2,'0')}`,pk=m===1?`${+y-1}-12`:`${y}-${String(m-1).padStart(2,'0')}`;if(!Number.isFinite(bcM[k])||!IM[k]||!IM[pk]){ok=false;break;}g*=(1+bcM[k]/100*30/365)/(IM[k]/IM[pk]);}
+      if(ok){result.interestRate.real[y]=round((g-1)*100,2);continue;}
+      const pi=INF[y];if(pi==null)continue;result.interestRate.real[y]=round(((1+i/100)/(1+pi/100)-1)*100,2);}result.interestRate.sourceUrl=x.url;if(Object.keys(result.interestRate.nominal).length<10)throw new Error('cobertura tasa insuficiente');}catch(e){errors.push('tasa: '+e.message)}
   result.errors=errors; if(!Object.keys(result.countryRisk).length&&!Object.keys(result.mervalUsdCcl).length&&!Object.keys(result.freeDollar.nominal).length&&!Object.keys(result.interestRate.nominal).length)throw new Error(errors.join('; ')||'sin series financieras');
   return result;
 }
@@ -428,32 +436,26 @@ async function exchangeHistorical(){
   // Deflactor ARS al último IPC publicado. La base se mueve automáticamente con cada nuevo dato mensual.
   try{
     const latestIpc=await ipc();
-    // Serie editorial auditada embebida: evita que un timeout de IPC histórico apague ARS reales/TCR.
-    const infl={...dashboardInflationAnnual};
-    // Índice histórico del costo de vida (Ciudad de Buenos Aires), Dirección de Estadística Social,
-    // base 1929=100. Se empalma en 1944 (=102) con el IPC histórico posterior.
-    // Fuente primaria digitalizada por la Biblioteca INDEC, cuadro de costo de vida 1914–1945.
+    // v201 · Un solo índice: la cadena mensual del IPC (1943+), extendida hacia atrás con el costo de vida de la
+    // Ciudad de Buenos Aires (Dirección de Estadística Social, base 1929=100; Biblioteca INDEC, 1914–1945), empalmado en
+    // el promedio de 1944. Cada dato se deflacta con el índice de su mismo período: promedios anuales con el índice
+    // promedio del año; datos mensuales y diarios con el índice del mes. Base: último mes publicado.
+    const M=ipcMonthlyChain(latestIpc.monthly||[]),A=ipcAnnualAvg(M);
     const costOfLiving1929={1914:76,1915:82,1916:88,1917:103,1918:130,1919:122,1920:143,1921:127,1922:107,1923:105,1924:107,1925:104,1926:101,1927:100,1928:99,1929:100,1930:101,1931:87,1932:78,1933:88,1934:78,1935:83,1936:91,1937:93,1938:92,1939:93,1940:95,1941:98,1942:103,1943:104,1944:102};
-    const idx={};
-    for(const [y,v] of Object.entries(costOfLiving1929))idx[y]=Number(v)/102;
-    idx[1944]=1;
-    for(let y=1945;y<=2025;y++){
-      const pi=infl[y]; if(pi==null||!Number.isFinite(Number(pi))){idx[y]=null;continue;}
-      const prev=idx[y-1]; idx[y]=prev==null?null:prev*(1+Number(pi)/100);
-    }
-    const dec2025=latestIpc.monthly.find(x=>x.date==='2025-12')?.index;
-    const latest=latestIpc.monthly.at(-1);
-    const latestScale=(dec2025&&latest?.index)?latest.index/dec2025:1;
-    const base2025=idx[2025];
-    const baseLatest=base2025?base2025*latestScale:null;
-    const basePeriod=latest?.date||'2025-12'; out.free.basePeriod=basePeriod;out.official.basePeriod=basePeriod;
+    const idx={...A};
+    for(const [y,v] of Object.entries(costOfLiving1929))if(+y<1944)idx[y]=A[1944]*Number(v)/costOfLiving1929[1944];
+    // Base: último mes con IPC de Argentina y de EE.UU. (el mismo que usa el TCR), así pesos constantes y TCR comparten base.
+    let usM={};try{usM=(await usCpiMonthly()).monthly||{};}catch{}
+    const basePeriod=latestCommonMonth(M,usM)||Object.keys(M).at(-1),baseLatest=M[basePeriod];
+    out.free.basePeriod=basePeriod;out.official.basePeriod=basePeriod;
     if(baseLatest){
       for(const [y,v] of Object.entries(out.free.nominal)){const yy=+y;if(idx[yy])out.free.real[y]=round(v*baseLatest/idx[yy],4);}
       for(const [y,v] of Object.entries(out.official.nominal)){const yy=+y;if(idx[yy])out.official.real[y]=round(v*baseLatest/idx[yy],4);}
-      const monthIndex=Object.fromEntries(latestIpc.monthly.map(x=>[x.date,x.index]));
-      const dailyReal=(daily,dest)=>{for(const [d,v] of Object.entries(daily)){const y=+d.slice(0,4),ym=d.slice(0,7);let factor=null;if(monthIndex[ym]&&latest?.index)factor=latest.index/monthIndex[ym];else if(y<=2019&&idx[y])factor=baseLatest/idx[y];else if(y===2025)factor=latestScale;else if(y>=2026)factor=1;if(factor)dest[d]=round(v*factor,4);}};
+      // Meses posteriores al último IPC publicado: a precios del último mes (factor 1).
+      const fac=ym=>M[ym]?baseLatest/M[ym]:(ym>basePeriod?1:null);
+      const dailyReal=(daily,dest)=>{for(const [d,v] of Object.entries(daily)){const f=fac(d.slice(0,7));if(f)dest[d]=round(v*f,4);}};
       dailyReal(out.free.daily.nominal,out.free.daily.real);dailyReal(out.official.daily.nominal,out.official.daily.real);
-      const monthlyReal=(monthly,dest)=>{for(const [ym,v] of Object.entries(monthly)){const y=+ym.slice(0,4);let factor=null;if(monthIndex[ym]&&latest?.index)factor=latest.index/monthIndex[ym];else if(idx[y])factor=baseLatest/idx[y];if(factor)dest[ym]=round(v*factor,4);}};
+      const monthlyReal=(monthly,dest)=>{for(const [ym,v] of Object.entries(monthly)){const f=fac(ym);if(f)dest[ym]=round(v*f,4);}};
       monthlyReal(out.free.monthly.nominal,out.free.monthly.real);monthlyReal(out.official.monthly.nominal,out.official.monthly.real);
       // La frecuencia anual moderna se deriva del último mes REAL disponible, no de una cadena anual separada.
       // Así 2026 aparece en ARS constantes hasta el último IPC publicado (actualmente ago-2026).

@@ -389,6 +389,22 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 - `public/reserves-components.json`: swap con China (CNY y tipo de cambio), BIS y otros pasivos de corto plazo, SEDESA, oro (toneladas y precio), con notas y fuentes. Actualizar `through` y los componentes cuando cambien (p. ej., pagos del BIS o el swap).
 - `/api/status` → `reserves`: cuántos meses del FMI ya se cargaron y el último error.
 
+## v201 — Deflactor único: la cadena mensual del IPC
+- Nuevo `src/api/ipc-chain.mjs`: la misma cadena mensual del gráfico (INDEC histórico ≤2006 → San Luis 2007–2016 → INDEC nacional 2017+). Se eliminó la tabla anual fija `dashboardInflationAnnual` (mezclaba promedio anual hasta 2001 y dic/dic desde 2002).
+- Criterio: cada dato se deflacta con el índice de su mismo período. Promedios anuales (dólar oficial/libre histórico) → índice promedio del año; datos mensuales y diarios → índice del mes (antes, antes de 2017 se usaba un índice anual); cierres de año → índice de diciembre. Antes de 1944, costo de vida CABA (base 1929) empalmado en el promedio de 1944.
+- Base de pesos constantes = último mes con IPC de Argentina y de EE.UU. (la misma del TCR; antes podían diferir en un mes).
+- Tasa real: rendimiento de renovar el plazo fijo a 30 días cada mes (TNA × 30/365) contra la inflación de esos meses; Fisher con promedios anuales sólo si faltan meses de tasa (1990, 1993, 1994).
+
+## v200 — Un solo criterio de inflación en todo el sitio
+- Las tablas anuales fijas (`inflation` en app.js y `dashboardInflationAnnual` en el Worker) se recalcularon con la misma cadena mensual del gráfico: INDEC histórico hasta dic-2006, IPC San Luis ene-2007–dic-2016, INDEC nacional desde ene-2017.
+- Navegador: diciembre contra diciembre en todos los años (igual que la vista por defecto del gráfico).
+- Worker (dólar real, TCR, tasa real): misma fuente; se mantiene la medida que ya usaba cada tramo (promedio anual hasta 2001, dic/dic desde 2002). Cambian 1950, 1957–1963, 2007 (12,6→21,5), 2008 (22,6→20,6) y 2016 (40,9→31,4); el resto, sólo redondeos.
+
+## v199 — IPC mensual histórico completo (1943–2016)
+- El selector Desde/Hasta y el gráfico mensual de inflación saltaban (p. ej. de ene 1995 a ene 2017): Datos Argentina devolvía el IPC histórico (178.1) con meses en null y la serie de San Luis (197.1) vacía.
+- Nuevo `public/ipc-history.json`: variaciones mensuales completas del IPC histórico INDEC (feb-1943 a dic-2006, empalme de bases) y del IPC San Luis (ene-2007 a dic-2016), verificadas por cantidad y suma contra la serie original. Es la fuente primaria de ese tramo; Datos Argentina queda de respaldo.
+- El tramo 1943–2016 se arma apenas carga el archivo, sin esperar a la API (que puede tardar ~30 s).
+
 ## v198 — "Último dato publicado" = la primera tarjeta del tablero
 - El recuadro de la portada ya no usa una lista propia de publicaciones (que no incluía, por ejemplo, el resultado fiscal ni la mora y por eso seguía mostrando la inflación): muestra la primera tarjeta de Pulso económico, que ya está ordenado por fecha de publicación.
 - Navegador: `releaseFromGrid()` toma nombre, organismo, valor, período y fecha de publicación de esa tarjeta cada vez que se reordena el tablero; ninguna otra fuente puede pisarlo.
