@@ -10,13 +10,14 @@
 //
 // Metodologías (todas en millones de USD):
 //   mercado  = brutas − encajes − swap China (total, en CNY al tipo de cambio) − repos − BIS/otros − SEDESA
+//              (repos: var 76 + REPO con bancos internacionales con menos de 12 meses al vencimiento, v202)
 //   liquidas = mercado − oro − tenencias de DEG
 //   fmi      = definición del programa 2025 (TMU): brutas netas de swaps, seguro de depósitos, encajes y otros pasivos
 //              de reservas, y excluyendo el cambio en el crédito neto del FMI desde 2025 → mercado − (crédito FMI(t) −
 //              crédito FMI(dic-2024)). Sólo desde ene-2025. Se calcula a precios de mercado, no a los "tipos de cambio
 //              del programa".
 const API = 'https://api.bcra.gob.ar/estadisticas/v4.0/monetarias';
-const KV_KEY = 'reserves:v4';
+const KV_KEY = 'reserves:v5'; // v202: REPO con bancos
 const TTL = 6 * 3600e3;
 
 async function fetchJson(url, ms = 12000) {
@@ -95,7 +96,10 @@ export function buildReserves(gross, encajes, repos, C, imfPos = {}, sdr83 = {},
   const imfBase = imfUsd('2024-12', 'credit') ?? carry(C.imfCreditUsd, '2024-12');
   const rows = [];
   for (const k of months) {
-    const g = G[k]?.v, enc = E[k]?.v ?? null, rep = R[k]?.v ?? (k >= '2003-01' ? 0 : null);
+    // v202: REPO con bancos internacionales documentados (C.bankRepos): se restan sólo con menos de 12 meses al vencimiento.
+    const mdiff = (a, b) => (+b.slice(0, 4) - +a.slice(0, 4)) * 12 + (+b.slice(5, 7) - +a.slice(5, 7));
+    const bankRep = (C.bankRepos || []).filter(o => o.settled <= k && (!o.ended || k < o.ended) && k < o.maturity && mdiff(k, o.maturity) < 12).reduce((s, o) => s + Number(o.usd || 0), 0);
+    const g = G[k]?.v, enc = E[k]?.v ?? null, rep = (R[k]?.v ?? (k >= '2003-01' ? 0 : null)) + (k >= '2003-01' ? bankRep : 0);
     const cny = carry(C.cnyPerUsd, k), swapCny = val(C.swapCnyBn, k) ?? (k < '2014-10' ? 0 : carry(C.swapCnyBn, k));
     const swap = swapCny != null && cny ? swapCny * 1000 / cny : null;
     const after = C.through && k > C.through; // después del último mes documentado se mantiene el último valor
@@ -107,7 +111,10 @@ export function buildReserves(gross, encajes, repos, C, imfPos = {}, sdr83 = {},
       row.encajes = r1(enc); row.swap = r1(swap); row.repos = r1(rep); row.bis = r1(bis); row.sedesa = r1(sedesa);
       row.mercado = r1(g - enc - swap - rep - bis - sedesa);
       if (gold != null && sdr != null) { row.oro = r1(gold); row.deg = r1(sdr); row.liquidas = r1(row.mercado - gold - sdr); }
-      if (k >= '2025-01' && imf != null && imfBase != null) { row.fmiNeto = r1(imf - imfBase); row.fmi = r1(row.mercado - (imf - imfBase)); }
+      if (bankRep) row.reposBancos = r1(bankRep);
+      // La medida FMI no resta los REPO con bancos por plazo residual (el programa los trata por plazo original, > 1 año):
+      // con ese criterio el sitio reproduce el cumplimiento de la meta de jun-2026 (−USD 8.600 M).
+      if (k >= '2025-01' && imf != null && imfBase != null) { row.fmiNeto = r1(imf - imfBase); row.fmi = r1(row.mercado + bankRep - (imf - imfBase)); }
     }
     rows.push(row);
   }

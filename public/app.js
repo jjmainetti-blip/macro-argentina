@@ -1417,9 +1417,9 @@ function showReservesSeries(on){const a=document.getElementById('historyCard'),b
   const f0=new Intl.NumberFormat('es-AR',{maximumFractionDigits:0});
   const usd=v=>v==null?'—':`${v<0?'−':''}US$ ${f0.format(Math.abs(v))} M`;
   const LABEL={mercado:'Netas de mercado',fmi:'Netas metodología FMI',liquidas:'Netas líquidas'};
-  const EXPL={mercado:'<strong>Netas de mercado:</strong> lo que queda de las reservas brutas después de restar lo que no es propio del BCRA o vence en el corto plazo: encajes de los depósitos en dólares, swap con China, repos con bancos, préstamos del BIS y otros, y SEDESA.',
-    fmi:'<strong>Metodología FMI (acuerdo 2025):</strong> parte de las netas de mercado y además excluye los dólares netos que prestó el FMI desde enero de 2025 (desembolsos menos pagos). Por eso sólo hay datos desde 2025. El FMI la calcula a tipos de cambio fijos del programa.',
-    liquidas:'<strong>Netas líquidas:</strong> netas de mercado sin el oro ni las tenencias de DEG del FMI, que no se pueden usar de inmediato para intervenir en el mercado.'};
+  const EXPL={mercado:'<strong>Netas de mercado:</strong> lo que queda de las reservas brutas después de restar lo que no es propio del BCRA o vence en el corto plazo: encajes de los depósitos en dólares, swap con China, REPO con bancos que vencen en menos de 12 meses, préstamos del BIS y otros, y SEDESA.',
+    fmi:'<strong>Metodología FMI (acuerdo 2025):</strong> parte de las netas de mercado y además excluye los dólares netos que prestó el FMI desde enero de 2025 (desembolsos menos pagos). Por eso sólo hay datos desde 2025. No resta los REPO con bancos internacionales (el programa los toma por su plazo original, mayor a un año). El FMI la calcula a tipos de cambio fijos del programa.',
+    liquidas:'<strong>Netas líquidas:</strong> netas de mercado sin el oro ni las tenencias de DEG del FMI, que no se pueden usar de inmediato para intervenir en el mercado. No es la misma medida que las «reservas líquidas» que publican algunas consultoras (p. ej. PPI), que parten de las brutas con otros criterios.'};
   const ym=m=>{const [y,mm]=m.split('-');return `${MONTH_LABELS[+mm-1]} ${y}`;};
   function render(){
     if(!window.Chart||!rows.length)return;
@@ -1439,7 +1439,7 @@ function showReservesSeries(on){const a=document.getElementById('historyCard'),b
     const detail=r=>{if(!r)return [];const out=[`Brutas: ${usd(r.brutas)}`];if(r.encajes==null)return out;
       out.push(`− Encajes: ${usd(r.encajes)}`,`− Swap China: ${usd(r.swap)}`);if(r.repos)out.push(`− Repos: ${usd(r.repos)}`);if(r.bis)out.push(`− BIS y otros: ${usd(r.bis)}`);if(r.sedesa)out.push(`− SEDESA: ${usd(r.sedesa)}`);
       out.push(`= De mercado: ${usd(r.mercado)}`);if(method==='liquidas'&&r.liquidas!=null)out.push(`− Oro: ${usd(r.oro)}`,`− DEG: ${usd(r.deg)}`,`= Líquidas: ${usd(r.liquidas)}`);
-      if(method==='fmi'&&r.fmi!=null)out.push(`− Crédito neto FMI desde 2025: ${usd(r.fmiNeto)}`,`= Metodología FMI: ${usd(r.fmi)}`);return out;};
+      if(method==='fmi'&&r.fmi!=null){if(r.reposBancos)out.push(`+ REPO con bancos (el FMI no los resta): ${usd(r.reposBancos)}`);out.push(`− Crédito neto FMI desde 2025: ${usd(r.fmiNeto)}`,`= Metodología FMI: ${usd(r.fmi)}`);}return out;};
     if(chart)chart.destroy();
     chart=new Chart(cv,{type:'line',data:{labels,datasets:ds},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
       plugins:{legend:{display:true,position:'bottom',labels:{boxWidth:12,usePointStyle:true}},tooltip:{callbacks:{title:it=>it.length?ym(it[0].label):'',label:c=>`${c.dataset.label}: ${usd(c.raw)}`,afterBody:it=>it.length?['',...detail(byM[it[0].label])]:[]}}},

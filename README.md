@@ -389,6 +389,12 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 - `public/reserves-components.json`: swap con China (CNY y tipo de cambio), BIS y otros pasivos de corto plazo, SEDESA, oro (toneladas y precio), con notas y fuentes. Actualizar `through` y los componentes cuando cambien (p. ej., pagos del BIS o el swap).
 - `/api/status` → `reserves`: cuántos meses del FMI ya se cargaron y el último error.
 
+## v202 — Reservas: REPO con bancos internacionales
+- Validación por muestra (brutas, swap China, encajes, swap EE.UU., netas y metodología FMI) contra prensa, BCRA y consultoras: brutas y componentes coinciden; faltaban los REPO.
+- La variable 76 del BCRA (pase pasivo con el exterior) informa 0 desde 2025, así que los REPO de ene-2025 (USD 1.000 M), jun-2025 (2.000 M), ene-2026 (3.000 M) y su renovación de jul-2026 (6.000 M a sep-2028) no se restaban. Se documentan en `reserves-components.json` (`bankRepos`, con vencimientos) y se restan de las netas de mercado y líquidas sólo los meses en que les quedan menos de 12 meses para vencer.
+- La medida FMI no los resta (el programa los toma por plazo original, mayor a un año); así se reproduce el cumplimiento de la meta de jun-2026.
+- Caché KV `reserves:v5` para recalcular al publicar. Textos de metodología actualizados; aclaración de que «líquidas» no es la medida de PPI.
+
 ## v201 — Deflactor único: la cadena mensual del IPC
 - Nuevo `src/api/ipc-chain.mjs`: la misma cadena mensual del gráfico (INDEC histórico ≤2006 → San Luis 2007–2016 → INDEC nacional 2017+). Se eliminó la tabla anual fija `dashboardInflationAnnual` (mezclaba promedio anual hasta 2001 y dic/dic desde 2002).
 - Criterio: cada dato se deflacta con el índice de su mismo período. Promedios anuales (dólar oficial/libre histórico) → índice promedio del año; datos mensuales y diarios → índice del mes (antes, antes de 2017 se usaba un índice anual); cierres de año → índice de diciembre. Antes de 1944, costo de vida CABA (base 1929) empalmado en el promedio de 1944.

@@ -18,7 +18,7 @@
   <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
   <script type="module" src="releases.js?v=198"></script>
   <script defer src="tabs.js?v=173"></script>
-  <script defer src="app.js?v=201"></script><script defer src="share.js?v=189"></script>
+  <script defer src="app.js?v=202"></script><script defer src="share.js?v=189"></script>
   <script defer src="uva-calc.js?v=139b"></script>
   <script defer src="update-schedule.js?v=152"></script>
   <script defer src="account.js?v=178"></script>
@@ -128,7 +128,7 @@
     <div class="fx-explainer" id="resExplainer"></div>
     <div class="chart-wrap"><canvas id="resChart" aria-label="Reservas internacionales brutas y netas del BCRA" role="img"></canvas><p id="resEmpty" class="chart-empty">Cargando reservas…</p></div>
     <div id="resSummary" class="period-summary"></div>
-    <div class="method-note"><strong>Metodología:</strong> brutas, encajes en dólares (cuentas corrientes en moneda extranjera de los bancos en el BCRA) y repos con bancos del exterior salen de la API de estadísticas del BCRA (último dato de cada mes). Swap con China: monto total en yuanes incorporado a las reservas (desde oct-2014; RMB 130.000 M desde dic-2018), convertido al tipo de cambio CNY/USD del mes. BIS y otros pasivos de corto plazo (incluye el swap con el Tesoro de EE.UU. de oct–nov 2025) y SEDESA (seguro de depósitos; dato documentado desde 2020): montos publicados por el BCRA y consultoras. Oro: toneladas × precio internacional. DEG y crédito del FMI: posición financiera de Argentina en el FMI. <em>De mercado</em> = brutas − encajes − swap China − repos − BIS/otros − SEDESA. <em>Líquidas</em> = de mercado − oro − DEG. <em>Metodología FMI</em> (meta del acuerdo 2025, desde ene-2025) = de mercado excluyendo el crédito neto recibido del FMI desde 2025; el FMI la mide a tipos de cambio del programa, por lo que puede diferir de su cifra oficial.</div>
+    <div class="method-note"><strong>Metodología:</strong> brutas, encajes en dólares (cuentas corrientes en moneda extranjera de los bancos en el BCRA) y pases pasivos con el exterior salen de la API de estadísticas del BCRA (último dato de cada mes). REPO con bancos internacionales (ene-2025, jun-2025, ene-2026 y su renovación de jul-2026 por USD 6.000 M a sep-2028): montos y vencimientos publicados; se restan sólo cuando les quedan menos de 12 meses para vencer. Swap con China: monto total en yuanes incorporado a las reservas (desde oct-2014; RMB 130.000 M desde dic-2018), convertido al tipo de cambio CNY/USD del mes. BIS y otros pasivos de corto plazo (incluye el swap con el Tesoro de EE.UU. de oct–nov 2025) y SEDESA (seguro de depósitos; dato documentado desde 2020): montos publicados por el BCRA y consultoras. Oro: toneladas × precio internacional. DEG y crédito del FMI: posición financiera de Argentina en el FMI. <em>De mercado</em> = brutas − encajes − swap China − repos − BIS/otros − SEDESA. <em>Líquidas</em> = de mercado − oro − DEG. <em>Metodología FMI</em> (meta del acuerdo 2025, desde ene-2025) = de mercado excluyendo el crédito neto recibido del FMI desde 2025, sin restar los REPO con bancos; el FMI la mide a tipos de cambio del programa, por lo que puede diferir de su cifra oficial.</div>
   </div>
 </section>
 
@@ -200,7 +200,7 @@
 </section>
 
 </main>
-<footer><div class="brand"><span class="brand-mark" aria-hidden="true"><img src="logo.svg?v=174" alt="" width="34" height="34"></span><span><strong>MACRODATOS</strong><small>ECONOMÍA ARGENTINA</small></span></div><p>Información económica para análisis. No constituye asesoramiento financiero.</p><a href="#inicio">Volver arriba ↑</a><span class="build-version">macrodatos.ar · v201</span></footer>
+<footer><div class="brand"><span class="brand-mark" aria-hidden="true"><img src="logo.svg?v=174" alt="" width="34" height="34"></span><span><strong>MACRODATOS</strong><small>ECONOMÍA ARGENTINA</small></span></div><p>Información económica para análisis. No constituye asesoramiento financiero.</p><a href="#inicio">Volver arriba ↑</a><span class="build-version">macrodatos.ar · v202</span></footer>
 
 <div id="kpiModal" class="kpi-modal" hidden aria-hidden="true">
   <div class="kpi-modal-backdrop" data-kpi-close></div>
