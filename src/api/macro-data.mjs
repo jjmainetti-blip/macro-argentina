@@ -1266,16 +1266,33 @@ export async function freshnessReport(env){
   for(const g of Object.keys(GROUPS)){const snap=await readSnapshot(env,g);if(snap?.sources)Object.assign(snaps,snap.sources);}
   return cardStatus([snaps,BUNDLED_SOURCES]);
 }
-export default async(env={},ctx=null,request=null,opts={})=>{
+// v203 · Marcas efímeras en la caché del edge (no gastan escrituras de KV): "revisado hace poco" y "actualizando".
+const EDGE=typeof caches!=='undefined'&&caches?.default?caches.default:null;
+const edgeKey=k=>new Request(`https://macrodatos.ar/__edge/${k}`);
+async function edgeHas(k){try{return !!(EDGE&&await EDGE.match(edgeKey(k)));}catch{return false;}}
+async function edgeMark(k,sec){try{if(EDGE)await EDGE.put(edgeKey(k),new Response('1',{headers:{'cache-control':`max-age=${sec}`}}));}catch{}}
+const FRESH_MS=10*60*1000;
+const macroData=async(env={},ctx=null,request=null,opts={})=>{
   let group='all';try{const g=new URL(request?.url||'http://x/').searchParams.get('group');if(g&&GROUPS[g])group=g;}catch{}
   const names=group==='all'?Object.keys(JOBS):GROUPS[group];
-  // v130 · Camino rápido: si el snapshot guardado en KV tiene menos de 15 minutos, se devuelve tal cual
-  // (sin descargar fuentes ni fusionar históricos). Cuida el límite de CPU por invocación: la actualización
-  // pesada la hace la revisión programada (cron), y las visitas sólo leen.
+  // v203 · Siempre responde al instante con el último snapshot guardado (KV), sin importar su antigüedad. Si tiene
+  // más de 10 minutos y nadie lo revisó hace poco, se actualiza en segundo plano (ctx.waitUntil); la próxima consulta
+  // del navegador (que vuelve a preguntar sola) ya recibe el dato nuevo. Antes, pasados 15 minutos, la visita
+  // esperaba la actualización completa (~10 s) y mientras tanto se veían los datos viejos.
   if(!opts.force&&group!=='all'&&env?.MACRO_STORE?.getWithMetadata){
     try{const {value,metadata}=await env.MACRO_STORE.getWithMetadata(SNAPSHOT_PREFIX+group,'text');
-      if(value&&metadata?.savedAt&&Date.now()-Date.parse(metadata.savedAt)<15*60*1000)
-        return new Response(value,{status:200,headers:{'content-type':'application/json; charset=utf-8','cache-control':'public, max-age=60, s-maxage=60, stale-while-revalidate=300','access-control-allow-origin':'*','x-macrodatos-cache':'kv'}});
+      if(value&&metadata?.savedAt){
+        const age=Date.now()-Date.parse(metadata.savedAt);
+        let state='kv';
+        if(age>=FRESH_MS&&!(await edgeHas(`checked/${group}`))){
+          state='kv-stale';
+          if(ctx?.waitUntil&&!(await edgeHas(`refreshing/${group}`))){
+            await edgeMark(`refreshing/${group}`,120);
+            ctx.waitUntil(macroData(env,null,request,{force:true,background:true}).catch(e=>console.log(`refresh ${group}: ${e?.message||e}`)));
+          }
+        }
+        return new Response(value,{status:200,headers:{'content-type':'application/json; charset=utf-8','cache-control':'no-cache','access-control-allow-origin':'*','x-macrodatos-cache':state,'x-macrodatos-age':String(Math.round(age/1000))}});
+      }
     }catch{}
   }
   const stored=await readSnapshot(env,group);
@@ -1304,6 +1321,9 @@ export default async(env={},ctx=null,request=null,opts={})=>{
   try{await recordSeen(env,ctx,group,previous?.sources,out.sources);}catch{}
   const ok=Object.values(out.sources).some(x=>x.status==='ok'||x.status==='snapshot');
   if(ok)out.stored=await writeSnapshot(env,ctx,out,group,stored,!!opts.force);
-  return new Response(JSON.stringify(out),{status:ok?200:503,headers:{'content-type':'application/json; charset=utf-8','cache-control':'public, max-age=60, s-maxage=60, stale-while-revalidate=300','access-control-allow-origin':'*'}});
+  // Revisado: aunque no haya cambiado nada (y por eso no se reescriba KV), no se vuelve a revisar por 10 minutos.
+  if(ok&&group!=='all')await edgeMark(`checked/${group}`,FRESH_MS/1000);
+  return new Response(JSON.stringify(out),{status:ok?200:503,headers:{'content-type':'application/json; charset=utf-8','cache-control':'no-cache','access-control-allow-origin':'*'}});
 };
+export default macroData;
 function ymFromPeriodEs(s){const m=String(s||'').match(/(ene|feb|mar|abr|may|jun|jul|ago|sep|oct|nov|dic)[a-z]*\s+(20\d{2})/i);if(!m)return null;const i=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'].indexOf(m[1].toLowerCase());return `${m[2]}-${String(i+1).padStart(2,'0')}`;}

@@ -389,6 +389,12 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 - `public/reserves-components.json`: swap con China (CNY y tipo de cambio), BIS y otros pasivos de corto plazo, SEDESA, oro (toneladas y precio), con notas y fuentes. Actualizar `through` y los componentes cuando cambien (p. ej., pagos del BIS o el swap).
 - `/api/status` → `reserves`: cuántos meses del FMI ya se cargaron y el último error.
 
+## v203 — Pulso económico: siempre el último dato, al instante
+- Causa: si el snapshot de un grupo tenía más de 15 minutos (y cuando el dato no cambiaba nunca se renovaba su fecha), la visita esperaba la actualización completa (~10 s) y mientras tanto se veían los valores viejos.
+- `/api/macro-data`: responde siempre al instante con el último snapshot de KV. Si tiene más de 10 minutos, lo actualiza en segundo plano (`ctx.waitUntil`), con marcas en la caché del edge ("revisado", "actualizando") que evitan revisiones duplicadas sin gastar escrituras de KV. Header `x-macrodatos-cache: kv | kv-stale`.
+- Navegador: dibuja al instante la copia guardada de la visita anterior; vuelve a pedir a los ~25 s los grupos que estaban en actualización y consulta cada 3 minutos (y al volver a la pestaña): si hay un dato nuevo, las tarjetas, el semáforo y "Último dato publicado" se actualizan solos.
+- `/api/trade-monthly` y `/api/status`: copia en la caché del edge renovada en segundo plano (antes 6–7 s por visita).
+
 ## v202 — Reservas: REPO con bancos internacionales
 - Validación por muestra (brutas, swap China, encajes, swap EE.UU., netas y metodología FMI) contra prensa, BCRA y consultoras: brutas y componentes coinciden; faltaban los REPO.
 - La variable 76 del BCRA (pase pasivo con el exterior) informa 0 desde 2025, así que los REPO de ene-2025 (USD 1.000 M), jun-2025 (2.000 M), ene-2026 (3.000 M) y su renovación de jul-2026 (6.000 M a sep-2028) no se restaban. Se documentan en `reserves-components.json` (`bankRepos`, con vencimientos) y se restan de las netas de mercado y líquidas sólo los meses en que les quedan menos de 12 meses para vencer.

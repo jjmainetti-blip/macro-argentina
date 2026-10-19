@@ -21,6 +21,21 @@ function withHeaders(response) {
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
 }
 
+// v203 · Caché en el edge con "stale-while-revalidate" para endpoints lentos (trade-monthly, status): responde al
+// instante con la última copia y, si tiene más de `fresh` segundos, la renueva en segundo plano.
+async function edgeSwr(ctx, key, fresh, keep, producer) {
+  const cache = typeof caches !== 'undefined' ? caches.default : null;
+  if (!cache) return producer();
+  const k = new Request(`https://macrodatos.ar/__swr/${key}`);
+  const refresh = async () => { const r = await producer(); if (r.ok) { const h = new Headers(r.headers); h.set('cache-control', `max-age=${keep}`); h.set('x-swr-at', String(Date.now())); await cache.put(k, new Response(await r.clone().arrayBuffer(), { status: r.status, headers: h })); } return r; };
+  let hit = null; try { hit = await cache.match(k); } catch { }
+  if (!hit) return refresh();
+  const age = (Date.now() - Number(hit.headers.get('x-swr-at') || 0)) / 1000;
+  if (age > fresh && ctx?.waitUntil) ctx.waitUntil(refresh().catch(() => { }));
+  const h = new Headers(hit.headers); h.set('cache-control', 'no-cache'); h.set('x-swr-age', String(Math.round(age)));
+  return new Response(hit.body, { status: hit.status, headers: h });
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -45,7 +60,7 @@ export default {
       return withHeaders(await uvaLoans(env, ctx));
     }
     if (request.method === 'GET' && url.pathname === '/api/trade-monthly') {
-      return withHeaders(await tradeMonthly());
+      return withHeaders(await edgeSwr(ctx, 'trade-monthly', 3600, 86400 * 7, () => tradeMonthly()));
     }
     if (request.method === 'GET' && url.pathname === '/api/cement-monthly') {
       return withHeaders(await cementMonthly(request));
@@ -56,11 +71,13 @@ export default {
     // v128: estado de actualización de cada tarjeta (último período, próximo esperado y fecha prevista).
     if (request.method === 'GET' && url.pathname === '/api/status') {
       if (url.searchParams.get('probe') === 'idecba') { const { probeIdecba } = await import('./api/live-sources.mjs'); return withHeaders(new Response(JSON.stringify(await probeIdecba(), null, 1), { headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } })); }
+      return withHeaders(await edgeSwr(ctx, 'status', 120, 3600, async () => { // v203: copia en el edge, renovada cada 2 min
       const cards = await freshnessReport(env);
       let xbcra = null; try { const x = await env?.MACRO_STORE?.get?.('x:bcra', 'json'); if (x) xbcra = { tokenConfigured: !!env?.X_BEARER_TOKEN, lastCheck: x.lastCheck ? new Date(x.lastCheck).toISOString() : null, lastError: x.lastError || null, backoffUntil: x.backoffUntil ? new Date(x.backoffUntil).toISOString() : null, days: x.days || {}, lastRead: x.lastRead ?? null, aiConfigured: !!env?.AI, aiError: x.aiError || null, recent: x.recent || [] }; else xbcra = { tokenConfigured: !!env?.X_BEARER_TOKEN, lastCheck: null }; } catch { }
       // Diagnóstico: nombres (nunca valores) de variables que parecen el token, por si quedó con otro nombre.
       try { xbcra = { ...(xbcra || {}), tokenShape: env?.X_BEARER_TOKEN ? xTokenShape(env.X_BEARER_TOKEN) : null, similarVarNames: Object.keys(env || {}).filter(k => /x_|bearer|token|twitter/i.test(k) && typeof env[k] === 'string').map(k => JSON.stringify(k)) }; } catch { }
-      return withHeaders(new Response(JSON.stringify({ generatedAt: new Date().toISOString(), kv: !!env?.MACRO_STORE, xBcra: xbcra, reminders: await remindersStatus(env), digests: await digestStatus(env).catch(() => null), reserves: await (async () => { try { const p = await env?.MACRO_STORE?.get?.('imfpos:v1', 'json'); return p ? { imfMonths: Object.keys(p).filter(k => /^\d{4}-\d{2}$/.test(k)).length, imfError: p._err || null, current: p._cur || null } : null; } catch { return null; } })(), ipcCaba: await (async () => { try { const c = (await env?.MACRO_STORE?.get?.('macro:snapshot:v131:core', 'json'))?.sources?.ipcCaba; return c ? { source: c.source, last: Object.keys(c.history || {}).sort().at(-1), latest: c.latest || null, idecbaError: c.idecbaError || null, baseError: c.baseError || null, refreshError: c.refreshError || null } : null; } catch { return null; } })(), cards }, null, 1), { headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', 'access-control-allow-origin': '*' } }));
+      return (new Response(JSON.stringify({ generatedAt: new Date().toISOString(), kv: !!env?.MACRO_STORE, xBcra: xbcra, reminders: await remindersStatus(env), digests: await digestStatus(env).catch(() => null), reserves: await (async () => { try { const p = await env?.MACRO_STORE?.get?.('imfpos:v1', 'json'); return p ? { imfMonths: Object.keys(p).filter(k => /^\d{4}-\d{2}$/.test(k)).length, imfError: p._err || null, current: p._cur || null } : null; } catch { return null; } })(), ipcCaba: await (async () => { try { const c = (await env?.MACRO_STORE?.get?.('macro:snapshot:v131:core', 'json'))?.sources?.ipcCaba; return c ? { source: c.source, last: Object.keys(c.history || {}).sort().at(-1), latest: c.latest || null, idecbaError: c.idecbaError || null, baseError: c.baseError || null, refreshError: c.refreshError || null } : null; } catch { return null; } })(), cards }, null, 1), { headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', 'access-control-allow-origin': '*' } }));
+      }));
     }
     // v164: cuentas, contratos y recordatorios por mail.
     if (url.pathname.startsWith('/api/account')) {

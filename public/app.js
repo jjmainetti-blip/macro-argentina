@@ -887,26 +887,41 @@ function applyMacroSources(when){
   safeApply('coverage',updateCoverage);
   if(window.Chart)safeApply('history',()=>renderHistory(currentSeries));
 }
+// v203 · Pulso económico: (1) al abrir se dibuja al instante la última copia guardada en este navegador; (2) se piden
+// todos los grupos (el servidor responde siempre al instante con su último snapshot y, si está viejo, lo actualiza en
+// segundo plano); (3) los grupos marcados "kv-stale" se vuelven a pedir a los ~25 s, y (4) cada 3 minutos, mientras
+// la pestaña está visible, se vuelve a consultar: si se publicó un dato nuevo, las tarjetas se actualizan solas.
+const macroSig={};let macroLastGen=null,macroPulling=null,macroLastPull=0,macroTimer=null;
+const fmtWhenAR=d=>{try{return new Date(d).toLocaleString('es-AR',{dateStyle:'medium',timeStyle:'short'});}catch{return '';}};
+async function pullMacroGroups(groups,retry=0){
+  let received=0,changed=false;const stale=[];
+  await Promise.allSettled(groups.map(async g=>{
+    const r=await fetch(`/api/macro-data?group=${g}`,{headers:{accept:'application/json'},cache:'no-cache'});if(!r.ok)throw new Error(`API ${g} ${r.status}`);
+    const text=await r.text();const d=JSON.parse(text);if(!d?.sources)throw new Error(`API ${g} sin fuentes`);
+    received++;if(r.headers.get('x-macrodatos-cache')==='kv-stale')stale.push(g);
+    const sig=`${d.generatedAt}|${text.length}`;if(macroSig[g]===sig)return;macroSig[g]=sig;changed=true;
+    apiKpiSources={...apiKpiSources,...d.sources};if(!macroLastGen||String(d.generatedAt)>String(macroLastGen))macroLastGen=d.generatedAt;
+  }));
+  macroLastPull=Date.now();
+  if(changed){rebuildKpiSourceCache();applyMacroSources(fmtWhenAR(macroLastGen));setTimeout(()=>{try{localStorage.setItem(MACRO_LS_KEY,JSON.stringify({generatedAt:macroLastGen,sources:apiKpiSources}));}catch{}},1500);}
+  else if(received)paintAutoStatus(fmtWhenAR(new Date()));
+  // El servidor está actualizando esos grupos en segundo plano: se vuelven a pedir en unos segundos.
+  if(stale.length&&retry<2)setTimeout(()=>pullMacroGroups(stale,retry+1),retry?40000:25000);
+  return received;
+}
+function scheduleMacroPolling(){
+  if(macroTimer)return;
+  const tick=()=>{if(document.visibilityState==='visible'&&!macroPulling&&Date.now()-macroLastPull>60000){macroPulling=pullMacroGroups(MACRO_GROUPS).finally(()=>{macroPulling=null;});}};
+  macroTimer=setInterval(tick,3*60*1000);
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')tick();});
+}
 async function loadAutomaticData(){
-  let received=0,applyTimer=null,lastGen=null;
-  const fmtWhen=d=>{try{return new Date(d).toLocaleString('es-AR',{dateStyle:'medium',timeStyle:'short'});}catch{return '';}};
-  const jobs=MACRO_GROUPS.map(async g=>{
-    const r=await fetch(`/api/macro-data?group=${g}`,{headers:{accept:'application/json'}});if(!r.ok)throw new Error(`API ${g} ${r.status}`);
-    const d=await r.json();if(!d?.sources)throw new Error(`API ${g} sin fuentes`);
-    received++;apiKpiSources={...apiKpiSources,...d.sources};lastGen=d.generatedAt;
-    // v173: los grupos que llegan juntos se aplican una sola vez (antes cada grupo recalculaba y redibujaba todo).
-    clearTimeout(applyTimer);applyTimer=setTimeout(()=>{rebuildKpiSourceCache();applyMacroSources(fmtWhen(lastGen));},120);
-  });
-  const res=await Promise.allSettled(jobs);
-  if(received){clearTimeout(applyTimer);rebuildKpiSourceCache();applyMacroSources(fmtWhen(lastGen));setTimeout(()=>{try{localStorage.setItem(MACRO_LS_KEY,JSON.stringify({generatedAt:lastGen,sources:apiKpiSources}));}catch{}},1500);}
-  const failed=res.filter(x=>x.status==='rejected');
-  if(failed.length)console.warn('macro-data: grupos con error',failed.map(x=>String(x.reason)));
-  if(!received){
-    // Ningún grupo respondió: usar el último snapshot guardado en este navegador (si existe) + histórico local.
-    let data=null;try{data=JSON.parse(localStorage.getItem(MACRO_LS_KEY)||'null');}catch{}
-    if(data?.sources){apiKpiSources=data.sources;rebuildKpiSourceCache();applyMacroSources(fmtWhen(data.generatedAt));}
-    else{paintAutoStatus('');}
-  }
+  // Copia local (visita anterior): se muestra al instante mientras llega la respuesta del servidor.
+  let cached=null;try{cached=JSON.parse(localStorage.getItem(MACRO_LS_KEY)||'null');}catch{}
+  if(cached?.sources&&!Object.keys(apiKpiSources||{}).length){try{apiKpiSources={...cached.sources};macroLastGen=cached.generatedAt||null;rebuildKpiSourceCache();applyMacroSources(fmtWhenAR(cached.generatedAt));}catch(e){console.warn('copia local',e);}}
+  const received=await pullMacroGroups(MACRO_GROUPS);
+  if(!received&&!cached?.sources)paintAutoStatus('');
+  scheduleMacroPolling();
   loadOfficialSeriesFallback();
 }
 window.addEventListener('load',()=>{
