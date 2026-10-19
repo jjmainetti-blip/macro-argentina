@@ -299,7 +299,20 @@ export default async(request=null,ctx=null,env=null,opts={})=>{
   const [a,b,c,d,e]=await Promise.allSettled([merval(),mep(),risk(),bna(),bcraFx(prev?.latest?.bcra,env)]);
   const val=x=>x.status==='fulfilled'?x.value:null,P=prev?.latest||{};
   const C=closeDay;const latest={merval:newer(C(val(a)),C(P.merval)),dollar:newer(C(val(b)),C(P.dollar)),risk:newer(C(val(c)),C(P.risk)),bna:newer(C(val(d)),C(P.bna)),bcra:newer(val(e),P.bcra)};
-  const body=JSON.stringify({version:133,generatedAt:new Date().toISOString(),mode:'live',refreshSeconds:30,latest});
+  // v204 · Serie intradiaria del día (Merval, MEP, riesgo país, BNA): cada actualización agrega un punto si el dato
+  // es de hoy. Viaja en el mismo registro de KV (sin escrituras extra). Resolución: ~1 min con visitas, 5 min por cron.
+  const today=isoDateAR(),nowIso=new Date().toISOString();
+  const intraday=prev?.intraday?.date===today?{...prev.intraday}:{date:today};
+  for(const k of ['merval','dollar','risk','bna']){
+    const x=latest[k];if(!x||String(x.date||'').slice(0,10)!==today||!Number.isFinite(Number(x.value)))continue;
+    const S=intraday[k]&&Array.isArray(intraday[k].points)?{...intraday[k],points:[...intraday[k].points]}:{points:[]};
+    if(Number.isFinite(Number(x.previous)))S.previous=Number(x.previous);
+    const last=S.points.at(-1),t=x.updatedAt||nowIso;
+    if(!last||(Date.parse(t)-Date.parse(last[0])>=45000&&(last[1]!==Number(x.value)||Date.parse(t)-Date.parse(last[0])>=300000)))S.points.push([t,Number(x.value)]);
+    if(S.points.length>720)S.points=S.points.slice(-720);
+    intraday[k]=S;
+  }
+  const body=JSON.stringify({version:133,generatedAt:nowIso,mode:'live',refreshSeconds:30,latest,intraday});
   MEMO={at:Date.now(),body};
   try{const put=caches?.default?.put(cacheKey,new Response(body,{headers:{'content-type':'application/json','cache-control':'public, max-age=20'}}));if(put&&ctx?.waitUntil)ctx.waitUntil(put);}catch{}
   try{if(env?.MACRO_STORE?.put&&Object.values(latest).some(Boolean)){const w=env.MACRO_STORE.put(KV_KEY,body,{metadata:{savedAt:Date.now()}});if(ctx?.waitUntil)ctx.waitUntil(w);else await w;}}catch{}

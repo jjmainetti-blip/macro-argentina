@@ -48,7 +48,10 @@ export default {
       return new Response(upstream.body, { status: 200, headers });
     }
     if (request.method === 'GET' && url.pathname === '/api/markets') {
-      return withHeaders(await marketsData(request, ctx, env));
+      // v204: la serie intradiaria sólo viaja si se pide (?intraday=1); el sondeo de la portada recibe el registro chico.
+      const r = await marketsData(request, ctx, env);
+      if (r.ok) { try { const j = JSON.parse(await r.clone().text()); if (url.searchParams.get('intraday') === '1') { return withHeaders(new Response(JSON.stringify({ generatedAt: j.generatedAt, intraday: j.intraday || null, latest: j.latest }), { headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } })); } if (j.intraday) { delete j.intraday; return withHeaders(new Response(JSON.stringify(j), { status: r.status, headers: r.headers })); } } catch { } }
+      return withHeaders(r);
     }
     // v160: reservas brutas y netas del BCRA (componentes documentados en public/reserves-components.json).
     if (request.method === 'GET' && url.pathname === '/api/reserves') {

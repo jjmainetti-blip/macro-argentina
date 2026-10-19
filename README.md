@@ -389,6 +389,11 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 - `public/reserves-components.json`: swap con China (CNY y tipo de cambio), BIS y otros pasivos de corto plazo, SEDESA, oro (toneladas y precio), con notas y fuentes. Actualizar `through` y los componentes cuando cambien (p. ej., pagos del BIS o el swap).
 - `/api/status` → `reserves`: cuántos meses del FMI ya se cargaron y el último error.
 
+## v204 — Mercados: evolución intradiaria del día
+- Al tocar Merval, Dólar MEP, Riesgo país o Dólar oficial BNA se abre un gráfico con los valores de hoy, la línea del cierre anterior, variación, máximo y mínimo; se refresca cada minuto mientras está abierto y se puede exportar como las demás tarjetas. Compras BCRA/reservas no cambia (dato diario).
+- `markets.mjs`: cada actualización (visitas ~1 min, cron cada 5 min) agrega un punto del día en el mismo registro de KV (`intraday`, máx. 720 puntos por serie; sin escrituras extra).
+- `/api/markets?intraday=1` devuelve la serie; el sondeo de la portada y el HTML reciben el registro sin `intraday`.
+
 ## v203 — Pulso económico: siempre el último dato, al instante
 - Causa: si el snapshot de un grupo tenía más de 15 minutos (y cuando el dato no cambiaba nunca se renovaba su fecha), la visita esperaba la actualización completa (~10 s) y mientras tanto se veían los valores viejos.
 - `/api/macro-data`: responde siempre al instante con el último snapshot de KV. Si tiene más de 10 minutos, lo actualiza en segundo plano (`ctx.waitUntil`), con marcas en la caché del edge ("revisado", "actualizando") que evitan revisiones duplicadas sin gastar escrituras de KV. Header `x-macrodatos-cache: kv | kv-stale`.
