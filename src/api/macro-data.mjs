@@ -9,6 +9,7 @@ import { autosLive, ipcCabaLive, povertyLive, cementLive, cameLive, scentiaLive 
 import { cardStatus, CARDS, periodEndYm, todayAR, ymShift } from './freshness.mjs';
 import { EVENTS } from './calendar-data.mjs';
 import { ipcMonthlyChain, ipcAnnualAvg, ipcAnnualAvgInflation } from './ipc-chain.mjs';
+import { indecXText, parseIndecIca } from './indec-x.mjs';
 /* Macrodatos (antes Macro Argentina) v8 — stable server-side data contract.
    Each adapter fails independently. The browser keeps its bundled last-known value
    when a source is temporarily unavailable or changes format. */
@@ -183,7 +184,9 @@ async function saMomFromLevels(id,start='2020-06-01'){const x=await seriesRows(i
 // índice ... cayó 3,2% respecto a igual mes de 2025 ... la serie desestacionalizada subió 1,9% ..."). Se usa para
 // incorporar el mes nuevo ni bien sale; cuando Datos Argentina lo publica, su serie lo reemplaza.
 let INDEC_NEWS={at:0,text:''};
-async function indecNewsText(){
+let INDEC_X_TEXT=''; // v205: publicaciones de @INDECArgentina en X (se cargan antes de correr los jobs)
+async function indecNewsText(){try{const t=await indecPortadaText();return INDEC_X_TEXT?`${INDEC_X_TEXT} . ${t}`:t;}catch(e){if(INDEC_X_TEXT)return INDEC_X_TEXT;throw e;}}
+async function indecPortadaText(){
   if(INDEC_NEWS.text&&Date.now()-INDEC_NEWS.at<10*60*1000)return INDEC_NEWS.text;
   const c=new AbortController(),tm=setTimeout(()=>c.abort(),15000);
   try{const r=await fetch('https://www.indec.gob.ar/indec/Portada',{signal:c.signal,headers:{'user-agent':'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36','accept-language':'es-AR,es;q=.9'},cf:{cacheTtl:600,cacheEverything:true}});if(!r.ok)throw new Error(`INDEC portada ${r.status}`);
@@ -295,7 +298,9 @@ async function tradeHistorical(){
     '2026-07':2115,'2026-08':2187
   };
   fillMissing(monthlyBalance,indecRecent);
-  return {status:'ok',source:'INDEC — Intercambio Comercial Argentino (ICA, cuadros oficiales; Datos Argentina de respaldo); CPI-U BLS para USD constantes',sourceUrl:ica?.url||'https://www.indec.gob.ar/indec/web/Nivel4-Tema-3-2-40',balance,exports,imports,real,monthlyBalance,estimatedImports:[...est].sort()};
+  // v205: el mes recién publicado (X de INDEC o portada) si todavía no está en el cuadro.
+  let icaNews=null;try{const n=parseIndecIca(await indecNewsText());const last=Object.keys(monthlyBalance).sort().at(-1);if(n&&(!last||n.ym>last)){monthlyBalance[n.ym]=n.balance;icaNews={ym:n.ym,exports:n.exports,imports:n.imports,source:'INDEC — informe técnico (X / portada)'};}}catch{}
+  return {status:'ok',source:'INDEC — Intercambio Comercial Argentino (ICA, cuadros oficiales; Datos Argentina de respaldo); CPI-U BLS para USD constantes',sourceUrl:ica?.url||'https://www.indec.gob.ar/indec/web/Nivel4-Tema-3-2-40',balance,exports,imports,real,monthlyBalance,...(icaNews?{indecNews:icaNews}:{}),estimatedImports:[...est].sort()};
 }
 
 function annualLastGeneric(rows){
@@ -902,6 +907,9 @@ async function emaeHistorical(){
   if(saR.status==='fulfilled')out.monthlySaMom=toPct(saR.value.rows);
   // v197: cuadro oficial de INDEC (sh_emae_mensual_base2004) primario; Datos Argentina sólo completa.
   try{const off=await indecEmae();out.monthlyYoy={...(out.monthlyYoy||{}),...Object.fromEntries(Object.entries(off.monthlyYoy).filter(([k])=>k>='2018-01'))};out.monthlySaMom={...(out.monthlySaMom||{}),...Object.fromEntries(Object.entries(off.monthlySaMom).filter(([k])=>k>='2015-01'))};out.sourceUrl=off.url;out.source='INDEC — EMAE (cuadros oficiales; Datos Argentina de respaldo)';}catch(e){console.warn('EMAE INDEC',e);}
+  // v205: el mes recién publicado (X de INDEC o portada) antes de que llegue el cuadro.
+  try{const n=parseIndecNews(await indecNewsText(),'estimador mensual de actividad econ[oó]mica(?: \\(EMAE\\))?');const last=Object.keys(out.monthlyYoy||{}).sort().at(-1);
+    if(n&&(!last||n.ym>last)){out.monthlyYoy={...(out.monthlyYoy||{}),[n.ym]:n.yoy};if(n.mom!==null)out.monthlySaMom={...(out.monthlySaMom||{}),[n.ym]:n.mom};out.indecNews={ym:n.ym,source:'INDEC — informe técnico (X / portada)'};}}catch{}
   if(!out.monthlyYoy&&!out.monthlySaMom)throw new Error('series EMAE no disponibles');
   return out;
 }
@@ -1299,6 +1307,7 @@ const macroData=async(env={},ctx=null,request=null,opts={})=>{
   const bundled={};for(const n of names)if(BUNDLED_SOURCES[n])bundled[n]=BUNDLED_SOURCES[n];
   const previous=mergeSnapshot({version:131,sources:bundled},stored||{});
   const out={version:131,group,generatedAt:new Date().toISOString(),snapshotMode:env?.MACRO_STORE?.get?'kv+bundled':'bundled+isolate',sources:{}};
+  try{INDEC_X_TEXT=await indecXText(env);}catch{}
   const results=await Promise.allSettled(names.map(n=>Promise.resolve().then(JOBS[n])));
   results.forEach((j,i)=>{
     const name=names[i],old=previous?.sources?.[name];

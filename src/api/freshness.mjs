@@ -83,6 +83,10 @@ export function cardStatus(sources, today = todayAR()) {
 // Elige el grupo a refrescar en esta ejecución programada. Prioridad: grupos con tarjetas "esperando"
 // (el dato ya debería estar publicado), rotando entre ellos; si no hay, rotación normal con "core" la mitad del tiempo.
 export function pickCronGroup(statuses, groups, tick) {
+  // v205: el día de publicación, de 16 a 19 h (hora de INDEC), cada revisión va a los grupos que esperan el dato de hoy.
+  const ar = new Date(Date.now() - 3 * 3600e3), h = ar.getUTCHours(), today = ar.toISOString().slice(0, 10);
+  const dueToday = [...new Set(statuses.filter(s => s.state === 'esperando' && s.expected === today).map(s => s.group))].filter(g => groups.includes(g));
+  if (dueToday.length && h >= 16 && h < 19) return { group: dueToday[tick % dueToday.length], reason: 'publicación de hoy' };
   const waiting = [...new Set(statuses.filter(s => s.state === 'esperando').map(s => s.group))].filter(g => groups.includes(g));
   if (waiting.length && tick % 3 !== 2) return { group: waiting[(tick - Math.floor(tick / 3)) % waiting.length], reason: 'esperando publicación' };
   const others = groups.filter(g => g !== 'core');

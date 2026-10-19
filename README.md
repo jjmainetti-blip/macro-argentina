@@ -389,6 +389,12 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 - `public/reserves-components.json`: swap con China (CNY y tipo de cambio), BIS y otros pasivos de corto plazo, SEDESA, oro (toneladas y precio), con notas y fuentes. Actualizar `through` y los componentes cuando cambien (p. ej., pagos del BIS o el swap).
 - `/api/status` → `reserves`: cuántos meses del FMI ya se cargaron y el último error.
 
+## v205 — Datos de INDEC el mismo día (16 h): X + portada, y balanza comercial
+- Balanza comercial: el backend ya tenía septiembre (ICA oficial 19-oct), pero la tarjeta usaba `/api/trade-monthly` (Datos Argentina, hasta agosto) y sólo tomaba el saldo del backend si había menos de 55 meses. Ahora el saldo oficial del backend siempre manda y `/api/trade-monthly` sólo completa meses faltantes; además ya no falla (y deja de renovarse) cuando Datos Argentina no responde.
+- Nuevo `src/api/indec-x.mjs`: en los días con publicación de INDEC (calendario oficial), de 16 a 22 h, se leen las publicaciones de @INDECArgentina en X cada ~4 minutos hasta capturar las del día (KV `x:indec`; mismo token que el BCRA). Su texto se suma al de la portada de indec.gob.ar para los lectores del dato del día: IPI, ISAC, EMAE (nuevo) y comercio exterior (nuevo, `parseIndecIca`: exportaciones, importaciones y saldo). Los cuadros oficiales mandan cuando llegan.
+- Revisión programada: el día de publicación, de 16 a 19 h, cada corrida (cada 5 min) va al grupo que espera el dato de hoy.
+- `/api/status` muestra `xIndec` (última lectura, error y últimas publicaciones) para diagnóstico.
+
 ## v204 — Mercados: evolución intradiaria del día
 - Al tocar Merval, Dólar MEP, Riesgo país o Dólar oficial BNA se abre un gráfico con los valores de hoy, la línea del cierre anterior, variación, máximo y mínimo; se refresca cada minuto mientras está abierto y se puede exportar como las demás tarjetas. Compras BCRA/reservas no cambia (dato diario).
 - `markets.mjs`: cada actualización (visitas ~1 min, cron cada 5 min) agrega un punto del día en el mismo registro de KV (`intraday`, máx. 720 puntos por serie; sin escrituras extra).

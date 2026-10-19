@@ -17,7 +17,7 @@ export default async function tradeMonthly(){
     }
     if(icaR.status==='fulfilled')Object.assign(monthly,icaR.value.monthlyBalance);
     const keys=Object.keys(monthly).sort().slice(-60); const data=Object.fromEntries(keys.map(k=>[k,monthly[k]]));
-    if(keys.length<55)throw new Error(`Serie mensual incompleta: ${keys.length} observaciones`);
+    if(keys.length<(icaR.status==='fulfilled'?12:55))throw new Error(`Serie mensual incompleta: ${keys.length} observaciones`);
     return new Response(JSON.stringify({status:'ok',source:icaR.status==='fulfilled'?'INDEC — ICA (cuadros oficiales; Datos Argentina de respaldo)':'Datos Argentina (respaldo)',seriesId:ID,count:keys.length,from:keys[0],to:keys.at(-1),monthlyBalance:data}),{headers:{'content-type':'application/json; charset=utf-8','cache-control':'public, max-age=3600, s-maxage=21600, stale-while-revalidate=86400'}});
   }catch(e){return new Response(JSON.stringify({status:'error',error:String(e?.message||e)}),{status:502,headers:{'content-type':'application/json; charset=utf-8'}})}finally{clearTimeout(t)}
 }
