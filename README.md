@@ -389,6 +389,11 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 - `public/reserves-components.json`: swap con China (CNY y tipo de cambio), BIS y otros pasivos de corto plazo, SEDESA, oro (toneladas y precio), con notas y fuentes. Actualizar `through` y los componentes cuando cambien (p. ej., pagos del BIS o el swap).
 - `/api/status` → `reserves`: cuántos meses del FMI ya se cargaron y el último error.
 
+## v208 — Compras BCRA: se suman las operaciones con el Tesoro
+- La serie ahora tiene tres vistas: Total (por defecto) = Mercado + Tesoro; Mercado (sector privado, var. 78, USD); Tesoro (var. 48, efecto monetario en $, convertido a USD con el mayorista A3500 del día, var. 5).
+- Tesoro: positivo cuando el BCRA le compra dólares al Tesoro (2016–2018: +10.871, +16.095 y +1.681 M) y negativo cuando el Tesoro le compra para pagar deuda (2024: −15.631 M).
+- Backend (`bcraPurchasesHistorical`) devuelve `treasury`; respaldo en `trade-annual.json` → `bcraTreasuryM`.
+
 ## v207 — Serie histórica: compras de divisas del BCRA
 - Nueva serie «Compras BCRA» (anual y mensual, barras verde/rojo): compras netas de divisas, 2003–hoy (variable diaria 78 del BCRA, «Variación de reservas internacionales por compra de divisas», sumada por mes/año; el año en curso, acumulado).
 - Backend: job `bcraPurchasesHistorical` (grupo `banks`). Respaldo incluido en `trade-annual.json` (`bcraPurchasesM`, ene-2003 a oct-2026).

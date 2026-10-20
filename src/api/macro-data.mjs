@@ -1212,11 +1212,16 @@ async function supermarkets(){
 // v207 · Compras netas de divisas del BCRA (variación de reservas por compra de divisas, API de Estadísticas var. 78,
 // diaria desde ene-2003, millones de USD): sumas mensuales.
 async function bcraPurchasesHistorical(){
-  const d=await bcraDaily(78,'2003-01-01');const monthly={};
+  // v208: + compras netas al Tesoro Nacional (var. 48, efecto monetario en millones de $, convertido a USD con el tipo
+  // de cambio mayorista Com. A 3500 del mismo día, var. 5). Total = mercado (sector privado) + Tesoro.
+  const [d,t,fx]=await Promise.all([bcraDaily(78,'2003-01-01'),bcraDaily(48,'2003-01-01').catch(()=>({})),bcraDaily(5,'2003-01-01').catch(()=>({}))]);
+  const monthly={},treasury={};
   for(const [k,v] of Object.entries(d)){const m=k.slice(0,7);monthly[m]=(monthly[m]||0)+Number(v);}
-  for(const k of Object.keys(monthly))monthly[k]=round(monthly[k],1)+0;
+  const fxk=Object.keys(fx).sort();let j=0,last=null;
+  for(const k of Object.keys(t).sort()){const v=Number(t[k]);while(j<fxk.length&&fxk[j]<=k){last=fx[fxk[j]];j++;}if(!v||!last)continue;const m=k.slice(0,7);treasury[m]=(treasury[m]||0)+v/last;}
+  for(const k of Object.keys(monthly)){monthly[k]=round(monthly[k],1)+0;if(Object.keys(t).length)treasury[k]=round(treasury[k]||0,1)+0;}
   if(Object.keys(monthly).length<200)throw new Error('compras BCRA: serie corta');
-  return {status:'ok',source:'BCRA — variación de reservas por compra de divisas (API de Estadísticas, var. 78)',sourceUrl:'https://api.bcra.gob.ar/estadisticas/v4.0/monetarias/78',lastDay:Object.keys(d).sort().at(-1),monthly};
+  return {status:'ok',source:'BCRA — compras netas de divisas: sector privado (var. 78, USD) y Tesoro Nacional (var. 48, $ convertidos al mayorista A3500)',sourceUrl:'https://api.bcra.gob.ar/estadisticas/v4.0/monetarias/78',lastDay:Object.keys(d).sort().at(-1),monthly,...(Object.keys(treasury).length?{treasury}:{})};
 }
 const JOBS={bcraPurchasesHistorical:()=>bcraPurchasesHistorical(),supermarkets:()=>supermarkets(),scentia:()=>scentiaLive(),ipcHistorical:()=>ipcHistorical(),gdpHistorical:()=>gdpHistorical(),emaeHistorical:()=>emaeHistorical(),industryHistorical:()=>industryHistorical(),unemploymentHistorical:()=>unemploymentHistorical(),tradeHistorical:()=>tradeHistorical(),financialHistorical:()=>financialHistorical(),exchangeHistorical:()=>exchangeHistorical(),ipc:()=>ipc(),arca:()=>arca(),icg:()=>icg(),bcra:()=>bcra(),rem:()=>rem(),salary:()=>salaryRipte(),icl:()=>icl(),contractIndices:()=>contractIndices(),isacHistorical:()=>isacHistorical(),creditHistorical:()=>creditHistorical(),arrearsHistorical:()=>arrearsHistorical(),activityPulse:()=>activityPulse(),ilaHistorical:()=>ilaHistorical(),igaHistorical:()=>igaHistorical(),bopHistorical:()=>bopHistorical(),autos:()=>autosLive(),ipcCaba:()=>ipcCabaLive(),poverty:()=>povertyLive(),cement:()=>cementLive(),came:()=>cameLive()};
 export const GROUPS={
