@@ -389,6 +389,11 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 - `public/reserves-components.json`: swap con China (CNY y tipo de cambio), BIS y otros pasivos de corto plazo, SEDESA, oro (toneladas y precio), con notas y fuentes. Actualizar `through` y los componentes cuando cambien (p. ej., pagos del BIS o el swap).
 - `/api/status` → `reserves`: cuántos meses del FMI ya se cargaron y el último error.
 
+## v207 — Serie histórica: compras de divisas del BCRA
+- Nueva serie «Compras BCRA» (anual y mensual, barras verde/rojo): compras netas de divisas, 2003–hoy (variable diaria 78 del BCRA, «Variación de reservas internacionales por compra de divisas», sumada por mes/año; el año en curso, acumulado).
+- Backend: job `bcraPurchasesHistorical` (grupo `banks`). Respaldo incluido en `trade-annual.json` (`bcraPurchasesM`, ene-2003 a oct-2026).
+- Antes de 2003 el BCRA no publica la serie diaria; no se completa con estimaciones.
+
 ## v206 — Resultado fiscal desde 1900
 - Gráfico histórico de resultado fiscal (primario y financiero, % del PIB) extendido a 1900–2025.
 - 1993–2006 financiero: Esquema AIF del SPN base caja, metodología 1993–2006 (Datos Argentina 379.1, resultado financiero), en `trade-annual.json` → `fiscalSpn.financial`; antes empezaba en 2007.

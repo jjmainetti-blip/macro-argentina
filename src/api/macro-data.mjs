@@ -1209,13 +1209,22 @@ async function supermarkets(){
     return {status:'ok',source:'INDEC — Encuesta de supermercados (ventas a precios constantes)',sourceUrl:'https://www.indec.gob.ar/indec/web/Nivel4-Tema-3-1-34',monthlyYoy,ytd,monthlySaMom,index,saIndex,latest:{ym:last,published}};
   }finally{clearTimeout(tm);}
 }
-const JOBS={supermarkets:()=>supermarkets(),scentia:()=>scentiaLive(),ipcHistorical:()=>ipcHistorical(),gdpHistorical:()=>gdpHistorical(),emaeHistorical:()=>emaeHistorical(),industryHistorical:()=>industryHistorical(),unemploymentHistorical:()=>unemploymentHistorical(),tradeHistorical:()=>tradeHistorical(),financialHistorical:()=>financialHistorical(),exchangeHistorical:()=>exchangeHistorical(),ipc:()=>ipc(),arca:()=>arca(),icg:()=>icg(),bcra:()=>bcra(),rem:()=>rem(),salary:()=>salaryRipte(),icl:()=>icl(),contractIndices:()=>contractIndices(),isacHistorical:()=>isacHistorical(),creditHistorical:()=>creditHistorical(),arrearsHistorical:()=>arrearsHistorical(),activityPulse:()=>activityPulse(),ilaHistorical:()=>ilaHistorical(),igaHistorical:()=>igaHistorical(),bopHistorical:()=>bopHistorical(),autos:()=>autosLive(),ipcCaba:()=>ipcCabaLive(),poverty:()=>povertyLive(),cement:()=>cementLive(),came:()=>cameLive()};
+// v207 · Compras netas de divisas del BCRA (variación de reservas por compra de divisas, API de Estadísticas var. 78,
+// diaria desde ene-2003, millones de USD): sumas mensuales.
+async function bcraPurchasesHistorical(){
+  const d=await bcraDaily(78,'2003-01-01');const monthly={};
+  for(const [k,v] of Object.entries(d)){const m=k.slice(0,7);monthly[m]=(monthly[m]||0)+Number(v);}
+  for(const k of Object.keys(monthly))monthly[k]=round(monthly[k],1)+0;
+  if(Object.keys(monthly).length<200)throw new Error('compras BCRA: serie corta');
+  return {status:'ok',source:'BCRA — variación de reservas por compra de divisas (API de Estadísticas, var. 78)',sourceUrl:'https://api.bcra.gob.ar/estadisticas/v4.0/monetarias/78',lastDay:Object.keys(d).sort().at(-1),monthly};
+}
+const JOBS={bcraPurchasesHistorical:()=>bcraPurchasesHistorical(),supermarkets:()=>supermarkets(),scentia:()=>scentiaLive(),ipcHistorical:()=>ipcHistorical(),gdpHistorical:()=>gdpHistorical(),emaeHistorical:()=>emaeHistorical(),industryHistorical:()=>industryHistorical(),unemploymentHistorical:()=>unemploymentHistorical(),tradeHistorical:()=>tradeHistorical(),financialHistorical:()=>financialHistorical(),exchangeHistorical:()=>exchangeHistorical(),ipc:()=>ipc(),arca:()=>arca(),icg:()=>icg(),bcra:()=>bcra(),rem:()=>rem(),salary:()=>salaryRipte(),icl:()=>icl(),contractIndices:()=>contractIndices(),isacHistorical:()=>isacHistorical(),creditHistorical:()=>creditHistorical(),arrearsHistorical:()=>arrearsHistorical(),activityPulse:()=>activityPulse(),ilaHistorical:()=>ilaHistorical(),igaHistorical:()=>igaHistorical(),bopHistorical:()=>bopHistorical(),autos:()=>autosLive(),ipcCaba:()=>ipcCabaLive(),poverty:()=>povertyLive(),cement:()=>cementLive(),came:()=>cameLive()};
 export const GROUPS={
   core:['ipc','arca','icg','bcra','rem','salary','icl','contractIndices','autos','ipcCaba','came'],
   history:['ipcHistorical','gdpHistorical','industryHistorical','unemploymentHistorical','tradeHistorical'],
   markets:['financialHistorical','exchangeHistorical'],
   activity:['emaeHistorical','isacHistorical','creditHistorical','activityPulse','cement','supermarkets','scentia'],
-  banks:['arrearsHistorical'], // v131: grupo propio (anexo xlsx del BCRA, pesado en memoria)
+  banks:['arrearsHistorical','bcraPurchasesHistorical'], // v131: grupo propio (anexo xlsx del BCRA, pesado en memoria)
   leading:['ilaHistorical','igaHistorical'],
   external:['bopHistorical','poverty'] // v122/v128: XML de INDEC y pobreza en un grupo propio
 };

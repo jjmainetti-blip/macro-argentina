@@ -67,7 +67,10 @@ const tradeBalance = {}, exportsSeries = {}, importsSeries = {}, tradeBalanceMon
 let tradePriceMode='real'; // real | nominal | gdp (v195: % del PIB)
 // v195: PIB anual en USD corrientes (Banco Mundial, 1960+) y en pesos (1993+) para expresar comercio, balanza de pagos y
 // resultado fiscal como % del PIB. Se cargan desde trade-annual.json.
-const gdpUsdAnnual={},gdpLcuAnnual={},fiscalSpn={primary:{},financial:{}},fiscalPctHist={primary:{},financial:{}};let bopUnit='usd',fiscalHMetric='primary';
+const gdpUsdAnnual={},gdpLcuAnnual={},fiscalSpn={primary:{},financial:{}},fiscalPctHist={primary:{},financial:{}};
+// v207: compras netas de divisas del BCRA (millones de USD por mes, desde ene-2003).
+const bcraBuyMonthly={};let bcraFreq='annual';
+function bcraBuyData(){if(bcraFreq==='monthly')return {...bcraBuyMonthly};const A={};for(const [k,v] of Object.entries(bcraBuyMonthly)){const y=k.slice(0,4);A[y]=(A[y]||0)+Number(v);}for(const y of Object.keys(A))A[y]=Math.round(A[y]);return A;}let bopUnit='usd',fiscalHMetric='primary';
 const pctOfGdp=(v,y)=>{const g=Number(gdpUsdAnnual[String(y).slice(0,4)]);return g>0&&Number.isFinite(Number(v))?Math.round(Number(v)/g*10000)/100:null;};
 function applyTradeMode(){
   for(const o of [tradeBalance,exportsSeries,importsSeries])for(const k of Object.keys(o))delete o[k];
@@ -204,7 +207,7 @@ async function loadPublicHistorical(){
     worldBankGdpGrowth(),
     // v180: comercio exterior desde la tabla anual completa incluida en el sitio (Datos Argentina ya no devuelve
     // las importaciones anuales). El backend la actualiza con los años nuevos.
-    fetch('/trade-annual.json?v=206').then(r=>{if(!r.ok)throw new Error('trade-annual '+r.status);return r.json();}),
+    fetch('/trade-annual.json?v=207').then(r=>{if(!r.ok)throw new Error('trade-annual '+r.status);return r.json();}),
   ]);
   const [histIpc,slIpc,natIpc,gdpR,emiR,ipiR,unempR,wbUnempR,wbGdpR,tradeR]=results;
   const ipcHist=await ipcHistP;
@@ -224,7 +227,7 @@ async function loadPublicHistorical(){
   // Sólo completa años que el backend todavía no trajo (si ya llegó, su dato manda).
   if(tradeR.status==='fulfilled'){const T=tradeR.value;for(const [k,target] of [['exports',exportsNominal],['imports',importsNominal],['balance',tradeBalanceNominal]])for(const [y,v] of Object.entries(T[k]||{}))if(!Number(target[y]))target[y]=v;}
   if(tradeR.status==='fulfilled')for(const [y,v] of Object.entries(tradeR.value.industry||{}))if(industry[y]==null)industry[y]=v;
-  if(tradeR.status==='fulfilled'){const T=tradeR.value;Object.assign(bopHistCA,T.bopCA||{});Object.assign(gdpUsdAnnual,T.gdpUsd||{});Object.assign(gdpLcuAnnual,T.gdpLcu||{});Object.assign(fiscalSpn.primary,T.fiscalSpn?.primary||{});Object.assign(fiscalPctHist.primary,T.fiscalPctHist?.primary||{});Object.assign(fiscalPctHist.financial,T.fiscalPctHist?.financial||{});Object.assign(fiscalSpn.financial,T.fiscalSpn?.financial||{});}
+  if(tradeR.status==='fulfilled'){const T=tradeR.value;Object.assign(bopHistCA,T.bopCA||{});Object.assign(gdpUsdAnnual,T.gdpUsd||{});Object.assign(gdpLcuAnnual,T.gdpLcu||{});Object.assign(fiscalSpn.primary,T.fiscalSpn?.primary||{});Object.assign(fiscalPctHist.primary,T.fiscalPctHist?.primary||{});Object.assign(fiscalPctHist.financial,T.fiscalPctHist?.financial||{});for(const [k,v] of Object.entries(T.bcraPurchasesM||{}))if(bcraBuyMonthly[k]==null)bcraBuyMonthly[k]=v;Object.assign(fiscalSpn.financial,T.fiscalSpn?.financial||{});}
   for(const y of Object.keys(exportsNominal)) if(importsNominal[y]!=null && tradeBalanceNominal[y]==null) tradeBalanceNominal[y]=Number((exportsNominal[y]-importsNominal[y]).toFixed(1));
   if(tradePriceMode==='real')rebuildRealTrade();else applyTradeMode();
   if(Object.keys(salaryRipte).length)applySalaryMode();
@@ -233,7 +236,7 @@ async function loadPublicHistorical(){
   if(window.Chart)renderHistory(currentSeries); updateCoverage(); syncUpdateIndexAvailability(); updateCalcMeta();
   const ok=results.filter(x=>x.status==='fulfilled').length; const el=document.getElementById('autoStatus'); if(el)el.textContent=`Series públicas cargadas directamente: ${ok}/${results.length}. Actualizando últimos datos…`;
 }
-function updateCoverage(){const coverage=document.getElementById('seriesCoverage');if(!coverage)return;try{seriesConfig.bop.data=bopData();seriesConfig.fiscalH.data=fiscalHData();}catch{}coverage.innerHTML=Object.entries(seriesConfig).map(([k,c])=>{const ks=Object.keys(c.data).filter(k=>/^\d{4}(-\d{2})?$/.test(k)),ys=[...new Set(ks.map(k=>+k.slice(0,4)))].sort((a,b)=>a-b);return `<span><b>${c.title}</b> ${ys.length?`${ys[0]}–${ys.at(-1)} (${ks.length})`:'sin datos'}</span>`}).join('');}
+function updateCoverage(){const coverage=document.getElementById('seriesCoverage');if(!coverage)return;try{seriesConfig.bop.data=bopData();seriesConfig.fiscalH.data=fiscalHData();seriesConfig.bcraBuy.data=bcraBuyData();}catch{}coverage.innerHTML=Object.entries(seriesConfig).map(([k,c])=>{const ks=Object.keys(c.data).filter(k=>/^\d{4}(-\d{2})?$/.test(k)),ys=[...new Set(ks.map(k=>+k.slice(0,4)))].sort((a,b)=>a-b);return `<span><b>${c.title}</b> ${ys.length?`${ys[0]}–${ys.at(-1)} (${ks.length})`:'sin datos'}</span>`}).join('');}
 
 
 // v119: índice de precios para el RIPTE real. Usa la cadena IPC completa si está cargada;
@@ -308,6 +311,7 @@ const seriesConfig = {
   freeDollar:{title:'Dólar libre',subtitle:'Venta · ARS constantes al último IPC por USD',source:'ArgentinaDatos / DolarApi + IPC compuesto',data:freeDollarReal,note:'<strong>Metodología:</strong> dólar blue/libre, punta vendedora, cierre anual. En modo real se expresa en pesos constantes al último IPC disponible con la misma cadena mensual del IPC del sitio: cada dato se deflacta con el índice de su mismo período (cierre de año → diciembre). No se empalma con mercados libres/paralelos históricos de regímenes cambiarios distintos.'},
   interestRate:{title:'Tasa de interés',subtitle:'Plazo fijo 30 días · tasa real anual · %',source:'BCRA (Datos Argentina de respaldo)',data:interestReal,note:'<strong>Metodología:</strong> tasa de depósitos a plazo fijo a 30 días (BCRA, API de Estadísticas), promedio anual. La tasa real es el rendimiento de renovar el plazo fijo cada mes del año (TNA del mes × 30/365) frente a la inflación de esos mismos meses, con la misma cadena mensual del IPC del sitio. Si faltan meses de tasa, se usa Fisher con la tasa y la inflación promedio del año.'},
   fiscalH:{title:'Resultado fiscal',subtitle:'% del PIB',source:'Ministerio de Economía (Esquema AIF, IMIG y serie 1961–2004) · O. Ferreres (1900–1960) · PIB: INDEC / Banco Mundial',data:{},note:'<strong>Metodología:</strong> resultado del Sector Público Nacional no financiero, base caja (Esquema Ahorro-Inversión-Financiamiento; desde 2021, IMIG), como % del PIB nominal anual. El resultado primario excluye los intereses de la deuda; el financiero los incluye. 1900–1960: Orlando Ferreres, <em>Dos siglos de economía argentina</em>; 1961–1992: serie histórica del Sector Público Nacional del Ministerio de Economía (1961–2004), ambas en % del PIB según la compilación de Victoria Giarrizzo (IIEP-UBA/CONICET). Desde 1993, Esquema AIF base caja: hay un salto de nivel en 1993 por el cambio de fuente y cobertura (esa compilación da 1,4% de superávit primario en 1993; el Esquema AIF, 2,4%). El año en curso muestra el acumulado a la fecha sobre el PIB estimado del año, igual que la tarjeta de Pulso económico. Los cambios de metodología (1993–2006, 2007–2014, 2017) se respetan tal como los publica el Ministerio de Economía.'},
+  bcraBuy:{title:'Compras de divisas del BCRA',subtitle:'Compras netas en el mercado de cambios · millones de USD',source:'BCRA — variación de reservas por compra de divisas (API de Estadísticas)',data:{},note:'<strong>Metodología:</strong> compras netas de divisas del Banco Central (compras menos ventas), según la variable diaria «Variación de reservas internacionales por compra de divisas» del BCRA, disponible desde enero de 2003; se suman por mes o por año. El año en curso es el acumulado a la fecha. Valores negativos: ventas netas. Los meses en cero corresponden a períodos sin intervención diaria del BCRA en el mercado (flotación de 2017–2019 y bandas cambiarias de abril a diciembre de 2025). No incluye compras del Tesoro.'},
   bop:{title:'Balanza de pagos',subtitle:'Saldo de la cuenta corriente · millones de USD corrientes',source:'INDEC (2006+) · MECON / BCRA (1881–2005)',data:{},note:'<strong>Metodología:</strong> saldo de la cuenta corriente del balance de pagos (bienes + servicios + ingreso primario + ingreso secundario), en millones de USD corrientes. Desde 2006, INDEC (sexta edición del Manual de Balanza de Pagos), sumando los cuatro trimestres; 1881–2005, serie histórica de MECON/BCRA con la metodología anterior, por lo que el empalme de 2006 implica un cambio de criterio. La vista de componentes y la trimestral están disponibles desde 2006.'},
   salary:{title:'Salario promedio (RIPTE)',subtitle:'Remuneración imponible promedio de trabajadores estables · ARS',source:'Secretaría de Seguridad Social',data:salaryRipte,note:'<strong>Cobertura:</strong> RIPTE mide la remuneración imponible promedio de trabajadores estables registrados con al menos 13 meses continuos bajo las condiciones del SIPA. No representa el salario promedio de toda la población ocupada.'}
 };
@@ -345,6 +349,9 @@ function cumulativeSummary(key, shown){
   } else if(key==='fiscalH'||(key==='bop'&&bopUnit==='gdp'&&bopFreq==='annual')||(['tradeBalance','exports','imports'].includes(key)&&tradePriceMode==='gdp')){
     const avg=shown.reduce((t,[,v])=>t+Number(v),0)/shown.length,pos=shown.filter(([,v])=>Number(v)>=0).length,la=shown[0][0],lb=shown.at(-1)[0];
     el.innerHTML=key==='exports'||key==='imports'?`<strong>${la}–${lb}:</strong> promedio <b>${fmt.format(avg)}% del PIB</b> · ${lb}: ${fmt.format(last)}% (${last-first>=0?'+':''}${fmt.format(last-first)} p.p. vs ${la}).`:`<strong>${la}–${lb}:</strong> promedio <b>${avg>=0?'+':''}${fmt.format(avg)}% del PIB</b> · ${pos} de ${shown.length} años con superávit · ${lb}: ${last>=0?'+':''}${fmt.format(last)}%.`;
+  } else if(key==='bcraBuy'){
+    const sum=Math.round(shown.reduce((t,[,v])=>t+Number(v),0)),la=bcraFreq==='monthly'?displayMonth(shown[0][0]):shown[0][0],lb=bcraFreq==='monthly'?displayMonth(shown.at(-1)[0]):shown.at(-1)[0],pos=shown.filter(([,v])=>Number(v)>0).length;
+    el.innerHTML=`<strong>${la}–${lb}:</strong> compras netas acumuladas <b>${sum>=0?'+':'−'}USD ${fmt.format(Math.abs(sum))} M</b> · ${pos} de ${shown.length} ${bcraFreq==='monthly'?'meses':'años'} con compras netas.`;
   } else if(key==='bop'){
     const sum=Math.round(shown.reduce((t,[,v])=>t+Number(v),0)),la=bopLabel(shown[0][0]),lb=bopLabel(shown.at(-1)[0]),sg=v=>v>=0?'superávit':'déficit';
     el.innerHTML=`<strong>${la}–${lb}:</strong> saldo acumulado de la cuenta corriente <b>${sum>=0?'+':'−'}${fmt.format(Math.abs(sum))} M USD</b> · ${lb}: ${sg(last)} de ${fmt.format(Math.round(Math.abs(last)))} M USD.`;
@@ -359,7 +366,7 @@ function cumulativeSummary(key, shown){
 function displayMonth(ym){const [y,m]=ym.split('-');return `${MONTH_LABELS[+m-1]} ${y}`;}
 function inflationDisplayData(){return inflationFrequency==='monthly'?inflationMonthly:inflation;}
 function syncPeriodSelectors(data){
-  let keys=Object.keys(data).sort(); const monthly=(currentSeries==='inflation'&&inflationFrequency==='monthly')||currentSeries==='salary';
+  let keys=Object.keys(data).sort(); const monthly=(currentSeries==='inflation'&&inflationFrequency==='monthly')||currentSeries==='salary'||(currentSeries==='bcraBuy'&&bcraFreq==='monthly');
   if(DAILY_SERIES.has(currentSeries))keys=[...new Set(keys.map(k=>k.slice(0,4)))]; if(!keys.length){for(const id of ['periodFrom','periodTo']){const el=document.getElementById(id);if(el)el.innerHTML='<option value="">—</option>';}return;}
   for(const id of ['periodFrom','periodTo']){const el=document.getElementById(id); if(!el)continue; const old=el.value; el.innerHTML=keys.map(k=>`<option value="${k}">${monthly?displayMonth(k):currentSeries==='poverty'?povertyLabel(k):k}</option>`).join(''); el.value=keys.includes(old)?old:(id==='periodFrom'?keys[0]:keys.at(-1));}
 }
@@ -369,7 +376,7 @@ function seriesValueLabel(key,v){
   if(key==='salary') return salaryMode.startsWith('usd')?`USD ${fmt.format(v)}`:money.format(v);
   if(key==='freeDollar') return `$ ${fmt.format(v)} / USD`;
   if(key==='fiscalH'||(['tradeBalance','exports','imports'].includes(key)&&tradePriceMode==='gdp')||(key==='bop'&&bopUnit==='gdp')) return `${fmt.format(v)}% del PIB`;
-  if(['tradeBalance','exports','imports','bop'].includes(key)) return `${fmt.format(v)} M USD`;
+  if(['tradeBalance','exports','imports','bop','bcraBuy'].includes(key)) return `${fmt.format(v)} M USD`;
   return `${fmt.format(v)}%`;
 }
 function seriesTickLabel(key,v){
@@ -378,7 +385,7 @@ function seriesTickLabel(key,v){
   if(key==='salary') return salaryMode.startsWith('usd')?`USD ${fmt.format(v)}`:money.format(v);
   if(key==='freeDollar') return `$ ${fmt.format(v)}`;
   if(key==='fiscalH'||(['tradeBalance','exports','imports'].includes(key)&&tradePriceMode==='gdp')||(key==='bop'&&bopUnit==='gdp')) return `${fmt.format(v)}%`;
-  if(['tradeBalance','exports','imports','bop'].includes(key)) return fmt.format(v);
+  if(['tradeBalance','exports','imports','bop','bcraBuy'].includes(key)) return fmt.format(v);
   return `${fmt.format(v)}%`;
 }
 // v173 · Los gráficos de pestañas ocultas (Series históricas, Dólar) no se dibujan al cargar: se marcan pendientes
@@ -393,6 +400,7 @@ function renderHistory(key){
     gdpControls:key==='gdp',
     bopControls:key==='bop',
     fiscalHControls:key==='fiscalH',
+    bcraBuyControls:key==='bcraBuy',
     tradeControls:['tradeBalance','exports','imports'].includes(key),
     dollarControls:key==='freeDollar',
     rateControls:key==='interestRate',
@@ -400,7 +408,8 @@ function renderHistory(key){
     mervalControls:key==='mervalUsd'
   };
   for(const [id,show] of Object.entries(visibility)){const el=document.getElementById(id);if(el){el.hidden=!show;el.classList.toggle('hidden',!show);}}
-  currentSeries=key; if(key==='mervalUsd')applyMervalMode(); const cfg=seriesConfig[key]; const isDaily=DAILY_SERIES.has(key); const isInflationMonthly=key==='inflation'&&inflationFrequency==='monthly'; const isSalaryMonthly=key==='salary'; const isMonthly=isInflationMonthly||isSalaryMonthly; let data;if(key==='bop'){cfg.data=bopData();cfg.subtitle=`${bopView==='components'?'Cuenta corriente y sus componentes':'Saldo de la cuenta corriente'} · ${bopUnit==='gdp'&&bopFreq==='annual'?'% del PIB (USD corrientes, Banco Mundial)':'millones de USD corrientes'} · ${bopFreq==='quarterly'?'trimestral':'anual'}`;{const gb=document.querySelector('[data-bop-unit="gdp"]');if(gb)gb.disabled=bopFreq==='quarterly';}}
+  currentSeries=key; if(key==='mervalUsd')applyMervalMode(); const cfg=seriesConfig[key]; const isDaily=DAILY_SERIES.has(key); const isInflationMonthly=key==='inflation'&&inflationFrequency==='monthly'; const isSalaryMonthly=key==='salary'; const isBcraMonthly=key==='bcraBuy'&&bcraFreq==='monthly'; const isMonthly=isInflationMonthly||isSalaryMonthly||isBcraMonthly; let data;if(key==='bop'){cfg.data=bopData();cfg.subtitle=`${bopView==='components'?'Cuenta corriente y sus componentes':'Saldo de la cuenta corriente'} · ${bopUnit==='gdp'&&bopFreq==='annual'?'% del PIB (USD corrientes, Banco Mundial)':'millones de USD corrientes'} · ${bopFreq==='quarterly'?'trimestral':'anual'}`;{const gb=document.querySelector('[data-bop-unit="gdp"]');if(gb)gb.disabled=bopFreq==='quarterly';}}
+  if(key==='bcraBuy'){cfg.data=bcraBuyData();cfg.subtitle=`Compras netas en el mercado de cambios · millones de USD · ${bcraFreq==='monthly'?'mensual':'anual (año en curso: acumulado)'}`;}
   if(key==='fiscalH'){cfg.data=fiscalHData();cfg.subtitle=`Resultado ${fiscalHMetric==='primary'?'primario':'financiero'} del Sector Público Nacional (base caja) · % del PIB · anual`;}if(isInflationMonthly)data=inflationMonthly;else if(key==='salary'){applySalaryMode();data=cfg.data;if(!Object.keys(data||{}).length)data=salaryRipteMonthly;}else data=cfg.data;
   // RIPTE usa una ruta explícita: filtra cualquier valor no numérico antes de Chart.js.
   const cleanData=Object.fromEntries(Object.entries(data||{}).filter(([k,v])=>/^\d{4}(?:-\d{2}(?:-\d{2})?)?$/.test(k)&&Number.isFinite(Number(v))).map(([k,v])=>[k,Number(v)]));
@@ -433,7 +442,7 @@ function renderHistory(key){
     if(P&&!P.none&&infProjMode==='on'&&projOk){projInfo=P;projFrom=labels.length;P.rows.forEach(([,v],i)=>{labels.push(P.labels[i]);values.push(v);});
       {const hc=document.getElementById('historyChart');if(hc)hc._exportKeys=[...(hc._exportKeys||[]),...P.keys];}
       document.getElementById('chartSubtitle').textContent+=P.kind==='annual'?` · ${P.rows.map(r=>r[0]).join('–')} estimado con REM`:` · REM hasta ${displayMonth(P.until)}`;}}
-  if(historyChart)historyChart.destroy();const asBars=['gdp','inflation','tradeBalance','exports','imports','bop','fiscalH'].includes(key); /* v183: inflación en barras (azul; deflación en verde) · v184: comercio exterior en barras (saldo verde/rojo; expo e impo azules) */const barColor0=key==='inflation'?inflationBarColor:(key==='exports'||key==='imports')?'#0b5bd3':barValueColor;const barColor=ctx=>{const c=typeof barColor0==='function'?barColor0(ctx):barColor0;return ctx.dataIndex>=projFrom?(key==='inflation'?'rgba(11,91,211,.25)':Number(ctx.raw)<0?'rgba(214,69,69,.35)':'rgba(31,157,85,.35)'):c;};const barBorder=ctx=>ctx.dataIndex>=projFrom?(key==='inflation'?'#0b5bd3':Number(ctx.raw)<0?'#d64545':'#1f9d55'):(typeof barColor0==='function'?barColor0(ctx):barColor0); // v138: PIB en barras (verde crecimiento, rojo caída), como los gráficos de las tarjetas
+  if(historyChart)historyChart.destroy();const asBars=['gdp','inflation','tradeBalance','exports','imports','bop','fiscalH','bcraBuy'].includes(key); /* v183: inflación en barras (azul; deflación en verde) · v184: comercio exterior en barras (saldo verde/rojo; expo e impo azules) */const barColor0=key==='inflation'?inflationBarColor:(key==='exports'||key==='imports')?'#0b5bd3':barValueColor;const barColor=ctx=>{const c=typeof barColor0==='function'?barColor0(ctx):barColor0;return ctx.dataIndex>=projFrom?(key==='inflation'?'rgba(11,91,211,.25)':Number(ctx.raw)<0?'rgba(214,69,69,.35)':'rgba(31,157,85,.35)'):c;};const barBorder=ctx=>ctx.dataIndex>=projFrom?(key==='inflation'?'#0b5bd3':Number(ctx.raw)<0?'#d64545':'#1f9d55'):(typeof barColor0==='function'?barColor0(ctx):barColor0); // v138: PIB en barras (verde crecimiento, rojo caída), como los gráficos de las tarjetas
   if(key==='bop'&&bopView==='components'){const keys=shown.map(x=>x[0]),comp=Object.fromEntries(BOP_COMP.map(([c])=>{const m=bopSeries(c);if(bopUnit==='gdp'&&bopFreq==='annual')for(const k of Object.keys(m))m[k]=pctOfGdp(m[k],k);return [c,m];}));
     historyChart=new Chart(document.getElementById('historyChart'),{type:'bar',data:{labels,datasets:[...BOP_COMP.map(([c,l,col])=>({type:'bar',label:l,data:keys.map(k=>comp[c][k]??null),backgroundColor:col,borderWidth:0,stack:'cc',maxBarThickness:28,order:2})),{type:'line',label:'Cuenta corriente',data:values,borderColor:'#071b35',backgroundColor:'#071b35',borderWidth:2.5,pointRadius:shown.length>40?0:3,tension:.15,order:1}]},
       options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{legend:{display:true,position:'bottom',labels:{boxWidth:12,usePointStyle:true}},tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${seriesValueLabel('bop',c.raw)}`}}},scales:{x:{stacked:true,grid:{display:false},ticks:{maxRotation:0,autoSkip:true,maxTicksLimit:12}},y:{stacked:true,grid:{color:'#edf2f7'},ticks:{callback:v=>seriesTickLabel('bop',v)}}}}});
@@ -445,6 +454,7 @@ document.querySelectorAll('[data-range]').forEach(btn=>btn.addEventListener('cli
 ['periodFrom','periodTo'].forEach(id=>document.getElementById(id)?.addEventListener('change',()=>{const a=document.getElementById('periodFrom').value,b=document.getElementById('periodTo').value;if(a>b){if(id==='periodFrom')document.getElementById('periodTo').value=String(a);else document.getElementById('periodFrom').value=String(b);}currentRange='custom';document.querySelectorAll('[data-range]').forEach(x=>x.classList.remove('active'));zoomFactor=1;renderHistory(currentSeries);}));
 document.querySelectorAll('[data-inf-frequency]').forEach(btn=>btn.addEventListener('click',()=>{inflationFrequency=btn.dataset.infFrequency;document.querySelectorAll('[data-inf-frequency]').forEach(b=>b.classList.toggle('active',b===btn));currentRange='20';document.querySelectorAll('[data-range]').forEach(b=>b.classList.toggle('active',b.dataset.range==='20'));renderHistory('inflation');}));
 document.querySelectorAll('[data-inf-annual]').forEach(btn=>btn.addEventListener('click',()=>{inflationAnnualMode=btn.dataset.infAnnual;document.querySelectorAll('[data-inf-annual]').forEach(b=>b.classList.toggle('active',b===btn));rebuildAnnualInflation();renderHistory('inflation');}));
+document.querySelectorAll('[data-bcra-freq]').forEach(btn=>btn.addEventListener('click',()=>{bcraFreq=btn.dataset.bcraFreq;document.querySelectorAll('[data-bcra-freq]').forEach(b=>b.classList.toggle('active',b===btn));renderHistory('bcraBuy');}));
 document.querySelectorAll('[data-fiscal-h]').forEach(btn=>btn.addEventListener('click',()=>{fiscalHMetric=btn.dataset.fiscalH;document.querySelectorAll('[data-fiscal-h]').forEach(b=>b.classList.toggle('active',b===btn));renderHistory('fiscalH');}));
 document.querySelectorAll('[data-bop-view],[data-bop-freq],[data-bop-unit]').forEach(btn=>btn.addEventListener('click',()=>{if(btn.disabled)return;if(btn.dataset.bopUnit){bopUnit=btn.dataset.bopUnit;document.querySelectorAll('[data-bop-unit]').forEach(b=>b.classList.toggle('active',b===btn));}else if(btn.dataset.bopView){bopView=btn.dataset.bopView;document.querySelectorAll('[data-bop-view]').forEach(b=>b.classList.toggle('active',b===btn));}else{bopFreq=btn.dataset.bopFreq;document.querySelectorAll('[data-bop-freq]').forEach(b=>b.classList.toggle('active',b===btn));if(bopFreq==='quarterly'&&bopUnit==='gdp'){bopUnit='usd';document.querySelectorAll('[data-bop-unit]').forEach(b=>b.classList.toggle('active',b.dataset.bopUnit==='usd'));}}renderHistory('bop');}));
 document.querySelectorAll('[data-inf-proj]').forEach(btn=>btn.addEventListener('click',()=>{if(btn.disabled)return;infProjMode=btn.dataset.infProj;document.querySelectorAll('[data-inf-proj]').forEach(b=>b.classList.toggle('active',b===btn));renderHistory(currentSeries);}));
@@ -790,6 +800,7 @@ function applyHistorySources(S){
     safeApply('inflationChain',()=>{if(srcOk(S.ipc)&&ipcRawRows)rebuildInflationFromSources();});
     const merge=(target,src)=>{if(srcOk(src)&&src.annual)Object.assign(target,src.annual)};
     merge(industry,S.industryHistorical); if(srcOk(S.unemploymentHistorical)&&S.unemploymentHistorical.annual){for(const [y,v0] of Object.entries(S.unemploymentHistorical.annual)){const v=Number(v0);if(Number.isFinite(v))unemployment[y]=Number((Math.abs(v)<=1?v*100:v).toFixed(1));}}
+    if(srcOk(S.bcraPurchasesHistorical))Object.assign(bcraBuyMonthly,S.bcraPurchasesHistorical.monthly||{}); // v207
     if(srcOk(S.tradeHistorical)){/* v205: el saldo mensual del backend (ICA oficial, incluye el mes recién publicado) siempre se aplica */Object.assign(tradeBalanceMonthly,S.tradeHistorical.monthlyBalance||{});const from1913=o=>Object.fromEntries(Object.entries(o||{}).filter(([y])=>Number(y)>=1913));Object.assign(tradeBalanceNominal,from1913(S.tradeHistorical.balance));Object.assign(exportsNominal,from1913(S.tradeHistorical.exports));Object.assign(importsNominal,from1913(S.tradeHistorical.imports));if(S.tradeHistorical.real){tradeBasePeriod=S.tradeHistorical.real.basePeriod||'';Object.assign(tradeBalance,from1913(S.tradeHistorical.real.balance));Object.assign(exportsSeries,from1913(S.tradeHistorical.real.exports));Object.assign(importsSeries,from1913(S.tradeHistorical.real.imports));}else rebuildRealTrade();if(tradePriceMode!=='real')applyTradeMode();}
     safeApply('financialHistorical',()=>{
     if(srcOk(S.financialHistorical)){const F=S.financialHistorical;if(F.daily){Object.assign(countryRiskDaily,F.daily.risk||{});Object.assign(mervalPointsDaily,F.daily.mervalPoints||{});Object.assign(mervalUsdDaily,F.daily.mervalUsd||{});rebuildMervalReal();applyMervalMode();seriesConfig.countryRisk.data=countryRiskDaily;}Object.assign(countryRisk,F.countryRisk||{});Object.assign(mervalUsdCcl,F.mervalUsdCcl||{});Object.assign(freeDollarNominal,F.freeDollar?.nominal||{});Object.assign(freeDollarReal,F.freeDollar?.real||{});Object.assign(interestNominal,F.interestRate?.nominal||{});Object.assign(interestReal,F.interestRate?.real||{});seriesConfig.freeDollar.data=dollarPriceMode==='real'?freeDollarReal:freeDollarNominal;seriesConfig.interestRate.data=interestMode==='real'?interestReal:interestNominal;const L=F.latest||{};if(!marketsFastLoaded)showMarkets(L);}
