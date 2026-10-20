@@ -389,6 +389,11 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 - `public/reserves-components.json`: swap con China (CNY y tipo de cambio), BIS y otros pasivos de corto plazo, SEDESA, oro (toneladas y precio), con notas y fuentes. Actualizar `through` y los componentes cuando cambien (p. ej., pagos del BIS o el swap).
 - `/api/status` → `reserves`: cuántos meses del FMI ya se cargaron y el último error.
 
+## v206 — Resultado fiscal desde 1900
+- Gráfico histórico de resultado fiscal (primario y financiero, % del PIB) extendido a 1900–2025.
+- 1993–2006 financiero: Esquema AIF del SPN base caja, metodología 1993–2006 (Datos Argentina 379.1, resultado financiero), en `trade-annual.json` → `fiscalSpn.financial`; antes empezaba en 2007.
+- 1900–1992 (`fiscalPctHist`, ya en % del PIB): Ferreres (1900–1960) y serie del SPN 1961–2004 del Ministerio de Economía (1961–1992), según la compilación de V. Giarrizzo (IIEP-UBA/CONICET). Coincide exactamente con la serie del sitio desde 2004; entre 1993 y 2003 difiere por fuente/cobertura, por eso se usa sólo hasta 1992 y la nota metodológica aclara el salto de 1993.
+
 ## v205 — Datos de INDEC el mismo día (16 h): X + portada, y balanza comercial
 - Balanza comercial: el backend ya tenía septiembre (ICA oficial 19-oct), pero la tarjeta usaba `/api/trade-monthly` (Datos Argentina, hasta agosto) y sólo tomaba el saldo del backend si había menos de 55 meses. Ahora el saldo oficial del backend siempre manda y `/api/trade-monthly` sólo completa meses faltantes; además ya no falla (y deja de renovarse) cuando Datos Argentina no responde.
 - Nuevo `src/api/indec-x.mjs`: en los días con publicación de INDEC (calendario oficial), de 16 a 22 h, se leen las publicaciones de @INDECArgentina en X cada ~4 minutos hasta capturar las del día (KV `x:indec`; mismo token que el BCRA). Su texto se suma al de la portada de indec.gob.ar para los lectores del dato del día: IPI, ISAC, EMAE (nuevo) y comercio exterior (nuevo, `parseIndecIca`: exportaciones, importaciones y saldo). Los cuadros oficiales mandan cuando llegan.
