@@ -296,7 +296,7 @@ export async function prefsApi(request, env, url, user) {
       let token = prev?.token;
       if (!token) { token = randomToken(24); await kvPut(env, `acct:rcpt:${token}`, { owner: email, kind: 'digest', self: true }); }
       subs[email] = { ...next, alertState: prev?.alertState || null, token };
-    } else if (prev) { subs[email] = { ...next, alertState: null, token: prev.token }; }
+    } else if (prev || next.digest.watch.length) { subs[email] = { ...next, alertState: null, token: prev?.token || null }; } // v209: la lista de seguimiento se guarda aunque no haya resúmenes activos
     else return json({ ok: true, prefs: next });
     await kvPut(env, SUBS, subs);
     return json({ ok: true, prefs: { digest: subs[email].digest, alerts: subs[email].alerts } });

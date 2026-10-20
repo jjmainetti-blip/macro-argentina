@@ -389,6 +389,12 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 - `public/reserves-components.json`: swap con China (CNY y tipo de cambio), BIS y otros pasivos de corto plazo, SEDESA, oro (toneladas y precio), con notas y fuentes. Actualizar `through` y los componentes cuando cambien (p. ej., pagos del BIS o el swap).
 - `/api/status` → `reserves`: cuántos meses del FMI ya se cargaron y el último error.
 
+## v209 — Mi cuenta en pestañas + Seguimiento
+- «Mi cuenta» se organiza en pestañas: Contratos, Créditos, Casas particulares, Seguimiento, Resúmenes y alertas, Cuenta (se recuerda la última abierta).
+- Nueva pestaña Seguimiento: tabla con los instrumentos que seguís (acciones, bonos, letras, ON, CEDEARs y ADRs): precio y variación del día, renovados cada 2 minutos; agregar/quitar guarda al instante (antes había que guardar el formulario de resúmenes).
+- Resúmenes y alertas pasa de ventana emergente a pestaña; la lista de seguimiento se administra sólo desde Seguimiento.
+- Corrección: la lista de seguimiento no se guardaba si la persona no tenía resúmenes ni alertas activos (`digest.mjs`).
+
 ## v208 — Compras BCRA: se suman las operaciones con el Tesoro
 - La serie ahora tiene tres vistas: Total (por defecto) = Mercado + Tesoro; Mercado (sector privado, var. 78, USD); Tesoro (var. 48, efecto monetario en $, convertido a USD con el mayorista A3500 del día, var. 5).
 - Tesoro: positivo cuando el BCRA le compra dólares al Tesoro (2016–2018: +10.871, +16.095 y +1.681 M) y negativo cuando el Tesoro le compra para pagar deuda (2024: −15.631 M).

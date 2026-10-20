@@ -437,26 +437,48 @@
       catch (err) { m.textContent = err.message; b.disabled = false; }
     });
   }
+  // v209 · Pestañas: contratos, créditos, casas particulares, seguimiento (instrumentos) y resúmenes/alertas.
+  const ACCT_TABS = [['contratos', 'Contratos'], ['creditos', 'Créditos'], ['personal', 'Casas particulares'], ['seguimiento', 'Seguimiento'], ['avisos', 'Resúmenes y alertas'], ['cuenta', 'Cuenta']];
+  let acctTab = (() => { try { const t = localStorage.getItem('acctTab'); return ACCT_TABS.some(x => x[0] === t) ? t : 'contratos'; } catch { return 'contratos'; } })();
+  function showAcctTab(t) {
+    acctTab = t; try { localStorage.setItem('acctTab', t); } catch { }
+    app.querySelectorAll('[data-acct-tab]').forEach(b => { const on = b.dataset.acctTab === t; b.classList.toggle('active', on); b.setAttribute('aria-selected', String(on)); });
+    app.querySelectorAll('[data-acct-panel]').forEach(p => { p.hidden = p.dataset.acctPanel !== t; });
+    if (t === 'seguimiento') renderWatchTab(); else stopWatchTimer();
+    if (t === 'avisos') renderPrefsTab();
+  }
   function viewAccount() {
     const d = state.data || {};
     const dataNote = [d.ipc ? `IPC hasta ${day(d.ipc)}` : null, d.icl ? `ICL hasta ${day(d.icl)}` : null, d.cer ? `CER hasta ${day(d.cer)}` : null, d.uva ? `UVA hasta ${day(d.uva)}` : null].filter(Boolean).join(' · ');
+    const count = n => n ? ` <small class="acct-tab-n">${n}</small>` : '';
+    const counts = { contratos: state.contracts.length, creditos: (state.loans || []).length, personal: (state.staff || []).length, seguimiento: (prefsData?.prefs?.digest?.watch || []).length };
     app.innerHTML = `<div class="acct-bar"><span>Sesión iniciada como <b>${esc(state.user.email)}</b></span><span class="acct-bar-actions"><button class="link-btn" id="acctLogout">Cerrar sesión</button></span></div>
       ${state.mail ? '' : '<p class="acct-warn">El envío de mails todavía no está configurado en el sitio: los contratos se guardan, pero los avisos no van a salir.</p>'}
+      <div class="acct-tabs" role="tablist" aria-label="Secciones de tu cuenta">${ACCT_TABS.map(([k, l]) => `<button type="button" role="tab" data-acct-tab="${k}" aria-selected="false">${l}${count(counts[k])}</button>`).join('')}</div>
+      <div data-acct-panel="contratos" role="tabpanel">
       <div class="acct-section-head"><h3>Tus contratos</h3><span class="acct-note">Tocá una tarjeta para ver todos los ajustes.</span></div>
       <div class="kpi-grid acct-kpis">${state.contracts.map(contractCard).join('')}
         <button type="button" class="kpi acct-kpi-add" id="acctAdd"><span>+</span><b>Agregar contrato</b><small>Monto, fecha, índice y frecuencia de ajuste</small></button></div>
+      <p class="acct-data">${esc(dataNote)}</p></div>
+      <div data-acct-panel="creditos" role="tabpanel" hidden>
       <div class="acct-section-head"><h3>Tus créditos</h3><span class="acct-note">Hipotecarios, prendarios o personales, en UVA o en pesos.</span></div>
       <div class="kpi-grid acct-kpis">${(state.loans || []).map(loanCard).join('')}
         <button type="button" class="kpi acct-kpi-add" id="loanAdd"><span>+</span><b>Agregar crédito</b><small>Monto, tasa, plazo, sistema de amortización y ajuste</small></button></div>
+      <p class="acct-data">${esc(dataNote)}</p></div>
+      <div data-acct-panel="personal" role="tabpanel" hidden>
       <div class="acct-section-head"><h3>Personal de casas particulares</h3><span class="acct-note">Pagos, registro de lo abonado y comparación con la escala oficial.</span></div>
       <div class="kpi-grid acct-kpis">${(state.staff || []).map(staffCard).join('')}
-        <button type="button" class="kpi acct-kpi-add" id="staffAdd"><span>+</span><b>Agregar persona</b><small>Monto, frecuencia, día de pago y horas</small></button></div>
-      <p class="acct-data">${esc(dataNote)}</p>
-      <div class="acct-card acct-prefs-bar"><div><h3>Resúmenes, alertas y seguimiento</h3><p id="acctPrefsSummary" class="acct-note">Cargando…</p></div><button class="btn primary" id="acctPrefsBtn" type="button">Configurar resúmenes y alertas</button></div>
-      <details class="acct-danger"><summary>Eliminar mi cuenta</summary><p>Se borran tus contratos y dejás de recibir avisos. No se puede deshacer.</p><button class="btn small danger" id="acctDelete">Eliminar mi cuenta</button></details>`;
+        <button type="button" class="kpi acct-kpi-add" id="staffAdd"><span>+</span><b>Agregar persona</b><small>Monto, frecuencia, día de pago y horas</small></button></div></div>
+      <div data-acct-panel="seguimiento" role="tabpanel" hidden><div id="acctWatchTab"><p class="acct-note">Cargando…</p></div></div>
+      <div data-acct-panel="avisos" role="tabpanel" hidden><p id="acctPrefsSummary" class="acct-note">Cargando…</p><div id="acctPrefsTab"></div></div>
+      <div data-acct-panel="cuenta" role="tabpanel" hidden>
+      <div class="acct-card"><h3>Tu cuenta</h3><p>Ingresás con un enlace que llega a <b>${esc(state.user.email)}</b>; no hay contraseña.</p><button class="btn small" id="acctLogout2" type="button">Cerrar sesión en este dispositivo</button></div>
+      <details class="acct-danger"><summary>Eliminar mi cuenta</summary><p>Se borran tus contratos, créditos, personal, seguimiento y avisos. No se puede deshacer.</p><button class="btn small danger" id="acctDelete">Eliminar mi cuenta</button></details></div>`;
+    app.querySelectorAll('[data-acct-tab]').forEach(b => b.addEventListener('click', () => showAcctTab(b.dataset.acctTab)));
+    document.getElementById('acctLogout2').onclick = () => document.getElementById('acctLogout').click();
     document.getElementById('acctAdd').onclick = () => openForm(null);
-    document.getElementById('acctPrefsBtn').onclick = () => openPrefs();
-    loadPrefs();
+    loadPrefs().then(() => { const n = (prefsData?.prefs?.digest?.watch || []).length, b = app.querySelector('[data-acct-tab=seguimiento]'); if (b) b.innerHTML = `Seguimiento${n ? ` <small class="acct-tab-n">${n}</small>` : ''}`; });
+    showAcctTab(acctTab);
     document.getElementById('acctLogout').onclick = async () => { try { await api('/logout', { method: 'POST' }); } catch { } state.user = null; setNav(); viewLogin(); };
     document.getElementById('acctDelete').onclick = async () => { if (!confirm('¿Eliminar tu cuenta y todos tus contratos?')) return; try { await api('', { method: 'DELETE' }); } catch { } state.user = null; setNav(); viewLogin('Tu cuenta fue eliminada.'); };
     document.getElementById('loanAdd').onclick = () => openLoanForm(null);
@@ -513,10 +535,7 @@
           <label>Horario<select name="weeklySlot">${slotOpts(D.weekly.slot)}</select></label></div></div>
       </div>
       <fieldset class="acct-fs"><legend>Qué incluir</legend><div class="acct-items">${Object.entries(j.items).map(([k, l]) => `<label class="acct-check"><input type="checkbox" name="item" value="${k}"${D.items.includes(k) ? ' checked' : ''}> ${esc(l)}</label>`).join('')}</div></fieldset>
-      <fieldset class="acct-fs acct-watch"><legend>Tu seguimiento: acciones, bonos y ADRs</legend>
-        <p class="acct-note">Elegí hasta 20 instrumentos de BYMA (acciones, bonos, letras, ON, CEDEARs) o empresas argentinas en Wall Street. Aparecen en tus resúmenes con su precio y su variación (diaria; en el semanal, también de la semana).</p>
-        <div class="acct-watch-add"><input id="watchInput" list="watchList" placeholder="Buscá un ticker: GGAL, AL30, GD30D, YPF…" autocomplete="off" aria-label="Agregar instrumento"><datalist id="watchList"></datalist><button class="btn small" type="button" id="watchAdd">Agregar</button></div>
-        <div class="acct-chips" id="watchChips"></div><p class="acct-note" id="watchInfo"></p></fieldset>
+      <p class="acct-note">Los instrumentos que seguís (acciones, bonos, ADRs) se eligen en la pestaña <b>Seguimiento</b>; marcá «Tus acciones, bonos…» en «Qué incluir» para recibirlos en los resúmenes.</p>
       <h3 class="acct-h3b">Alertas de mercado</h3><p>Te avisamos cuando la variación del día supera tu umbral. Se revisa cada 5 minutos en días hábiles (10:30 a 18 h); llega un mail por activo y dirección, y otro si el movimiento llega al doble, al triple…</p>
       <div class="acct-alerts">${P.alerts.map(a => `<div class="acct-alert" data-asset="${a.asset}"><label class="acct-check"><input type="checkbox" name="on"${a.on ? ' checked' : ''}> <b>${esc(j.assets[a.asset])}</b></label>
         <label>Umbral (%)<input name="pct" inputmode="decimal" value="${String(a.pct).replace('.', ',')}"></label>
@@ -524,36 +543,8 @@
       <div class="acct-actions"><button class="btn primary" type="submit">Guardar</button><button class="btn small" type="button" data-test="daily">Probar resumen diario</button><button class="btn small" type="button" data-test="weekly">Probar resumen semanal</button></div>
       <p class="acct-msg" id="acctPrefsMsg" role="status"></p></form>`;
     const f = document.getElementById('acctPrefsForm'), msg = document.getElementById('acctPrefsMsg');
-    // v167 · Lista de seguimiento.
-    const watch = [...(D.watch || [])], quotes = {};
-    const MK = { ar: 'Acción BYMA', bono: 'Bono', letra: 'Letra', on: 'ON', cedear: 'CEDEAR', us: 'Wall Street' };
-    const chips = document.getElementById('watchChips'), info = document.getElementById('watchInfo'), inp = document.getElementById('watchInput');
-    const fmtQ = q => q?.price == null ? 'sin cotización' : `${q.currency === 'ARS' ? '$' : 'US$'} ${new Intl.NumberFormat('es-AR', { maximumFractionDigits: q.price < 1000 ? 2 : 0 }).format(q.price)}${q.pct == null ? '' : ` <b class="${q.pct >= 0 ? 'up' : 'down'}">${q.pct >= 0 ? '+' : '−'}${new Intl.NumberFormat('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Math.abs(q.pct))}%</b>`}`;
-    const paintChips = () => {
-      chips.innerHTML = watch.length ? watch.map(id => { const [m, sym] = id.split(':'), q = quotes[id]; return `<span class="acct-chip"><b>${esc(sym)}</b><small>${esc(q?.name ? `${q.name} · ` : '')}${esc(MK[m] || m)}</small><span class="acct-chip-q">${q ? fmtQ(q) : '…'}</span><button type="button" data-rm="${esc(id)}" aria-label="Quitar ${esc(sym)}">×</button></span>`; }).join('') : '<span class="acct-note">Todavía no agregaste instrumentos.</span>';
-      chips.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => { watch.splice(watch.indexOf(b.dataset.rm), 1); paintChips(); });
-    };
-    const refreshQuotes = async () => { if (!watch.length) return paintChips(); try { const r = await api('/prefs/watch', { method: 'POST', body: { ids: watch } }); for (const q of r.quotes || []) quotes[q.id] = q; } catch { } paintChips(); };
-    let catalog = null, catLoading = null;
-    const loadCatalog = () => catLoading ||= api('/prefs/instruments').then(c => { catalog = c.rows || []; document.getElementById('watchList').innerHTML = catalog.map(r => `<option value="${esc(r[1])} · ${esc(r[2])}${r[3] ? ` · ${esc(r[3])}` : ''}"></option>`).join(''); info.textContent = `${catalog.length} instrumentos disponibles · ${c.source}.`; }).catch(err => { info.textContent = `No se pudo cargar la lista de instrumentos: ${err.message}`; catLoading = null; });
-    inp.addEventListener('focus', loadCatalog, { once: true });
-    const add = async () => {
-      await loadCatalog(); const v = inp.value.trim(); if (!v) return;
-      const [sym, lab] = v.split(' · ').map(x => x.trim()), S = sym.toUpperCase();
-      const cands = (catalog || []).filter(r => r[1] === S && (!lab || r[2] === lab));
-      const pick = cands.find(r => r[0].startsWith('us:')) && !lab ? (cands.find(r => r[0].startsWith('ar:')) || cands[0]) : cands[0];
-      if (!pick) { info.textContent = `No encontré "${v}". Elegilo de la lista que aparece al escribir.`; return; }
-      if (watch.includes(pick[0])) { inp.value = ''; return; }
-      if (watch.length >= 20) { info.textContent = 'Podés seguir hasta 20 instrumentos.'; return; }
-      watch.push(pick[0]); quotes[pick[0]] = { id: pick[0], price: pick[4], pct: pick[5], name: pick[3], currency: pick[0].startsWith('us:') ? 'USD' : (S.length > 3 && /D$/.test(S) ? 'USD' : S.length > 3 && /C$/.test(S) ? 'USD cable' : 'ARS') };
-      const it = f.querySelector('[name=item][value=watch]'); if (it) it.checked = true;
-      inp.value = ''; paintChips(); info.textContent = 'Agregado. Acordate de guardar.';
-    };
-    document.getElementById('watchAdd').onclick = add;
-    inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); add(); } });
-    paintChips(); refreshQuotes();
     const read = () => ({
-      digest: { daily: { on: f.dailyOn.checked, slot: f.dailySlot.value }, weekly: { on: f.weeklyOn.checked, day: Number(f.weeklyDay.value), slot: f.weeklySlot.value }, items: [...f.querySelectorAll('[name=item]:checked')].map(x => x.value), watch: [...watch] },
+      digest: { daily: { on: f.dailyOn.checked, slot: f.dailySlot.value }, weekly: { on: f.weeklyOn.checked, day: Number(f.weeklyDay.value), slot: f.weeklySlot.value }, items: [...f.querySelectorAll('[name=item]:checked')].map(x => x.value), watch: [...(prefsData?.prefs?.digest?.watch || D.watch || [])] },
       alerts: [...f.querySelectorAll('.acct-alert')].map(el => ({ asset: el.dataset.asset, on: el.querySelector('[name=on]').checked, pct: el.querySelector('[name=pct]').value, dir: el.querySelector('[name=dir]').value })),
     });
     f.addEventListener('submit', async e => {
@@ -567,6 +558,66 @@
       catch (err) { msg.textContent = err.message; }
       b.disabled = false;
     });
+  }
+
+  // ── v209 · Pestaña "Seguimiento": instrumentos que sigue la persona, con precio y variación del día ───────────────────
+  const MK = { ar: 'Acción BYMA', bono: 'Bono', letra: 'Letra', on: 'ON', cedear: 'CEDEAR', us: 'Wall Street' };
+  let watchTimer = null, watchCatalog = null, watchCatLoading = null;
+  function stopWatchTimer() { clearInterval(watchTimer); watchTimer = null; }
+  async function renderPrefsTab() {
+    const box = document.getElementById('acctPrefsTab'); if (!box) return;
+    if (!prefsData) { try { prefsData = await api('/prefs'); } catch (err) { box.innerHTML = `<p class="acct-warn">${esc(err.message)}</p>`; return; } }
+    if (!box.querySelector('#acctPrefsForm')) renderPrefs(box, prefsData);
+  }
+  async function saveWatch(list) {
+    const P = prefsData.prefs, D = P.digest;
+    const items = D.items.includes('watch') || !list.length ? D.items : [...D.items, 'watch'];
+    const r = await api('/prefs', { method: 'POST', body: { digest: { daily: D.daily, weekly: D.weekly, items, watch: list }, alerts: P.alerts } });
+    prefsData = { ...prefsData, prefs: r.prefs };
+    const sm = document.getElementById('acctPrefsSummary'); if (sm) sm.textContent = prefsSummary(r.prefs);
+    const t = app.querySelector('[data-acct-tab=seguimiento]'); if (t) t.innerHTML = `Seguimiento${list.length ? ` <small class="acct-tab-n">${list.length}</small>` : ''}`;
+    const pf = document.getElementById('acctPrefsTab'); if (pf) pf.innerHTML = '';
+  }
+  async function renderWatchTab() {
+    const box = document.getElementById('acctWatchTab'); if (!box) return;
+    if (!prefsData) { try { prefsData = await api('/prefs'); } catch (err) { box.innerHTML = `<p class="acct-warn">${esc(err.message)}</p>`; return; } }
+    const watch = [...(prefsData.prefs?.digest?.watch || [])], quotes = {};
+    box.innerHTML = `<div class="acct-section-head"><h3>Instrumentos que seguís</h3><span class="acct-note">Acciones, bonos, letras, ON y CEDEARs de BYMA, y empresas argentinas en Wall Street (hasta 20).</span></div>
+      <div class="acct-watch-add"><input id="watchInput" list="watchList" placeholder="Buscá un ticker: GGAL, AL30, GD30D, YPF…" autocomplete="off" aria-label="Agregar instrumento"><datalist id="watchList"></datalist><button class="btn small primary" type="button" id="watchAdd">Agregar</button></div>
+      <p class="acct-note" id="watchInfo"></p>
+      <div class="acct-watch-table-wrap"><table class="acct-watch-table"><thead><tr><th>Instrumento</th><th>Tipo</th><th class="num">Precio</th><th class="num">Var. del día</th><th></th></tr></thead><tbody id="watchRows"></tbody></table></div>
+      <p class="acct-note" id="watchStamp"></p>`;
+    const rows = document.getElementById('watchRows'), info = document.getElementById('watchInfo'), inp = document.getElementById('watchInput'), stamp = document.getElementById('watchStamp');
+    const nf = (v, d) => new Intl.NumberFormat('es-AR', { minimumFractionDigits: d, maximumFractionDigits: d }).format(v);
+    const paint = () => {
+      rows.innerHTML = watch.length ? watch.map(id => { const [m, sym] = id.split(':'), q = quotes[id] || {};
+        const cur = q.currency === 'ARS' ? '$' : q.currency === 'USD cable' ? 'US$ (cable)' : 'US$';
+        const price = q.price == null ? (quotes[id] ? 'sin cotización' : '…') : `${cur} ${nf(q.price, q.price < 1000 ? 2 : 0)}`;
+        const chg = q.pct == null ? '—' : `<b class="${q.pct >= 0 ? 'up' : 'down'}">${q.pct >= 0 ? '+' : '−'}${nf(Math.abs(q.pct), 2)}%</b>`;
+        return `<tr><td><b>${esc(sym)}</b>${q.name ? `<small>${esc(q.name)}</small>` : ''}</td><td>${esc(MK[m] || m)}</td><td class="num">${price}</td><td class="num">${chg}</td><td class="num"><button type="button" class="link-btn" data-rm="${esc(id)}" aria-label="Dejar de seguir ${esc(sym)}">Quitar</button></td></tr>`; }).join('')
+        : '<tr><td colspan="5" class="acct-note">Todavía no seguís ningún instrumento. Buscalo arriba por su ticker.</td></tr>';
+      rows.querySelectorAll('[data-rm]').forEach(b => b.onclick = async () => { const i = watch.indexOf(b.dataset.rm); if (i < 0) return; watch.splice(i, 1); paint(); try { await saveWatch([...watch]); info.textContent = 'Quitado.'; } catch (err) { info.textContent = `No se pudo guardar: ${err.message}`; } });
+    };
+    const refresh = async () => { if (!watch.length) return paint(); try { const r = await api('/prefs/watch', { method: 'POST', body: { ids: watch } }); for (const q of r.quotes || []) quotes[q.id] = q; stamp.textContent = `Precios actualizados a las ${new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })} (con la demora de cada mercado). Se renuevan solos cada 2 minutos.`; } catch (err) { stamp.textContent = `No se pudieron actualizar los precios: ${err.message}`; } paint(); };
+    const loadCatalog = () => watchCatLoading ||= api('/prefs/instruments').then(c => { watchCatalog = c.rows || []; const dl = document.getElementById('watchList'); if (dl) dl.innerHTML = watchCatalog.map(r => `<option value="${esc(r[1])} · ${esc(r[2])}${r[3] ? ` · ${esc(r[3])}` : ''}"></option>`).join(''); if (info && !info.textContent) info.textContent = `${watchCatalog.length} instrumentos disponibles · ${c.source}.`; }).catch(err => { info.textContent = `No se pudo cargar la lista de instrumentos: ${err.message}`; watchCatLoading = null; });
+    if (watchCatalog) { const dl = document.getElementById('watchList'); dl.innerHTML = watchCatalog.map(r => `<option value="${esc(r[1])} · ${esc(r[2])}${r[3] ? ` · ${esc(r[3])}` : ''}"></option>`).join(''); }
+    inp.addEventListener('focus', loadCatalog, { once: true });
+    const add = async () => {
+      await loadCatalog(); const v = inp.value.trim(); if (!v) return;
+      const [sym, lab] = v.split(' · ').map(x => x.trim()), S = sym.toUpperCase();
+      const cands = (watchCatalog || []).filter(r => r[1] === S && (!lab || r[2] === lab));
+      const pick = cands.find(r => r[0].startsWith('us:')) && !lab ? (cands.find(r => r[0].startsWith('ar:')) || cands[0]) : cands[0];
+      if (!pick) { info.textContent = `No encontré "${v}". Elegilo de la lista que aparece al escribir.`; return; }
+      if (watch.includes(pick[0])) { inp.value = ''; info.textContent = 'Ya lo seguís.'; return; }
+      if (watch.length >= 20) { info.textContent = 'Podés seguir hasta 20 instrumentos.'; return; }
+      watch.push(pick[0]); quotes[pick[0]] = { id: pick[0], price: pick[4], pct: pick[5], name: pick[3], currency: pick[0].startsWith('us:') ? 'USD' : (S.length > 3 && /D$/.test(S) ? 'USD' : S.length > 3 && /C$/.test(S) ? 'USD cable' : 'ARS') };
+      inp.value = ''; paint();
+      try { await saveWatch([...watch]); info.textContent = `Agregado ${S}. También aparece en tus resúmenes por mail si los tenés activos.`; } catch (err) { info.textContent = `No se pudo guardar: ${err.message}`; }
+    };
+    document.getElementById('watchAdd').onclick = add;
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); add(); } });
+    paint(); refresh();
+    stopWatchTimer(); watchTimer = setInterval(() => { if (document.visibilityState === 'visible' && acctTab === 'seguimiento' && document.getElementById('watchRows')) refresh(); else if (!document.getElementById('watchRows')) stopWatchTimer(); }, 120000);
   }
 
   // ── Formulario de contrato con vista previa ────────────────────────────────────────────────────────────────
