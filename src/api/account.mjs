@@ -9,6 +9,7 @@
 //   acct:run:<fecha>         marca de la corrida diaria de recordatorios
 // Mails: Resend (secreto RESEND_API_KEY; remitente MAIL_FROM, por defecto "Macrodatos <avisos@macrodatos.ar>").
 import { BUNDLED_SOURCES } from './bundled-history.mjs';
+import { countMail } from './stats.mjs';
 import { normalizeLoan, computeLoan, SYSTEMS, ADJUST } from './loans-core.mjs';
 import { normalizeStaff, computeStaff, payDates, computeSac, semesterOf, prevSemester, STAFF_FREQ, WEEKDAYS } from './staff-core.mjs';
 import { STAFF_SCALE, STAFF_CATEGORIES, ZONA_PCT } from './casas-scale.mjs';
@@ -61,7 +62,9 @@ export function mailDiag(env) {
   const k = resendKey(env);
   return { configured: !!k, keyShape: k ? { length: k.length, prefix: k.slice(0, 3) } : null, varNames: names, from: env?.MAIL_FROM ? 'personalizado' : 'por defecto' };
 }
-export async function sendMail(env, { to, subject, html, text, unsubscribe }) {
+// v210 · Administrador del sitio: una sola cuenta (se puede cambiar con la variable ADMIN_EMAIL de Cloudflare).
+export const isAdmin = (env, email) => !!email && normEmail(email) === normEmail(env?.ADMIN_EMAIL || 'jjmainetti@gmail.com');
+export async function sendMail(env, { to, subject, html, text, unsubscribe, kind = 'otro' }) {
   const key = resendKey(env); if (!key) throw new Error('El envío de mails no está configurado (falta RESEND_API_KEY).');
   const headers = {};
   if (unsubscribe) { headers['List-Unsubscribe'] = `<${unsubscribe.post}>`; headers['List-Unsubscribe-Post'] = 'List-Unsubscribe=One-Click'; }
@@ -71,6 +74,7 @@ export async function sendMail(env, { to, subject, html, text, unsubscribe }) {
     body: JSON.stringify({ from: env.MAIL_FROM || 'Macrodatos <avisos@macrodatos.ar>', to: [to], subject, html, text, headers, ...(env.MAIL_REPLY_TO ? { reply_to: env.MAIL_REPLY_TO } : {}) }),
   });
   if (!r.ok) { let m = ''; try { m = (await r.json())?.message || ''; } catch { } throw new Error(`Resend ${r.status}${m ? `: ${m}` : ''}`); }
+  try { await countMail(env, /^\[Prueba\]/.test(subject) ? 'prueba' : kind); } catch { } // v210: estadísticas
   return true;
 }
 export function layout(env, { title, intro = '', body = '', button = null, footer = '' }) {
@@ -279,7 +283,7 @@ async function syncRecipients(env, u, c, prev, wanted) {
       const s = site(env), isLoan = c.type === 'loan', isStaff = c.type === 'staff', what = isStaff ? 'de los pagos a' : isLoan ? 'de las cuotas del crédito' : 'de actualización del contrato', title = `${u.email} quiere enviarte avisos ${isStaff ? 'de pagos' : isLoan ? 'de un crédito' : 'de un contrato'}`;
       try {
         await sendMail(env, {
-          to: email, subject: title,
+          to: email, subject: title, kind: 'invitacion',
           text: `${u.email} te agregó como destinatario de los avisos ${what} "${c.name}" en Macrodatos.\n\nPara recibirlos, confirmá en: ${s}/#confirmar=${token}\n\nSi no conocés a esta persona, ignorá este mail: no vas a recibir nada más.`,
           html: layout(env, { title, intro: `${esc(u.email)} te agregó como destinatario de los avisos ${what} <strong>${esc(c.name)}</strong> (${esc(isStaff ? staffFacts(c) : isLoan ? loanFacts(c) : contractFacts(c))}).`, body: '<p style="font-size:14px;color:#40556e">Para empezar a recibirlos tenés que confirmarlo. Si no conocés a esta persona, ignorá este mail: no vas a recibir nada más.</p>', button: { href: `${s}/#confirmar=${token}`, label: 'Confirmar' } }),
         });
@@ -329,7 +333,7 @@ export async function runReminders(env, { force = false, today = todayAR(), hour
         for (const make of queue) for (const rc of rcpts) {
           const m = make(rc);
           if (dryRun) { log.mails.push({ to: rc.to, subject: m.subject }); continue; }
-          try { await sendMail(env, { to: rc.to, subject: m.subject, html: m.html, text: m.text, unsubscribe: unsubLinks(env, rc.token) }); log.sent++; }
+          try { await sendMail(env, { to: rc.to, subject: m.subject, html: m.html, text: m.text, unsubscribe: unsubLinks(env, rc.token), kind: 'recordatorio' }); log.sent++; }
           catch (e) { log.errors.push(`${S.id}: ${String(e?.message || e).slice(0, 120)}`); }
         }
       }
@@ -350,7 +354,7 @@ export async function runReminders(env, { force = false, today = todayAR(), hour
         for (const make of queue) for (const rc of rcpts) {
           const m = make(rc);
           if (dryRun) { log.mails.push({ to: rc.to, subject: m.subject }); continue; }
-          try { await sendMail(env, { to: rc.to, subject: m.subject, html: m.html, text: m.text, unsubscribe: unsubLinks(env, rc.token) }); log.sent++; }
+          try { await sendMail(env, { to: rc.to, subject: m.subject, html: m.html, text: m.text, unsubscribe: unsubLinks(env, rc.token), kind: 'recordatorio' }); log.sent++; }
           catch (e) { log.errors.push(`${L.id}: ${String(e?.message || e).slice(0, 120)}`); }
         }
       }
@@ -379,7 +383,7 @@ export async function runReminders(env, { force = false, today = todayAR(), hour
         for (const make of queue) for (const rc of rcpts) {
           const m = make(rc);
           if (dryRun) { log.mails.push({ to: rc.to, subject: m.subject }); continue; }
-          try { await sendMail(env, { to: rc.to, subject: m.subject, html: m.html, text: m.text, unsubscribe: unsubLinks(env, rc.token) }); log.sent++; }
+          try { await sendMail(env, { to: rc.to, subject: m.subject, html: m.html, text: m.text, unsubscribe: unsubLinks(env, rc.token), kind: 'recordatorio' }); log.sent++; }
           catch (e) { log.errors.push(`${c.id}: ${String(e?.message || e).slice(0, 120)}`); }
         }
       }
@@ -418,7 +422,17 @@ export async function accountApi(request, env, ctx, url) {
 
   if (p === '/api/account/status' && method === 'GET') {
     const me = await currentUser(request, env);
-    return json({ mail: mailConfigured(env), user: me ? { email: me.user.email } : null });
+    return json({ mail: mailConfigured(env), user: me ? { email: me.user.email, ...(isAdmin(env, me.user.email) ? { admin: true } : {}) } : null });
+  }
+
+  // v210 · Pestaña "Sitio": estadísticas y carga de datos. Sólo para la cuenta del administrador (se verifica acá, en
+  // el servidor, con la sesión; para cualquier otra cuenta o sin sesión responde 403/401 y no muestra nada).
+  if (p.startsWith('/api/account/admin/')) {
+    const me = await currentUser(request, env);
+    if (!me) return json({ error: 'Tenés que entrar a tu cuenta.' }, 401);
+    if (!isAdmin(env, me.user.email)) return json({ error: 'No autorizado.' }, 403);
+    const { adminApi } = await import('./admin.mjs');
+    return adminApi(request, env, ctx, url, me.user);
   }
 
   // Ingreso: se pide un enlace por mail.
@@ -433,7 +447,7 @@ export async function accountApi(request, env, ctx, url) {
     const s = site(env), link = `${s}/#acceso=${token}`;
     try {
       await sendMail(env, {
-        to: email, subject: 'Tu enlace para entrar a Macrodatos',
+        to: email, subject: 'Tu enlace para entrar a Macrodatos', kind: 'acceso',
         text: `Para entrar a tu cuenta de Macrodatos abrí este enlace (vence en ${LOGIN_MINUTES} minutos y sirve una sola vez):\n\n${link}\n\nSi no lo pediste, ignorá este mail.`,
         html: layout(env, { title: 'Entrá a tu cuenta', intro: `Tocá el botón para entrar a Macrodatos. El enlace vence en ${LOGIN_MINUTES} minutos y sirve una sola vez. Si es la primera vez, se crea tu cuenta.`, button: { href: link, label: 'Entrar a Macrodatos' }, footer: 'Si no pediste este enlace, ignorá este mail: nadie puede entrar sin él.' }),
       });

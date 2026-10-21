@@ -232,7 +232,7 @@ export async function runDigests(env, slot, { today = todayAR(), only = null, ki
         const contracts = p.digest.items?.includes('contracts') ? await contractsFor(env, email, today) : [];
         const watch = await watchFor(p, kind, today);
         const m = buildDigest(env, kind, p, data, today, { contracts, watch, token: p.token });
-        await sendMail(env, { to: email, subject: test ? `[Prueba] ${m.subject}` : m.subject, html: m.html, text: m.text, unsubscribe: unsubHeaders(env, p.token) });
+        await sendMail(env, { to: email, subject: test ? `[Prueba] ${m.subject}` : m.subject, kind: 'resumen', html: m.html, text: m.text, unsubscribe: unsubHeaders(env, p.token) });
         log.sent++;
         if (!test) { p.digest.last = { ...(p.digest.last || {}), [kind]: today }; }
       } catch (e) { log.errors.push(String(e?.message || e).slice(0, 140)); }
@@ -260,7 +260,7 @@ export async function checkAlerts(env, now = new Date()) {
       const st = p.alertState?.date === today ? p.alertState : (p.alertState = { date: today, levels: {} });
       const key = `${a.asset}${chg > 0 ? '+' : '-'}`; if ((st.levels[key] || 0) >= level) continue;
       st.levels[key] = level; changed = true;
-      try { const m = alertMail(env, a, x, chg, level, p.token); await sendMail(env, { to: email, subject: m.subject, html: m.html, text: m.text, unsubscribe: unsubHeaders(env, p.token) }); log.sent++; }
+      try { const m = alertMail(env, a, x, chg, level, p.token); await sendMail(env, { to: email, subject: m.subject, kind: 'alerta', html: m.html, text: m.text, unsubscribe: unsubHeaders(env, p.token) }); log.sent++; }
       catch (e) { log.errors.push(String(e?.message || e).slice(0, 140)); }
     }
   }

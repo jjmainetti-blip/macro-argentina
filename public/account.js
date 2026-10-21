@@ -19,7 +19,7 @@
     if (!r.ok) { const e = new Error(j?.errors?.join(' ') || j?.error || `Error ${r.status}`); e.status = r.status; e.errors = j?.errors; throw e; }
     return j;
   }
-  const state = { user: null, mail: true, contracts: [], data: {}, today: '', editing: null, loaded: false };
+  const state = { user: null, admin: false, mail: true, contracts: [], data: {}, today: '', editing: null, loaded: false };
   const setNav = () => { if (navLink) navLink.textContent = state.user ? 'Mi cuenta ✓' : 'Mi cuenta'; };
   const clearHash = () => { try { history.replaceState(null, '', '#cuenta'); } catch { } };
 
@@ -61,7 +61,7 @@
     const b = document.getElementById('acctVerify');
     b.onclick = async () => {
       b.disabled = true; document.getElementById('acctMsg').textContent = 'Entrando…';
-      try { const j = await api('/verify', { method: 'POST', body: { token } }); clearHash(); state.user = { email: j.email }; setNav(); await loadContracts(); }
+      try { const j = await api('/verify', { method: 'POST', body: { token } }); clearHash(); state.user = { email: j.email }; try { const s = await api('/status'); state.admin = !!s.user?.admin; } catch { } setNav(); await loadContracts(); }
       catch (err) { document.getElementById('acctMsg').innerHTML = `${esc(err.message)} <button type="button" class="link-btn" id="acctRetry">Pedir otro enlace</button>`; document.getElementById('acctRetry').onclick = () => { clearHash(); viewLogin(); }; }
     };
   }
@@ -439,13 +439,17 @@
   }
   // v209 · Pestañas: contratos, créditos, casas particulares, seguimiento (instrumentos) y resúmenes/alertas.
   const ACCT_TABS = [['contratos', 'Contratos'], ['creditos', 'Créditos'], ['personal', 'Casas particulares'], ['seguimiento', 'Seguimiento'], ['avisos', 'Resúmenes y alertas'], ['cuenta', 'Cuenta']];
-  let acctTab = (() => { try { const t = localStorage.getItem('acctTab'); return ACCT_TABS.some(x => x[0] === t) ? t : 'contratos'; } catch { return 'contratos'; } })();
+  // v210: la pestaña "Sitio" sólo aparece si el servidor dice que la sesión es del administrador (y el servidor vuelve a
+  // verificarlo en cada pedido de /admin; esto es sólo para no mostrar el botón).
+  const acctTabs = () => state.admin ? [...ACCT_TABS, ['sitio', 'Sitio']] : ACCT_TABS;
+  let acctTab = (() => { try { return localStorage.getItem('acctTab') || 'contratos'; } catch { return 'contratos'; } })();
   function showAcctTab(t) {
     acctTab = t; try { localStorage.setItem('acctTab', t); } catch { }
     app.querySelectorAll('[data-acct-tab]').forEach(b => { const on = b.dataset.acctTab === t; b.classList.toggle('active', on); b.setAttribute('aria-selected', String(on)); });
     app.querySelectorAll('[data-acct-panel]').forEach(p => { p.hidden = p.dataset.acctPanel !== t; });
     if (t === 'seguimiento') renderWatchTab(); else stopWatchTimer();
     if (t === 'avisos') renderPrefsTab();
+    if (t === 'sitio') renderSiteTab(); else stopSiteTimer();
   }
   function viewAccount() {
     const d = state.data || {};
@@ -454,7 +458,7 @@
     const counts = { contratos: state.contracts.length, creditos: (state.loans || []).length, personal: (state.staff || []).length, seguimiento: (prefsData?.prefs?.digest?.watch || []).length };
     app.innerHTML = `<div class="acct-bar"><span>Sesión iniciada como <b>${esc(state.user.email)}</b></span><span class="acct-bar-actions"><button class="link-btn" id="acctLogout">Cerrar sesión</button></span></div>
       ${state.mail ? '' : '<p class="acct-warn">El envío de mails todavía no está configurado en el sitio: los contratos se guardan, pero los avisos no van a salir.</p>'}
-      <div class="acct-tabs" role="tablist" aria-label="Secciones de tu cuenta">${ACCT_TABS.map(([k, l]) => `<button type="button" role="tab" data-acct-tab="${k}" aria-selected="false">${l}${count(counts[k])}</button>`).join('')}</div>
+      <div class="acct-tabs" role="tablist" aria-label="Secciones de tu cuenta">${acctTabs().map(([k, l]) => `<button type="button" role="tab" data-acct-tab="${k}" aria-selected="false">${l}${count(counts[k])}</button>`).join('')}</div>
       <div data-acct-panel="contratos" role="tabpanel">
       <div class="acct-section-head"><h3>Tus contratos</h3><span class="acct-note">Tocá una tarjeta para ver todos los ajustes.</span></div>
       <div class="kpi-grid acct-kpis">${state.contracts.map(contractCard).join('')}
@@ -473,13 +477,15 @@
       <div data-acct-panel="avisos" role="tabpanel" hidden><p id="acctPrefsSummary" class="acct-note">Cargando…</p><div id="acctPrefsTab"></div></div>
       <div data-acct-panel="cuenta" role="tabpanel" hidden>
       <div class="acct-card"><h3>Tu cuenta</h3><p>Ingresás con un enlace que llega a <b>${esc(state.user.email)}</b>; no hay contraseña.</p><button class="btn small" id="acctLogout2" type="button">Cerrar sesión en este dispositivo</button></div>
-      <details class="acct-danger"><summary>Eliminar mi cuenta</summary><p>Se borran tus contratos, créditos, personal, seguimiento y avisos. No se puede deshacer.</p><button class="btn small danger" id="acctDelete">Eliminar mi cuenta</button></details></div>`;
+      <details class="acct-danger"><summary>Eliminar mi cuenta</summary><p>Se borran tus contratos, créditos, personal, seguimiento y avisos. No se puede deshacer.</p><button class="btn small danger" id="acctDelete">Eliminar mi cuenta</button></details></div>
+      ${state.admin ? '<div data-acct-panel="sitio" role="tabpanel" hidden><div id="acctSiteTab"><p class="acct-note">Cargando…</p></div></div>' : ''}`;
     app.querySelectorAll('[data-acct-tab]').forEach(b => b.addEventListener('click', () => showAcctTab(b.dataset.acctTab)));
     document.getElementById('acctLogout2').onclick = () => document.getElementById('acctLogout').click();
     document.getElementById('acctAdd').onclick = () => openForm(null);
     loadPrefs().then(() => { const n = (prefsData?.prefs?.digest?.watch || []).length, b = app.querySelector('[data-acct-tab=seguimiento]'); if (b) b.innerHTML = `Seguimiento${n ? ` <small class="acct-tab-n">${n}</small>` : ''}`; });
+    if (!acctTabs().some(x => x[0] === acctTab)) acctTab = 'contratos';
     showAcctTab(acctTab);
-    document.getElementById('acctLogout').onclick = async () => { try { await api('/logout', { method: 'POST' }); } catch { } state.user = null; setNav(); viewLogin(); };
+    document.getElementById('acctLogout').onclick = async () => { try { await api('/logout', { method: 'POST' }); } catch { } state.user = null; state.admin = false; stopSiteTimer(); setNav(); viewLogin(); };
     document.getElementById('acctDelete').onclick = async () => { if (!confirm('¿Eliminar tu cuenta y todos tus contratos?')) return; try { await api('', { method: 'DELETE' }); } catch { } state.user = null; setNav(); viewLogin('Tu cuenta fue eliminada.'); };
     document.getElementById('loanAdd').onclick = () => openLoanForm(null);
     document.getElementById('staffAdd').onclick = () => openStaffForm(null);
@@ -692,6 +698,131 @@
     });
   }
 
+  // ── v210 · Pestaña "Sitio" (sólo administrador) ─────────────────────────────────────────
+  // Visitas: una por carga de página; "visitante" = primera visita del día de ese navegador. Sin cookies ni datos personales.
+  function sendHit() {
+    try {
+      const d = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' }).format(new Date());
+      let first = true; try { first = localStorage.getItem('mdVisit') !== d; localStorage.setItem('mdVisit', d); } catch { }
+      fetch('/api/hit', { method: 'POST', keepalive: true, credentials: 'omit', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ first, mobile: matchMedia('(max-width: 700px)').matches, logged: !!state.user }) }).catch(() => { });
+    } catch { }
+  }
+  let siteTimer = null, siteData = null;
+  function stopSiteTimer() { if (siteTimer) { clearInterval(siteTimer); siteTimer = null; } }
+  const nfi = v => new Intl.NumberFormat('es-AR').format(Math.round(v || 0));
+  const nfd = v => new Intl.NumberFormat('es-AR', { maximumFractionDigits: 4 }).format(v);
+  const SMES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+  const ymLabel = ym => /^\d{4}-\d{2}$/.test(ym || '') ? `${SMES[+ym.slice(5) - 1]} ${ym.slice(0, 4)}` : (ym || '—');
+  const dmy = s => { const t = String(s || '').slice(0, 10); if (!/^\d{4}-\d{2}-\d{2}$/.test(t)) return '—'; const [y, m, d] = t.split('-'); return `${+d} ${SMES[+m - 1]} ${y}`; };
+  const MAIL_KIND = { acceso: 'Enlaces de acceso', recordatorio: 'Avisos de contratos y créditos', resumen: 'Resúmenes', alerta: 'Alertas', invitacion: 'Invitaciones', prueba: 'Pruebas', otro: 'Otros' };
+  const STATE_LBL = { 'al-dia': 'Al día', esperando: 'Esperando dato', atrasado: 'Atrasado', 'sin-datos': 'Sin datos' };
+  const GROUP_LBL = { core: 'Precios, recaudación, CAME y otros', history: 'IPI, PIB, empleo y comercio', activity: 'EMAE, ISAC, crédito, consumo y cemento', banks: 'Mora y compras del BCRA', markets: 'Tasas y dólar', leading: 'Índices líderes', external: 'Balanza de pagos y pobreza' };
+
+  function siteBars(days) {
+    const out = []; const today = new Date(Date.now() - 3 * 3600e3);
+    for (let i = 29; i >= 0; i--) { const d = new Date(today - i * 86400e3).toISOString().slice(0, 10); out.push([d, days[d] || {}]); }
+    const max = Math.max(1, ...out.map(([, v]) => v.views || 0));
+    return `<div class="site-bars" role="img" aria-label="Visitas por día, últimos 30 días">${out.map(([d, v]) => `<span title="${dmy(d)}: ${nfi(v.visitors)} visitantes · ${nfi(v.views)} páginas vistas"><i style="height:${Math.round((v.views || 0) / max * 100)}%"></i><b style="height:${Math.round((v.visitors || 0) / max * 100)}%"></b></span>`).join('')}</div>
+      <div class="site-bars-axis"><span>${dmy(out[0][0])}</span><span><b class="sw sw-a"></b>Visitantes <b class="sw sw-b"></b>Páginas vistas</span><span>hoy</span></div>`;
+  }
+  async function renderSiteTab() {
+    const box = document.getElementById('acctSiteTab'); if (!box) return;
+    if (!box.dataset.ready) {
+      box.dataset.ready = '1';
+      box.innerHTML = `<div class="acct-section-head"><h3>Estadísticas del sitio</h3><span class="acct-note" id="siteStamp">Cargando…</span></div>
+        <div id="siteStats"></div>
+        <div class="acct-section-head site-head2"><h3>Cargar un dato</h3><span class="acct-note">Para publicar un dato antes de que lo tome la fuente, o corregirlo. Se aplica enseguida en la tarjeta y en las series.</span></div>
+        <form class="acct-card site-form" id="siteForm" novalidate>
+          <label class="site-wide">Serie<select id="siteSeries"></select></label>
+          <label>Mes<input type="month" id="siteYm" required></label>
+          <label>Valor <small id="siteUnit"></small><input id="siteValue" inputmode="decimal" placeholder="Ej.: 2,1" required></label>
+          <fieldset class="site-mode"><legend>Si la fuente ya tiene ese mes</legend>
+            <label><input type="radio" name="siteMode" value="fill" checked> Dejar el de la fuente (sólo completa lo que falta)</label>
+            <label><input type="radio" name="siteMode" value="replace"> Reemplazarlo por este valor</label></fieldset>
+          <label class="site-wide">Nota (opcional)<input id="siteNote" maxlength="140" placeholder="Ej.: dato del comunicado de prensa de INDEC"></label>
+          <p class="acct-note site-wide" id="siteRecent"></p>
+          <div class="site-wide site-actions"><button class="btn primary" type="submit">Guardar dato</button><span class="acct-msg" id="siteMsg" role="status"></span></div>
+        </form>
+        <div class="acct-section-head site-head2"><h3>Datos cargados</h3><span class="acct-note">Cuando la fuente publica el mismo mes, manda el dato oficial (salvo que hayas elegido reemplazar). Podés borrarlos cuando quieras.</span></div>
+        <div class="acct-watch-table-wrap"><table class="acct-watch-table"><thead><tr><th>Serie</th><th>Mes</th><th class="num">Valor</th><th>Estado</th><th></th></tr></thead><tbody id="siteEntries"><tr><td colspan="5" class="acct-note">Cargando…</td></tr></tbody></table></div>
+        <div class="acct-section-head site-head2"><h3>Actualizar fuentes ahora</h3><span class="acct-note">Lo mismo que hace sola la revisión cada 5 minutos, para un grupo de fuentes.</span></div>
+        <div class="acct-card site-refresh"><select id="siteGroup">${Object.entries(GROUP_LBL).map(([k, l]) => `<option value="${k}">${esc(l)}</option>`).join('')}</select><button class="btn small" type="button" id="siteRefresh">Actualizar</button><span class="acct-msg" id="siteRefreshMsg" role="status"></span></div>`;
+      const f = document.getElementById('siteForm'), sel = document.getElementById('siteSeries');
+      sel.onchange = () => paintRecent();
+      document.getElementById('siteYm').max = new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 7);
+      f.addEventListener('submit', async e => {
+        e.preventDefault();
+        const m = document.getElementById('siteMsg'), b = f.querySelector('button[type=submit]');
+        const body = { id: sel.value, ym: document.getElementById('siteYm').value, value: document.getElementById('siteValue').value.trim(), mode: f.querySelector('[name=siteMode]:checked')?.value || 'fill', note: document.getElementById('siteNote').value.trim() };
+        if (!/^\d{4}-\d{2}$/.test(body.ym)) { m.textContent = 'Elegí el mes.'; return; }
+        body.value = /,/.test(body.value) ? body.value.replace(/\./g, '').replace(',', '.') : body.value;
+        if (!body.value || !Number.isFinite(Number(body.value))) { m.textContent = 'Revisá el valor (número; podés usar coma decimal).'; return; }
+        b.disabled = true; m.textContent = 'Guardando…';
+        try { const j = await api('/admin/data', { method: 'POST', body }); siteData = j; paintData(); m.textContent = `Guardado (${ymLabel(body.ym)}). ${j.applied === 'kv' ? 'Ya se ve en el sitio.' : j.applied === 'unchanged' ? 'La fuente ya tenía ese mes: quedó el dato oficial.' : ''}`; document.getElementById('siteValue').value = ''; document.getElementById('siteNote').value = ''; refreshSiteData(); }
+        catch (err) { m.textContent = err.message; }
+        b.disabled = false;
+      });
+      document.getElementById('siteRefresh').onclick = async () => {
+        const b = document.getElementById('siteRefresh'), m = document.getElementById('siteRefreshMsg'), g = document.getElementById('siteGroup').value;
+        b.disabled = true; m.textContent = 'Actualizando (puede tardar unos segundos)…';
+        try { const j = await api('/admin/refresh', { method: 'POST', body: { group: g } }); m.textContent = `${j.stored === 'kv' ? 'Listo: hay datos nuevos.' : j.stored === 'unchanged' ? 'Listo: sin cambios.' : `Listo (${j.stored || '—'}).`}${j.errors?.length ? ` Errores: ${j.errors.join(' · ')}` : ''}`; loadSiteStats(); refreshSiteData(); }
+        catch (err) { m.textContent = err.message; }
+        b.disabled = false;
+      };
+    }
+    loadSiteStats(); refreshSiteData();
+    stopSiteTimer(); siteTimer = setInterval(() => { if (!document.hidden && acctTab === 'sitio') loadSiteStats(); }, 120000);
+  }
+  async function refreshSiteData() { try { siteData = await api('/admin/data'); paintData(); } catch (err) { const t = document.getElementById('siteEntries'); if (t) t.innerHTML = `<tr><td colspan="5" class="acct-warn">${esc(err.message)}</td></tr>`; } }
+  function paintRecent() {
+    const sel = document.getElementById('siteSeries'), S = siteData?.series?.find(x => x.id === sel?.value); if (!S) return;
+    document.getElementById('siteUnit').textContent = `(${S.unit})`;
+    const r = S.recent || [];
+    document.getElementById('siteRecent').innerHTML = r.length ? `Últimos datos en el sitio: ${r.map(([k, v]) => `<b>${ymLabel(k)}</b> ${esc(nfd(v))}`).join(' · ')}` : 'Todavía no hay datos de esta serie en el sitio.';
+    const ym = document.getElementById('siteYm'); if (!ym.value && r.length) { let [y, m] = r.at(-1)[0].split('-').map(Number); m++; if (m > 12) { m = 1; y++; } const n = `${y}-${String(m).padStart(2, '0')}`; if (n <= ym.max) ym.value = n; }
+  }
+  function paintData() {
+    const sel = document.getElementById('siteSeries'); if (!sel || !siteData) return;
+    if (!sel.options.length) { sel.innerHTML = siteData.series.map(s => `<option value="${esc(s.id)}">${esc(s.label)}</option>`).join(''); }
+    paintRecent();
+    const st = e => e.state === 'aplicado' ? `<b class="up">Aplicado</b>${e.mode === 'replace' ? '<small>reemplaza a la fuente</small>' : '<small>la fuente todavía no lo publicó</small>'}` : e.state === 'fuente' ? `Publicado por la fuente<small>valor oficial: ${esc(nfd(e.sourceValue))}${e.id === 'ipc' ? ' (índice)' : ''} · ya podés borrarlo</small>` : 'Pendiente<small>se aplica en la próxima actualización</small>';
+    const rows = document.getElementById('siteEntries');
+    rows.innerHTML = siteData.entries.length ? siteData.entries.map(e => `<tr><td>${esc(e.label)}${e.note ? `<small>${esc(e.note)}</small>` : ''}<small>cargado ${dmy(e.at)}</small></td><td>${ymLabel(e.ym)}</td><td class="num">${esc(nfd(e.value))}<small>${esc(e.unit)}</small></td><td>${st(e)}</td><td class="num"><button type="button" class="link-btn" data-del="${esc(e.id)}|${esc(e.ym)}">Borrar</button></td></tr>`).join('')
+      : '<tr><td colspan="5" class="acct-note">Todavía no cargaste ningún dato.</td></tr>';
+    rows.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
+      const [id, ym] = b.dataset.del.split('|'); if (!confirm(`¿Borrar el dato cargado de ${ymLabel(ym)}?`)) return;
+      b.disabled = true;
+      try { siteData = await api(`/admin/data?id=${encodeURIComponent(id)}&ym=${encodeURIComponent(ym)}`, { method: 'DELETE' }); paintData(); } catch (err) { alert(err.message); b.disabled = false; }
+    });
+  }
+  async function loadSiteStats() {
+    const box = document.getElementById('siteStats'), stamp = document.getElementById('siteStamp'); if (!box) return;
+    let S; try { S = await api('/admin/stats'); } catch (err) { box.innerHTML = `<p class="acct-warn">${esc(err.message)}</p>`; return; }
+    const V = S.visits, U = S.users, M = S.mails, B = S.subs;
+    const tile = (t, v, sub) => `<div class="site-tile"><span>${t}</span><b>${v}</b>${sub ? `<small>${sub}</small>` : ''}</div>`;
+    const kinds = Object.entries(M.kinds || {}).sort((a, b) => b[1] - a[1]);
+    const late = (S.cards || []).filter(c => c.state && c.state !== 'al-dia');
+    box.innerHTML = `<div class="site-tiles">
+        ${tile('Visitantes hoy', nfi(V.today.visitors), `${nfi(V.today.views)} páginas vistas`)}
+        ${tile('Visitantes · 7 días', nfi(V.visitors7), `${nfi(V.views7)} páginas vistas`)}
+        ${tile('Visitantes · 30 días', nfi(V.visitors30), `${nfi(V.views30)} páginas vistas`)}
+        ${tile('Usuarios registrados', nfi(U.total), `${nfi(U.new30)} nuevos y ${nfi(U.active30)} activos en 30 días`)}
+        ${tile('Mails enviados · 30 días', nfi(M.total30), `${nfi(M.total7)} en los últimos 7 días`)}
+        ${tile('Resúmenes y alertas', nfi(B.subscribers), `${nfi(B.daily)} diario · ${nfi(B.weekly)} semanal · ${nfi(B.alerts)} con alertas`)}
+        ${tile('Contratos', nfi(U.contracts), `de ${nfi(U.withContracts)} usuarios`)}
+        ${tile('Créditos · personal', `${nfi(U.loans)} · ${nfi(U.staff)}`, `${nfi(U.withLoans)} y ${nfi(U.withStaff)} usuarios`)}
+        ${tile('Seguimiento', nfi(B.watchItems), `instrumentos de ${nfi(B.watching)} usuarios`)}
+      </div>
+      <div class="acct-card site-chart"><h4>Visitas por día · últimos 30 días</h4>${siteBars(V.days || {})}<p class="acct-note">Visitante = primera visita del día de cada navegador. Los números son aproximados (se cuentan desde el ${dmy(S.since || S.today)} y pueden perderse algunas visitas cuando Cloudflare reinicia el servidor).</p></div>
+      <div class="site-cols">
+        <div class="acct-card"><h4>Mails enviados por tipo · 60 días</h4>${kinds.length ? `<ul class="site-list">${kinds.map(([k, n]) => `<li><span>${esc(MAIL_KIND[k] || k)}</span><b>${nfi(n)}</b></li>`).join('')}</ul>` : '<p class="acct-note">Todavía no hay mails contados.</p>'}</div>
+        <div class="acct-card"><h4>Tarjetas pendientes o atrasadas</h4>${late.length ? `<ul class="site-list">${late.map(c => `<li><span>${esc(c.title)}<small>último ${esc(c.latestLabel || '—')}${c.nextLabel ? ` · espera ${esc(c.nextLabel)}${c.expected ? ` (${dmy(c.expected)})` : ''}` : ''}</small></span><b class="${c.state === 'atrasado' ? 'down' : ''}">${esc(STATE_LBL[c.state] || c.state)}</b></li>`).join('')}</ul>` : '<p class="acct-note">Todas las tarjetas están al día.</p>'}${S.xIndec ? `<p class="acct-note">X de INDEC: última lectura ${S.xIndec.lastCheck ? new Date(S.xIndec.lastCheck).toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'}${S.xIndec.lastError ? ` · error: ${esc(S.xIndec.lastError)}` : ''}</p>` : ''}</div>
+      </div>
+      <div class="acct-section-head site-head2"><h3>Últimos usuarios</h3><span class="acct-note">Ordenados por último ingreso.</span></div>
+      <div class="acct-watch-table-wrap"><table class="acct-watch-table site-users"><thead><tr><th>Mail</th><th>Alta</th><th>Último ingreso</th><th class="num">Contratos</th><th class="num">Créditos</th><th class="num">Personal</th></tr></thead><tbody>${(U.recent || []).map(u => `<tr><td>${esc(u.email)}</td><td>${dmy(u.createdAt)}</td><td>${dmy(u.lastLogin)}</td><td class="num">${u.contracts}</td><td class="num">${u.loans}</td><td class="num">${u.staff}</td></tr>`).join('') || '<tr><td colspan="6" class="acct-note">Sin usuarios.</td></tr>'}</tbody></table></div>`;
+    stamp.textContent = `Actualizado a las ${new Date(S.generatedAt).toLocaleTimeString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires', hour: '2-digit', minute: '2-digit' })}`;
+  }
+
   // ── Arranque ───────────────────────────────────────────────────────────────────────────────────────────────
   async function route() {
     const h = decodeURIComponent((location.hash || '').slice(1));
@@ -703,7 +834,8 @@
     viewLogin();
   }
   (async () => {
-    try { const s = await api('/status'); state.mail = s.mail; state.user = s.user; setNav(); } catch { }
+    try { const s = await api('/status'); state.mail = s.mail; state.user = s.user; state.admin = !!s.user?.admin; setNav(); } catch { }
+    sendHit();
     await route();
   })();
   window.addEventListener('hashchange', () => { if (document.documentElement.getAttribute('data-tab') === 'cuenta') route(); });

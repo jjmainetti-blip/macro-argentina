@@ -6,6 +6,7 @@ import { FISCAL_BASE } from './fiscal-base.mjs';
 import { fiscalFromNews } from './fiscal-news.mjs';
 import { indecEmae, indecIpi, indecIsac, indecIca, indecPib, indecEph, bcraDaily, monthlyAvg, annualAvg } from './indec-official.mjs';
 import { autosLive, ipcCabaLive, povertyLive, cementLive, cameLive, scentiaLive } from './live-sources.mjs';
+import { readOverrides, applyOverrides } from './overrides.mjs';
 import { cardStatus, CARDS, periodEndYm, todayAR, ymShift } from './freshness.mjs';
 import { EVENTS } from './calendar-data.mjs';
 import { ipcMonthlyChain, ipcAnnualAvg, ipcAnnualAvgInflation } from './ipc-chain.mjs';
@@ -1331,7 +1332,33 @@ const macroData=async(env={},ctx=null,request=null,opts={})=>{
   });
   for(const [name,old] of Object.entries(previous?.sources||{}))if(!out.sources[name])out.sources[name]=old;
   repairHistorical(out.sources);
-  // Tarjetas: alinear ISAC, mora y crédito con sus series (mismo grupo "activity").
+  // v210: datos cargados a mano desde la pestaña "Sitio" (sólo el administrador).
+  try{const OV=await readOverrides(env);const manual={};for(const g of group==='all'?Object.keys(GROUPS):[group])Object.assign(manual,applyOverrides(out.sources,g,OV.entries,stored?.manual));if(Object.keys(manual).length)out.manual=manual;}catch(e){console.warn('datos manuales',e);}
+  alignCards(out.sources);
+  try{await recordSeen(env,ctx,group,previous?.sources,out.sources);}catch{}
+  const ok=Object.values(out.sources).some(x=>x.status==='ok'||x.status==='snapshot');
+  if(ok)out.stored=await writeSnapshot(env,ctx,out,group,stored,!!opts.force);
+  // Revisado: aunque no haya cambiado nada (y por eso no se reescriba KV), no se vuelve a revisar por 10 minutos.
+  if(ok&&group!=='all')await edgeMark(`checked/${group}`,FRESH_MS/1000);
+  return new Response(JSON.stringify(out),{status:ok?200:503,headers:{'content-type':'application/json; charset=utf-8','cache-control':'no-cache','access-control-allow-origin':'*'}});
+};
+export default macroData;
+// v210 · Al guardar o borrar un dato manual se aplica enseguida sobre el snapshot guardado (sin esperar la próxima
+// actualización de las fuentes) y se recalcula el "Último dato publicado".
+export async function applyOverridesNow(env,group){
+  if(!GROUPS[group])return 'grupo inválido';
+  const stored=await readSnapshot(env,group);if(!stored?.sources)return 'sin snapshot';
+  const OV=await readOverrides(env,{fresh:true});
+  const snap=JSON.parse(JSON.stringify(stored));delete snap.hash;delete snap.savedAt;
+  const manual=applyOverrides(snap.sources,group,OV.entries,stored.manual);if(Object.keys(manual).length)snap.manual=manual;else delete snap.manual;
+  alignCards(snap.sources);
+  const r=await writeSnapshot(env,null,snap,group,stored,true);
+  try{await latestReleaseFor(env,null,{force:true});}catch{}
+  return r;
+}
+// Tarjetas: alinear ISAC, mora y crédito con sus series (mismo grupo "activity").
+function alignCards(sources){
+  const out={sources};
   const AP=out.sources.activityPulse;
   if(AP){
     const lastOf=o=>Object.entries(o||{}).filter(([k,v])=>/^\d{4}-\d{2}$/.test(k)&&Number.isFinite(Number(v))).sort(([a],[b])=>a.localeCompare(b)).at(-1);
@@ -1341,12 +1368,6 @@ const macroData=async(env={},ctx=null,request=null,opts={})=>{
     if(at&&(!AP.arrears||at[0]>(AP.arrears.ym||ymFromPeriodEs(AP.arrears.period)||''))){const f=A.monthlyFamilies?.[at[0]],c=A.monthlyCompanies?.[at[0]];AP.arrears={...(AP.arrears||{}),ym:at[0],period:periodEs(at[0]),total:at[1],families:Number.isFinite(Number(f))?Number(f):null,companies:Number.isFinite(Number(c))?Number(c):null};}
     if(AP.creditLatest&&AP.credit&&AP.creditLatest.ym>(AP.credit.ym||'')){AP.credit={source:AP.credit.source,ym:AP.creditLatest.ym,period:AP.creditLatest.period,arsRealMom:AP.creditLatest.arsRealMom};}
   }
-  try{await recordSeen(env,ctx,group,previous?.sources,out.sources);}catch{}
-  const ok=Object.values(out.sources).some(x=>x.status==='ok'||x.status==='snapshot');
-  if(ok)out.stored=await writeSnapshot(env,ctx,out,group,stored,!!opts.force);
-  // Revisado: aunque no haya cambiado nada (y por eso no se reescriba KV), no se vuelve a revisar por 10 minutos.
-  if(ok&&group!=='all')await edgeMark(`checked/${group}`,FRESH_MS/1000);
-  return new Response(JSON.stringify(out),{status:ok?200:503,headers:{'content-type':'application/json; charset=utf-8','cache-control':'no-cache','access-control-allow-origin':'*'}});
-};
-export default macroData;
+}
 function ymFromPeriodEs(s){const m=String(s||'').match(/(ene|feb|mar|abr|may|jun|jul|ago|sep|oct|nov|dic)[a-z]*\s+(20\d{2})/i);if(!m)return null;const i=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'].indexOf(m[1].toLowerCase());return `${m[2]}-${String(i+1).padStart(2,'0')}`;}
+export const readSnapshotFor=(env,g)=>readSnapshot(env,g);

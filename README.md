@@ -389,6 +389,15 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 - `public/reserves-components.json`: swap con China (CNY y tipo de cambio), BIS y otros pasivos de corto plazo, SEDESA, oro (toneladas y precio), con notas y fuentes. Actualizar `through` y los componentes cuando cambien (p. ej., pagos del BIS o el swap).
 - `/api/status` → `reserves`: cuántos meses del FMI ya se cargaron y el último error.
 
+## v210 — Pestaña "Sitio" (sólo administrador): estadísticas y carga de datos
+
+- **Acceso**: sólo la cuenta `jjmainetti@gmail.com` (o la que se defina en la variable `ADMIN_EMAIL` de Cloudflare). El control se hace en el servidor con la sesión: cualquier otra cuenta recibe 403 y sin sesión 401; el botón de la pestaña sólo aparece si `/api/account/status` devuelve `admin: true`.
+- **Estadísticas** (`GET /api/account/admin/stats`): visitantes y páginas vistas (hoy, 7 y 30 días, gráfico diario), usuarios registrados (nuevos/activos, últimos 25 con alta e ingreso), mails enviados por tipo, suscriptos a resúmenes/alertas/seguimiento, contratos/créditos/personal y tarjetas pendientes o atrasadas.
+- **Visitas**: el navegador manda `POST /api/hit` una vez por carga (sin cookies ni datos personales; se descartan bots y otros orígenes). Cada instancia del Worker acumula en memoria y guarda su propia clave `stats:hit:<día>:<instancia>` (totales en los metadatos, vencen a los ~13 meses) cada 25 visitas o 5 minutos: pocas escrituras de KV y sin carreras. Son aproximadas. Mails: `sendMail` cuenta por tipo (`stats:mail:…`).
+- **Carga de datos** (`/api/account/admin/data`): IPC nacional (variación mensual → índice), IPC CABA, ARCA, ICG, CAME, IPI, balanza comercial, EMAE, ISAC, cemento, supermercados, Scentia, crédito y mora. Se guardan en KV `admin:overrides` y se aplican en cada actualización del grupo (`src/api/overrides.mjs`) y enseguida sobre el snapshot guardado (`applyOverridesNow`), recalculando el "Último dato publicado". Modo "completar" (por defecto: si la fuente ya publicó ese mes, manda el oficial) o "reemplazar". Borrar un dato lo saca del sitio (el snapshot guarda `manual` con lo aplicado).
+- **Actualizar fuentes ahora** (`POST /api/account/admin/refresh`): fuerza la revisión de un grupo.
+- Arreglo: `.acct` ya no se ensancha en celulares con tablas o selectores largos.
+
 ## v209 — Mi cuenta en pestañas + Seguimiento
 - «Mi cuenta» se organiza en pestañas: Contratos, Créditos, Casas particulares, Seguimiento, Resúmenes y alertas, Cuenta (se recuerda la última abierta).
 - Nueva pestaña Seguimiento: tabla con los instrumentos que seguís (acciones, bonos, letras, ON, CEDEARs y ADRs): precio y variación del día, renovados cada 2 minutos; agregar/quitar guarda al instante (antes había que guardar el formulario de resúmenes).

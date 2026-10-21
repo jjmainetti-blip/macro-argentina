@@ -10,6 +10,7 @@ import uvaLoans from './api/uva-loans.mjs';
 import { accountApi, runReminders, remindersStatus } from './api/account.mjs';
 import { digestTick, checkAlerts, digestStatus } from './api/digest.mjs';
 import { indecXStatus } from './api/indec-x.mjs';
+import { countHit, flushStats } from './api/stats.mjs';
 
 const jsonHeaders = {
   'X-Content-Type-Options': 'nosniff',
@@ -83,9 +84,18 @@ export default {
       return (new Response(JSON.stringify({ generatedAt: new Date().toISOString(), kv: !!env?.MACRO_STORE, xBcra: xbcra, xIndec: await indecXStatus(env), reminders: await remindersStatus(env), digests: await digestStatus(env).catch(() => null), reserves: await (async () => { try { const p = await env?.MACRO_STORE?.get?.('imfpos:v1', 'json'); return p ? { imfMonths: Object.keys(p).filter(k => /^\d{4}-\d{2}$/.test(k)).length, imfError: p._err || null, current: p._cur || null } : null; } catch { return null; } })(), ipcCaba: await (async () => { try { const c = (await env?.MACRO_STORE?.get?.('macro:snapshot:v131:core', 'json'))?.sources?.ipcCaba; return c ? { source: c.source, last: Object.keys(c.history || {}).sort().at(-1), latest: c.latest || null, idecbaError: c.idecbaError || null, baseError: c.baseError || null, refreshError: c.refreshError || null } : null; } catch { return null; } })(), cards }, null, 1), { headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', 'access-control-allow-origin': '*' } }));
       }));
     }
+    // v210: visitas (lo manda el navegador una vez por carga de página; sin cookies ni datos personales).
+    if (request.method === 'POST' && url.pathname === '/api/hit') {
+      const origin = request.headers.get('origin'), ua = request.headers.get('user-agent') || '';
+      if ((!origin || origin === url.origin) && !/bot|crawl|spider|slurp|headless|lighthouse|preview/i.test(ua)) {
+        let b = {}; try { b = await request.json(); } catch { }
+        ctx.waitUntil(countHit(env, { first: !!b?.first, mobile: !!b?.mobile, logged: !!b?.logged }).catch(() => { }));
+      }
+      return new Response(null, { status: 204, headers: { 'cache-control': 'no-store' } });
+    }
     // v164: cuentas, contratos y recordatorios por mail.
     if (url.pathname.startsWith('/api/account')) {
-      const r = await accountApi(request, env, ctx, url); if (r) return r;
+      const r = await accountApi(request, env, ctx, url); if (r) { ctx.waitUntil(flushStats(env).catch(() => { })); return r; }
     }
     if (request.method === 'GET' && url.pathname === '/api/calendar-data') {
       return withHeaders(await calendarData(env));
@@ -110,9 +120,9 @@ export default {
   async scheduled(event, env, ctx) {
     // v164: recordatorios de contratos — una vez por día (08:47 hora argentina). Si esa ejecución se perdió, la
     // revisión de cada 5 minutos la hace más tarde ese mismo día (runReminders no repite si ya corrió).
-    if (event.cron === '47 11 * * *') { ctx.waitUntil(runReminders(env).then(r => console.log(`recordatorios: ${JSON.stringify({ ...r, mails: undefined })}`)).catch(e => console.log(`recordatorios: error ${e?.message || e}`))); return; }
+    if (event.cron === '47 11 * * *') { ctx.waitUntil(runReminders(env).then(r => console.log(`recordatorios: ${JSON.stringify({ ...r, mails: undefined })}`)).then(() => flushStats(env, true)).catch(e => console.log(`recordatorios: error ${e?.message || e}`))); return; }
     // v176: los avisos se revisan cada hora (runReminders no repite dentro de la misma hora).
-    ctx.waitUntil(runReminders(env).catch(() => { }));
+    ctx.waitUntil(runReminders(env).catch(() => { }).then(() => flushStats(env, true)).catch(() => { }));
     const groups = Object.keys(GROUPS), tick = Math.floor((event.scheduledTime || Date.now()) / 300000);
     let statuses = [];
     try { statuses = await freshnessReport(env); ctx.waitUntil(saveCardStatus(env, statuses)); } catch { }
@@ -124,6 +134,7 @@ export default {
     ctx.waitUntil(marketsData(null, ctx, env, { force: true }).catch(e => console.log(`cron markets: error ${e?.message || e}`))
       .then(() => checkAlerts(env)).then(r => { if (r?.sent || r?.errors?.length) console.log(`alertas: ${JSON.stringify(r)}`); })
       .then(() => digestTick(env)).then(r => { if (r?.length) console.log(`resúmenes: ${JSON.stringify(r)}`); })
+      .then(() => flushStats(env, true))
       .catch(e => console.log(`cron alertas/resúmenes: error ${e?.message || e}`)));
     ctx.waitUntil(macroData(env, ctx, new Request(`https://cron.invalid/api/macro-data?group=${group}`), { force: true })
       .then(r => r.json()).then(async j => { try { await latestReleaseFor(env, null, { force: true }); } catch { } return j; }).then(j => console.log(`cron ${group} (${reason}): guardado=${j.stored} esperando=${statuses.filter(s => s.state === 'esperando').map(s => s.key).join(',') || '—'}`))
