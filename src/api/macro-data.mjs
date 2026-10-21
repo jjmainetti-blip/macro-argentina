@@ -4,7 +4,7 @@ import { BUNDLED_SOURCES } from './bundled-history.mjs';
 import { TRADE_ANNUAL, INDUSTRY_BRIDGE, INDUSTRY_ANNUAL } from './trade-annual.mjs';
 import { FISCAL_BASE } from './fiscal-base.mjs';
 import { fiscalFromNews } from './fiscal-news.mjs';
-import { indecEmae, indecIpi, indecIsac, indecIca, indecPib, indecEph, bcraDaily, monthlyAvg, annualAvg } from './indec-official.mjs';
+import { indecEmae, indecIpi, indecIsac, indecIca, indecPib, indecEph, bcraDaily, monthlyAvg, annualAvg, indecAvgPrices } from './indec-official.mjs';
 import { autosLive, ipcCabaLive, povertyLive, cementLive, cameLive, scentiaLive } from './live-sources.mjs';
 import { readOverrides, applyOverrides } from './overrides.mjs';
 import { cardStatus, CARDS, periodEndYm, todayAR, ymShift } from './freshness.mjs';
@@ -1412,3 +1412,36 @@ function alignCards(sources){
 }
 function ymFromPeriodEs(s){const m=String(s||'').match(/(ene|feb|mar|abr|may|jun|jul|ago|sep|oct|nov|dic)[a-z]*\s+(20\d{2})/i);if(!m)return null;const i=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'].indexOf(m[1].toLowerCase());return `${m[2]}-${String(i+1).padStart(2,'0')}`;}
 export const readSnapshotFor=(env,g)=>readSnapshot(env,g);
+
+// v212 · "La economía cuando naciste": extensión automática de public/birth-economy.json (que se arma a mano cada tanto).
+// Últimos 24 meses de: IPC (índice; el navegador lo encadena), IPC de EE.UU., dólar oficial y libre (promedio mensual de
+// los cierres diarios), RIPTE y precios promedio de INDEC (GBA) de los bienes de la tabla "¿Cuánto costaba?".
+// Precios: archivo sh_ipc_precios_promedio.xls de INDEC (primaria; incluye el mes recién publicado) y series 105.1 de
+// Datos Argentina (respaldo). `f` = factor de unidad (manteca: INDEC 200 g → 1 kg; café: INDEC 500 g → 250 g).
+const BIRTH_PRICES={bread:['pan frances tipo flauta','105.1_I2PFF_2016_M_27',1],beef:['asado','105.1_I2A_2016_M_14',1],milk:['leche fresca entera','105.1_I2LFES_2016_M_35',1],
+  sugar:['azucar','105.1_I2A_2016_M_15',1],flour:['harina de trigo comun','105.1_I2HTC_2016_M_27',1],rice:['arroz blanco simple','105.1_I2ABS_2016_M_28',1],butter:['manteca','105.1_I2M_2016_M_16',5],
+  eggs:['huevos de gallina','105.1_I2HG_2016_M_23',1],yerba:['yerba mate','105.1_I2YM_2016_M_19',1],coffee:['cafe molido','105.1_I2CM_2016_M_20',.5],wine:['vino comun','105.1_I2VC_2016_M_19',1],
+  oil15:['aceite de girasol','105.1_I2AG_2016_M_23',1],chicken:['pollo entero','105.1_I2PE_2016_M_21',1],potato:['papa','105.1_I2P_2016_M_13',1]};
+export async function birthExtension(env){
+  const now=new Date(Date.now()-3*3600e3),from=`${now.getUTCFullYear()-2}-${String(now.getUTCMonth()+1).padStart(2,'0')}`;
+  const recent=o=>Object.fromEntries(Object.entries(o||{}).filter(([k,v])=>/^\d{4}-\d{2}$/.test(k)&&k>=from&&Number.isFinite(Number(v))&&Number(v)>0).map(([k,v])=>[k,Number(v)]).sort(([a],[b])=>a.localeCompare(b)));
+  const out={generatedAt:new Date().toISOString(),cpi:{},usCpi:{},fx:{},fxFree:{},ripte:{},prices:{},sources:{},errors:[]};
+  const [core,mk]=await Promise.all([readSnapshot(env,'core'),readSnapshot(env,'markets')]);
+  const S={...(BUNDLED_SOURCES||{}),...(core?.sources||{}),...(mk?.sources||{})};
+  out.cpi=recent(Object.fromEntries((S.ipc?.monthly||[]).map(r=>[String(r.date).slice(0,7),Number(r.index)])));
+  out.ripte=recent(S.salary?.monthly);
+  const avg=daily=>{const a={};for(const [d,v] of Object.entries(daily||{})){if(!/^\d{4}-\d{2}-\d{2}$/.test(d)||!(Number(v)>0))continue;(a[d.slice(0,7)]??=[]).push(Number(v));}return Object.fromEntries(Object.entries(a).map(([k,xs])=>[k,round(xs.reduce((s,x)=>s+x,0)/xs.length,2)]));};
+  out.fx=recent(avg(S.exchangeHistorical?.official?.daily?.nominal));out.fxFree=recent(avg(S.exchangeHistorical?.free?.daily?.nominal));
+  try{out.usCpi=recent((await usCpiMonthly())?.monthly);}catch(e){out.errors.push(`IPC EE.UU.: ${String(e?.message||e).slice(0,80)}`);}
+  // Precios promedio: INDEC (archivo) y Datos Argentina para lo que falte.
+  let ip=null;try{ip=await indecAvgPrices();out.sources.prices=`INDEC — precios promedio GBA (${ip.end})`;}catch(e){out.errors.push(`INDEC precios: ${String(e?.message||e).slice(0,100)}`);}
+  for(const [key,[name,,f]] of Object.entries(BIRTH_PRICES)){
+    const k=ip?Object.keys(ip.prices).find(n=>n===name||n.startsWith(name+' ')||n.startsWith(name+',')):null;
+    if(k)out.prices[key]=Object.fromEntries(Object.entries(recent(ip.prices[k])).map(([m,v])=>[m,round(v*f,2)]));
+  }
+  try{const ids=Object.values(BIRTH_PRICES).map(x=>x[1]);const j=await get(`${SERIES_API}?ids=${ids.join(',')}&start_date=${from}-01&limit=1000&format=json&metadata=none`,'json');
+    Object.keys(BIRTH_PRICES).forEach((key,i)=>{const f=BIRTH_PRICES[key][2];for(const r of j?.data||[]){const v=Number(r[i+1]),ym=String(r[0]).slice(0,7);if(r[i+1]==null||!(v>0))continue;(out.prices[key]??={})[ym]??=round(v*f,2);}});
+    out.sources.pricesBackup='Datos Argentina (serie 105.1)';}catch(e){out.errors.push(`Datos Argentina precios: ${String(e?.message||e).slice(0,80)}`);}
+  for(const k of Object.keys(out.prices))out.prices[k]=Object.fromEntries(Object.entries(out.prices[k]).sort(([a],[b])=>a.localeCompare(b)));
+  return out;
+}

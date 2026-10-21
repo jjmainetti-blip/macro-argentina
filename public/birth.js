@@ -73,7 +73,7 @@
     if(!pts.length)return null;const t=ymIdx(ym);
     let a=null,b=null;for(const p of pts){const i=ymIdx(p.p);if(i<=t)a=p;if(i>=t&&!b)b=p;}
     const ct=cpiAt(ym,usd);if(!Number.isFinite(ct))return null;
-    if(a&&a.p===ym)return {value:val(a),exact:true,a};
+    if(a&&a.p===ym)return a.est?{value:val(a),exact:false,a,inflated:true}:{value:val(a),exact:true,a};
     if(a&&b){const ia=ymIdx(a.p),ib=ymIdx(b.p),ca=cpiAt(a.p,usd),cb=cpiAt(b.p,usd);
       if(ib-ia<=24&&ca&&cb){const w=(t-ia)/(ib-ia),r=Math.pow(val(a)/ca,1-w)*Math.pow(val(b)/cb,w);return {value:r*ct,exact:false,a,b};}}
     const near=[a,b].filter(Boolean).map(p=>({p,d:Math.abs(ymIdx(p.p)-t)})).sort((x,y)=>x.d-y.d)[0];
@@ -81,6 +81,40 @@
     return null;
   }
   function lastPoint(points){return (points||[]).filter(p=>/^\d{4}-\d{2}$/.test(p.p)).slice().sort((a,b)=>a.p.localeCompare(b.p)).at(-1)||null;}
+
+  // v212 · Actualización automática: /api/birth-update trae los últimos meses de IPC, IPC de EE.UU., dólar oficial y
+  // libre, RIPTE y precios promedio de INDEC (GBA). Se agregan a la base incluida (que se rearma a mano cada tanto),
+  // se corre el mes de referencia de "pesos de hoy" al último IPC y, para los bienes sin precio nuevo (auto, nafta,
+  // departamento y los que la fuente no publique), el precio de hoy se estima por inflación desde el último observado.
+  const AUTO_SRC='https://www.indec.gob.ar/indec/web/Nivel4-Tema-3-5-31';
+  function extendWith(X){
+    if(!X||typeof X!=='object')return;
+    const series=['cpi','usCpi','fx','fxFree','ripte'],all=[...series.flatMap(k=>Object.keys(X[k]||{})),...Object.values(X.prices||{}).flatMap(o=>Object.keys(o||{}))].filter(k=>/^\d{4}-\d{2}$/.test(k)).sort();
+    const maxYm=all.at(-1);
+    if(maxYm&&maxYm>D.end){const n=ymIdx(maxYm)+1;for(const k of [...series,'wage','wageSrc'])if(Array.isArray(D[k]))while(D[k].length<n)D[k].push(null);D.end=maxYm;}
+    const okIdx=(k,ym)=>{const i=ymIdx(ym);return i>=0&&i<D[k].length?i:-1;};
+    // Índices (IPC y IPC de EE.UU.): se encadenan desde el último mes de la base.
+    for(const k of ['cpi','usCpi']){const L=lastOf(k),src=X[k]||{};if(!L||!(src[L.ym]>0))continue;for(const [ym,v] of Object.entries(src)){if(ym<=L.ym||!(v>0))continue;const i=okIdx(k,ym);if(i>=0)D[k][i]=L.v*v/src[L.ym];}}
+    // Montos nominales (dólar, RIPTE): el último mes de la base puede haber sido parcial; desde ahí manda la fuente.
+    for(const k of ['fx','fxFree','ripte']){const L=lastOf(k);for(const [ym,v] of Object.entries(X[k]||{})){if(L&&ym<L.ym||!(v>0))continue;const i=okIdx(k,ym);if(i>=0)D[k][i]=v;}}
+    {const L=lastOf('wage');for(const [ym,v] of Object.entries(X.ripte||{})){if(L&&ym<=L.ym||!(v>0))continue;const i=okIdx('wage',ym);if(i>=0){D.wage[i]=v;if(D.wageSrc)D.wageSrc[i]='ripte';}}}
+    // Nuevo mes de referencia: el último IPC.
+    const C=lastOf('cpi');if(C&&C.ym!==D.cpiBase&&C.v>0){D.cpi=D.cpi.map(v=>Number.isFinite(v)?v/C.v:v);D.cpiBase=C.ym;}
+    // Precios observados (INDEC, GBA): se agregan si son coherentes con el último precio (ajustado por IPC).
+    const B=D.basket||{},updated=new Set();
+    for(const [key,obs] of Object.entries(X.prices||{})){const g=B[key];if(!g||g.m2)continue;
+      const real=(g.points||[]).filter(p=>!p.est&&Number.isFinite(p.ars)),L=lastPoint(real);if(!L)continue;
+      const add=[];let ok=true;
+      for(const [ym,v] of Object.entries(obs||{})){if(ym<=L.p||!(v>0))continue;const c0=at('cpi',L.p),c1=atOrBefore('cpi',ym,3);if(c0&&c1){const r=v/(L.ars*c1.v/c0);if(r<0.5||r>2){ok=false;break;}}
+        add.push({p:ym,ars:v,cur:'$',nominal:v,src:AUTO_SRC,area:'GBA',type:'Observado mensual (precio promedio INDEC)',auto:true});}
+      if(ok&&add.length){g.points=[...(g.points||[]),...add];updated.add(key);}}
+    // Estimación por inflación hasta el mes de referencia (auto, nafta, departamento y los que no tengan precio nuevo).
+    for(const [key,g] of Object.entries(B)){const L=lastPoint((g.points||[]).filter(p=>!p.est));if(!L||L.p>=D.cpiBase||ymIdx(L.p)<ymIdx(D.cpiBase)-24)continue;
+      if(g.m2){const u0=at('usCpi',L.p),u1=atOrBefore('usCpi',D.cpiBase,3);if(!(L.usd>0)||!u0||!u1)continue;g.points=[...g.points,{p:D.cpiBase,usd:L.usd*u1.v/u0,src:L.src,model:L.model,area:L.area,est:true,from:L.p}];continue;}
+      const c0=at('cpi',L.p),c1=at('cpi',D.cpiBase);if(!(L.ars>0)||!c0||!c1)continue;
+      g.points=[...g.points,{p:D.cpiBase,ars:L.ars*c1/c0,src:L.src,model:L.model,area:L.area,est:true,from:L.p}];}
+    D.notes={...D.notes,auto:`Últimos meses actualizados automáticamente (IPC e índices de precios promedio de INDEC, dólar oficial y libre, RIPTE e IPC de EE.UU.); los bienes sin precio publicado reciente se estiman por inflación desde su último precio observado.`};
+  }
   const fxFor=ym=>at('fxFree',ym)??at('fx',ym)??(ym>lastOf('fx').ym?(lastOf('fxFree')?.v??lastOf('fx').v):null);
 
   function goodsRows(ym,sal){
@@ -93,7 +127,7 @@
       const ars=g.m2?(fxFor(ym)?pr.value*g.m2*fxFor(ym):null):pr.value,cur=currencyAt(ym);
       const ratio=(price,s)=>Number.isFinite(price)&&Number.isFinite(s)&&s>0?(food?`${big(s/price)} ${per} por sueldo`:`${big(price/s)} sueldos`):null;
       const ref=pr.exact?pr.a:null;
-      const how=pr.exact?`precio de ${ymShort(pr.a.p)}`:pr.carried?`estimado desde ${ymShort(pr.a.p)} (ajustado por IPC)`:`estimado entre ${ymShort(pr.a.p)} y ${ymShort(pr.b.p)} (ajustado por IPC)`;
+      const how=pr.exact?`precio de ${ymShort(pr.a.p)}`:pr.inflated?`estimado por inflación desde ${ymShort(pr.a.from)}`:pr.carried?`estimado desde ${ymShort(pr.a.p)} (ajustado por IPC)`:`estimado entre ${ymShort(pr.a.p)} y ${ymShort(pr.b.p)} (ajustado por IPC)`;
       const srcs=[pr.a,pr.b].filter(Boolean).filter((p,i,arr)=>p.src&&arr.findIndex(q=>q.src===p.src)===i).map((p,i)=>`<a href="${esc(p.src)}" target="_blank" rel="noopener">fuente${i?' 2':''}</a>`).join(' · ');
       const model=(ref||pr.a)?.model,flag=[pr.a,pr.b].find(p=>p?.flag)?.flag;
       const nom=g.m2?`US$ ${nf(0).format(pr.value*g.m2)} <small>(US$ ${nf(0).format(pr.value)}/m²)</small>`:fmtEra(ars,cur);
@@ -101,7 +135,7 @@
       const r=sal?ratio(ars,sal.v):null;
       const L=lastPoint(g.points);let today='—';
       if(L&&ymIdx(L.p)>=ymIdx(lastOf('cpi').ym)-24){const lv=g.m2?L.usd:L.ars,lars=g.m2?lv*g.m2*(fxFor(L.p)||0):lv,lr=ratio(lars,salToday?.v);
-        today=`${lr?`<b>${lr}</b>`:''}<small>${g.m2?`US$ ${nf(0).format(lv*g.m2)}`:fmtToday(lv)} · ${ymShort(L.p)}${L.model&&g.kind==='durable'&&!g.m2?` · ${esc(L.model)}`:''}</small>`;}
+        today=`${lr?`<b>${lr}</b>`:''}<small>${g.m2?`US$ ${nf(0).format(lv*g.m2)}`:fmtToday(lv)} · ${ymShort(L.p)}${L.est?` (estimado por inflación desde ${ymShort(L.from)})`:''}${L.model&&g.kind==='durable'&&!g.m2?` · ${esc(L.model)}`:''}</small>`;}
       rows.push(`<tr><th scope="row">${esc(g.label)}${(ref||pr.a)?.area?`<small>${esc((ref||pr.a).area)}</small>`:''}</th><td data-label="En su época">${then}</td><td data-label="Equivalía a">${r?`<b>${r}</b>`:'—'}</td><td data-label="Hoy">${today}</td></tr>`);
     }
     return rows.join('');
@@ -140,7 +174,7 @@
       </div>
       ${goods?`<div class="be-goods"><h4>¿Cuánto costaba?</h4><p>${sal?`Cuántos sueldos hacían falta entonces (${esc(salLabel.replace(/\s*\((.*)\)/,' $1').replace(/^./,c=>c.toLowerCase()))}) y cuántos hacen falta hoy (sueldo promedio, RIPTE).`:''} Cuando no hay un precio publicado para ese mes exacto, se estima a partir de las observaciones más cercanas (separadas por hasta 2 años), manteniendo su valor real.</p>
         <div class="be-table-wrap"><table class="be-table"><thead><tr><th>Bien</th><th>Precio en su época</th><th>Equivalía a</th><th>Hoy</th></tr></thead><tbody>${goods}</tbody></table></div></div>`:''}
-      <p class="be-notes">Valores “a pesos de ${base}” ajustados por IPC (${esc(D.notes.cpi)}). TCR: dólar oficial ajustado por la inflación de Argentina y de EE.UU. (IPC-U). ${esc(D.notes.salary)} ${esc(D.notes.prices||'')} ${esc(D.notes.gdp)} Fotos: Wikipedia / Wikimedia Commons.</p>`;
+      <p class="be-notes">Valores “a pesos de ${base}” ajustados por IPC (${esc(D.notes.cpi)}). TCR: dólar oficial ajustado por la inflación de Argentina y de EE.UU. (IPC-U). ${esc(D.notes.salary)} ${esc(D.notes.prices||'')} ${esc(D.notes.gdp)} ${esc(D.notes.auto||'')} Fotos: Wikipedia / Wikimedia Commons.</p>`;
     try{history.replaceState(null,'',`#nacimiento-${ym}`);}catch{}
   }
 
@@ -156,7 +190,11 @@
 
   async function load(){
     if(loading)return loading;
-    loading=(async()=>{try{const r=await fetch('/birth-economy.json?v=155',{cache:'no-cache'});if(!r.ok)throw new Error(r.status);D=await r.json();fillSelectors();render();}
+    loading=(async()=>{try{
+      const extP=(async()=>{try{const c=new AbortController(),t=setTimeout(()=>c.abort(),8000);const r=await fetch('/api/birth-update',{signal:c.signal});clearTimeout(t);return r.ok?await r.json():null;}catch{return null;}})();
+      const r=await fetch('/birth-economy.json?v=155',{cache:'no-cache'});if(!r.ok)throw new Error(r.status);D=await r.json();
+      try{extendWith(await extP);}catch(e){console.warn('birth-update',e);}
+      fillSelectors();render();}
       catch(e){const o=$('beResult');if(o)o.innerHTML='<p class="be-na">No se pudieron cargar los datos históricos. Probá recargar la página.</p>';loading=null;}})();
     return loading;
   }

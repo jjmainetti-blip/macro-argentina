@@ -1,4 +1,4 @@
-import macroData, { GROUPS, freshnessReport, latestReleaseFor, cardsSeen } from './api/macro-data.mjs';
+import macroData, { GROUPS, freshnessReport, latestReleaseFor, cardsSeen, birthExtension } from './api/macro-data.mjs';
 import { pickCronGroup } from './api/freshness.mjs';
 import calendarData, { saveCardStatus } from './api/calendar-data.mjs';
 import marketsData, { latestMarketsBody, xTokenShape } from './api/markets.mjs';
@@ -96,6 +96,10 @@ export default {
     // v164: cuentas, contratos y recordatorios por mail.
     if (url.pathname.startsWith('/api/account')) {
       const r = await accountApi(request, env, ctx, url); if (r) { ctx.waitUntil(flushStats(env).catch(() => { })); return r; }
+    }
+    // v212: datos nuevos para "La economía cuando naciste" (IPC, dólar, RIPTE y precios), renovados cada 6 horas.
+    if (request.method === 'GET' && url.pathname === '/api/birth-update') {
+      return withHeaders(await edgeSwr(ctx, 'birth-update', 6 * 3600, 30 * 86400, async () => new Response(JSON.stringify(await birthExtension(env)), { headers: { 'content-type': 'application/json; charset=utf-8' } })));
     }
     if (request.method === 'GET' && url.pathname === '/api/calendar-data') {
       return withHeaders(await calendarData(env));

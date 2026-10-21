@@ -167,3 +167,53 @@ export async function bcraDaily(id, desde) {
 }
 export function monthlyAvg(daily) { const by = {}; for (const [d, v] of Object.entries(daily)) (by[d.slice(0, 7)] ??= []).push(v); const o = {}; for (const [k, a] of Object.entries(by)) o[k] = a.reduce((s, v) => s + v, 0) / a.length; return o; }
 export function annualAvg(daily) { const by = {}; for (const [d, v] of Object.entries(daily)) (by[d.slice(0, 4)] ??= []).push(v); const o = {}; for (const [k, a] of Object.entries(by)) o[k] = Math.round(a.reduce((s, v) => s + v, 0) / a.length * 100) / 100; return o; }
+
+// ---------- v212 · Precios promedio del IPC (GBA) ----------
+// sh_ipc_precios_promedio.xls: una hoja por cobertura ("Precios … para el Gran Buenos Aires (GBA). Abril 2016-<mes> <año>"
+// y otra por regiones). Se busca la hoja de GBA y se detecta sola la orientación (meses en columnas o en filas). El
+// año de cada mes se deduce del título (primer mes de la serie) avanzando cuando el mes "vuelve" a enero, y se verifica
+// contra el último mes del título.
+const normTxt = s => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/['’]/g, '').replace(/\s+/g, ' ').trim();
+const MES_N = { enero: 1, febrero: 2, marzo: 3, abril: 4, mayo: 5, junio: 6, julio: 7, agosto: 8, septiembre: 9, setiembre: 9, octubre: 10, noviembre: 11, diciembre: 12 };
+export function parseAvgPrices(rows) {
+  const title = rows.slice(0, 8).flat().map(normTxt).find(t => /gran buenos aires|gba/.test(t) && /(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre) \d{4}/.test(t));
+  if (!title) throw new Error('precios promedio: título de GBA no encontrado');
+  const tm = [...title.matchAll(/(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre) (\d{4})/g)];
+  const [y0, m0] = [+tm[0][2], MES_N[tm[0][1]]], end = tm.length > 1 ? ymk(+tm.at(-1)[2], MES_N[tm.at(-1)[1]]) : null;
+  const isMonth = v => MES_N[normTxt(v)] || null;
+  // ¿Meses en una fila (columnas = meses) o en una columna (filas = meses)?
+  let best = { n: 0 };
+  rows.forEach((r, i) => { const n = (r || []).filter(isMonth).length; if (n > best.n) best = { n, row: i }; });
+  const width = Math.max(...rows.map(r => (r || []).length));
+  for (let c = 0; c < width; c++) { const n = rows.filter(r => isMonth(r?.[c])).length; if (n > best.n) best = { n, col: c }; }
+  if (best.n < 6) throw new Error('precios promedio: meses no encontrados');
+  const seq = []; // [índice de columna o fila, ym]
+  let y = y0, prev = 0;
+  const push = (idx, v) => { const m = isMonth(v); if (!m) return; if (!seq.length) { y = m >= m0 ? y0 : y0 + 1; } else if (m <= prev) y++; prev = m; seq.push([idx, ymk(y, m)]); };
+  if (best.row != null) rows[best.row].forEach((v, c) => push(c, v)); else rows.forEach((r, i) => push(i, r?.[best.col]));
+  if (end && seq.at(-1)[1] !== end) throw new Error(`precios promedio: el último mes (${seq.at(-1)[1]}) no coincide con el título (${end})`);
+  const out = {}; // nombre normalizado → { ym: precio }
+  if (best.row != null) {
+    for (const r of rows.slice(best.row + 1)) {
+      const name = (r || []).slice(0, 3).map(normTxt).find(t => /[a-z]{3}/.test(t)); if (!name) continue;
+      const o = {}; for (const [c, ym] of seq) { const v = n(r[c]); if (v != null && v > 0) o[ym] = v; }
+      if (Object.keys(o).length) out[name] = { ...(out[name] || {}), ...o };
+    }
+  } else {
+    const hdr = rows.slice(0, seq[0][0]).reverse().find(r => (r || []).filter(v => /[a-z]{3}/i.test(String(v ?? ''))).length >= 5) || [];
+    hdr.forEach((h, c) => { const name = normTxt(h); if (!/[a-z]{3}/.test(name) || c === best.col) return; const o = {}; for (const [i, ym] of seq) { const v = n(rows[i]?.[c]); if (v != null && v > 0) o[ym] = v; } if (Object.keys(o).length) out[name] = o; });
+  }
+  if (Object.keys(out).length < 10) throw new Error('precios promedio: pocos productos');
+  return { end: seq.at(-1)[1], prices: out };
+}
+export async function indecAvgPrices() {
+  const url = `${BASE}/ftp/cuadros/economia/sh_ipc_precios_promedio.xls`;
+  const buf = await fetchT(url, 'buf');
+  const wb = XLSX.read(buf, { type: 'array', dense: true, cellStyles: false, cellHTML: false, cellFormula: false });
+  let lastErr = null;
+  for (const name of wb.SheetNames) {
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, raw: true, defval: null });
+    try { return { url, sheet: name, ...parseAvgPrices(rows) }; } catch (e) { lastErr = e; }
+  }
+  throw lastErr || new Error('precios promedio: sin hojas');
+}

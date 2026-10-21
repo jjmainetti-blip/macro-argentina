@@ -389,6 +389,12 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 - `public/reserves-components.json`: swap con China (CNY y tipo de cambio), BIS y otros pasivos de corto plazo, SEDESA, oro (toneladas y precio), con notas y fuentes. Actualizar `through` y los componentes cuando cambien (p. ej., pagos del BIS o el swap).
 - `/api/status` → `reserves`: cuántos meses del FMI ya se cargaron y el último error.
 
+## v212 — "La economía cuando naciste" se actualiza sola
+
+- **Nuevo endpoint** `/api/birth-update` (`birthExtension` en `macro-data.mjs`; copia en el edge renovada cada 6 h): últimos 24 meses de IPC (snapshot `core`), IPC de EE.UU. (BLS), dólar oficial y libre (promedio mensual de los cierres diarios de `exchangeHistorical`), RIPTE y precios promedio de INDEC para GBA (`sh_ipc_precios_promedio.xls`, parser `parseAvgPrices` en `indec-official.mjs` que detecta la orientación de la hoja; respaldo: Datos Argentina serie 105.1). Factores de unidad: manteca ×5 (200 g → 1 kg), café ×0,5 (500 g → 250 g).
+- **`birth.js`** (`extendWith`): agrega esos meses a `birth-economy.json`, encadena IPC e IPC de EE.UU., corre el mes de "pesos de hoy" al último IPC publicado y suma los precios nuevos sólo si son coherentes con el último precio ajustado por IPC (entre 0,5 y 2 veces). Los bienes sin precio nuevo (auto, nafta, departamento y los que INDEC no publique) se estiman por inflación hasta el mes de referencia (el departamento, en USD, con la inflación de EE.UU.) y se marcan "estimado por inflación desde <mes>".
+- **Actualización general manual** (cada tanto): volver a correr `scripts/build-birth-economy.py` para incorporar precios observados de auto, nafta, departamento y demás fuentes no automáticas.
+
 ## v211 — Índice de salarios (INDEC): tarjeta y serie histórica
 
 - **Tarjeta en Pulso económico** (`wages`): variación mensual nominal del índice total, variación real del mes (contra el IPC del mismo mes), interanual y apertura por sector en la explicación del semáforo (verde si el salario le ganó a la inflación). Al tocarla: barras de la variación mensual vs. línea de inflación de los últimos 3 años. También en el Semáforo ("Salarios (reales)").
