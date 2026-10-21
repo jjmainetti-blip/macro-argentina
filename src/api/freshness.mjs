@@ -15,6 +15,8 @@ const dd = (ym, day) => `${ym}-${String(Math.min(day, 28)).padStart(2, '0')}`;
 export const AGENCY = { ipc: 'INDEC', ipcCaba: 'IDECBA', arca: 'ARCA', icg: 'UTDT', autos: 'ACARA', came: 'CAME', super: 'INDEC', scentia: 'Scentia', emae: 'INDEC', isac: 'INDEC', fiscal: 'Ministerio de Economía', cement: 'AFCP', credit: 'BCRA', arrears: 'BCRA', ipi: 'INDEC', trade: 'INDEC', ila: 'CICEc', iga: 'OJF', bop: 'INDEC', poverty: 'INDEC' };
 export const CARDS = [
   { key: 'ipc', title: 'Inflación nacional', group: 'core', freq: 'M', lag: 1, day: 15, cal: /precios al consumidor \(IPC\)/i, latest: S => lastKey(Object.fromEntries((S.ipc?.monthly || []).map(r => [String(r.date).slice(0, 7), r.value]))) },
+  // v211 · Índice de salarios (INDEC): sale ~2 meses después del período.
+  { key: 'wages', title: 'Índice de salarios', group: 'core', freq: 'M', lag: 2, day: 14, cal: /[ÍI]ndice de salarios/i, latest: S => lastKey(S.wages?.monthly?.total) },
   { key: 'ipcCaba', title: 'Inflación CABA', group: 'core', freq: 'M', lag: 1, day: 8, latest: S => lastKey(S.ipcCaba?.history) },
   { key: 'arca', title: 'Recaudación', group: 'core', freq: 'M', lag: 1, day: 2, cal: /Recaudaci[oó]n tributaria/i, latest: S => maxKey(lastKey(S.arca?.history), S.arca?.latest?.ym) },
   { key: 'icg', title: 'Confianza en el gobierno', group: 'core', freq: 'M', lag: 0, day: 28, latest: S => lastKey(S.icg?.history) },

@@ -389,6 +389,12 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 - `public/reserves-components.json`: swap con China (CNY y tipo de cambio), BIS y otros pasivos de corto plazo, SEDESA, oro (toneladas y precio), con notas y fuentes. Actualizar `through` y los componentes cuando cambien (p. ej., pagos del BIS o el swap).
 - `/api/status` → `reserves`: cuántos meses del FMI ya se cargaron y el último error.
 
+## v211 — Índice de salarios (INDEC): tarjeta y serie histórica
+
+- **Tarjeta en Pulso económico** (`wages`): variación mensual nominal del índice total, variación real del mes (contra el IPC del mismo mes), interanual y apertura por sector en la explicación del semáforo (verde si el salario le ganó a la inflación). Al tocarla: barras de la variación mensual vs. línea de inflación de los últimos 3 años. También en el Semáforo ("Salarios (reales)").
+- **Fuente** (job `wages`, grupo `core`): CSV oficial de INDEC `ftp/cuadros/sociedad/indice_salarios.csv` (primaria), Datos Argentina serie 149.1 (respaldo) y el texto del informe (portada/X de INDEC) para el mes recién publicado. Calendario: 21-oct (agosto) y 13-nov-2026 (septiembre).
+- **Serie histórica** "Índice de salarios" desde jul-1994: base oct-2016=100 (INDEC) empalmada con la serie base abr-2012=100 (oct-2001–oct-2015, `public/wages-history.json`); el hueco oct-2015–sep-2016 del total y del no registrado sigue al total registrado; 1994–2001 (total y privado registrado) con la variación del RIPTE. Vistas: total / privado registrado / público / no registrado; real (deflactado con la cadena IPC del sitio) / nominal / variación interanual real o nominal; mensual o promedio anual.
+
 ## v210 — Pestaña "Sitio" (sólo administrador): estadísticas y carga de datos
 
 - **Acceso**: sólo la cuenta `jjmainetti@gmail.com` (o la que se defina en la variable `ADMIN_EMAIL` de Cloudflare). El control se hace en el servidor con la sesión: cualquier otra cuenta recibe 403 y sin sesión 401; el botón de la pestaña sólo aparece si `/api/account/status` devuelve `admin: true`.

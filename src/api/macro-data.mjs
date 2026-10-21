@@ -724,6 +724,47 @@ async function rem(){
   const surveys=(sameSurvey&&cpi?.entry&&cpi?.survey&&!cpi.fallback)?{[cpi.survey]:{...cpi.entry,published:pub?`${pub[3]}-${String(MES[pub[2].toLowerCase()]).padStart(2,'0')}-${String(+pub[1]).padStart(2,'0')}`:null}}:undefined;
   return {status:'ok',source:'REM BCRA',sourceUrl:URLS.rem,...(surveys?{surveys}:{}),latest:{survey,published:pub?`${pub[3]}-${String(MES[pub[2].toLowerCase()]).padStart(2,'0')}-${String(+pub[1]).padStart(2,'0')}`:null,participants:participants?+participants[1]:null,consultants:participants?+participants[2]:null,banks:participants?+participants[3]:null,gdpYear,gdp:gdp?Number(gdp[1].replace(',','.')):null,gdp2026:gdp&&gdpYear===2026?Number(gdp[1].replace(',','.')):null,fxDecYear:fxYear||(sameSurvey?cpi?.fxDec?.year:null)||null,fxDec:fx?Number(fx[1].replace(/\./g,'')):(sameSurvey&&cpi?.fxDec?cpi.fxDec.value:null),fxDec2026:fx&&fxYear===2026?Number(fx[1].replace(/\./g,'')):(sameSurvey&&cpi?.fxDec?.year===2026?cpi.fxDec.value:null),inflationNext12:sameSurvey&&Number.isFinite(cpi?.next12)?cpi.next12:null},cpiExpected:cpi};
 }
+// v211 · Índice de salarios (INDEC, base octubre 2016=100): total, privado registrado, público, total registrado y
+// privado no registrado. Primaria: CSV oficial de INDEC (se reemplaza en cada informe); respaldo: Datos Argentina
+// (serie 149.1, suele llegar un mes después). El mes recién publicado se toma también del texto del informe (portada de
+// INDEC o su publicación en X): "el índice de salarios se incrementó 2,7% mensual … subas de 2,8% en el sector privado
+// registrado, 2,3% en el sector público y 3,0% en el sector privado no registrado".
+const WAGE_KEYS=['privReg','pub','totalReg','nonReg','total'];
+export function parseWagesCsv(t){
+  const M=Object.fromEntries(WAGE_KEYS.map(k=>[k,{}]));const lines=String(t||'').split(/\r?\n/).filter(Boolean);if(lines.length<10)throw new Error('CSV de salarios vacío');
+  const head=lines[0].split(';').map(x=>x.trim().toLowerCase());
+  const col={privReg:head.indexOf('is_sector_privado_registrado'),pub:head.indexOf('is_sector_publico'),totalReg:head.indexOf('is_total_registrado'),nonReg:head.indexOf('is_sector_no_registrado'),total:head.indexOf('is_indice_total')};
+  if(col.total<0||col.privReg<0)throw new Error('CSV de salarios: columnas inesperadas');
+  for(const l of lines.slice(1)){const c=l.split(';');const d=String(c[0]||'').trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);if(!d)continue;const ym=`${d[3]}-${d[2].padStart(2,'0')}`;
+    for(const k of WAGE_KEYS){if(col[k]<0)continue;const v=Number(String(c[col[k]]||'').trim().replace(/\./g,'').replace(',','.'));if(Number.isFinite(v)&&v>0)M[k][ym]=v;}}
+  return M;
+}
+export function parseWagesNews(text){
+  const t=String(text||'').replace(/\s+/g,' ');
+  const m=t.match(/En (enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre) de (20\d{2}),? el [ií]ndice de salarios (?:se increment[oó]|aument[oó]|creci[oó]|subi[oó]|registr[oó] una suba de|baj[oó]|cay[oó]|disminuy[oó])\s*(?:un |de )?(-?[\d]+,?\d*)\s*% mensual(?: y (-?[\d]+,?\d*)\s*% interanual)?([^]{0,400})/i);
+  if(!m)return null;const MES={enero:1,febrero:2,marzo:3,abril:4,mayo:5,junio:6,julio:7,agosto:8,septiembre:9,setiembre:9,octubre:10,noviembre:11,diciembre:12};
+  const num=x=>x==null?null:Number(String(x).replace(',','.')),neg=/baj[oó]|cay[oó]|disminuy[oó]/i.test(m[0].slice(0,120));
+  const rest=m[5]||'',sec=re=>{const r=rest.match(re);return r?num(r[1]):null;};
+  return {ym:`${m[2]}-${String(MES[m[1].toLowerCase()]).padStart(2,'0')}`,total:(neg?-1:1)*Math.abs(num(m[3])),yoy:num(m[4]),
+    privReg:sec(/(-?[\d]+,?\d*)\s*% en el sector privado registrado/i),pub:sec(/(-?[\d]+,?\d*)\s*% en el sector p[uú]blico/i),nonReg:sec(/(-?[\d]+,?\d*)\s*% en el sector privado no registrado/i)};
+}
+async function wagesIndec(){
+  const url='https://www.indec.gob.ar/ftp/cuadros/sociedad/indice_salarios.csv';let M=null,src=[],errors=[];
+  try{M=parseWagesCsv(await get(url,'text'));src.push('INDEC (CSV oficial)');}catch(e){errors.push(`INDEC: ${String(e?.message||e).slice(0,80)}`);}
+  M??=Object.fromEntries(WAGE_KEYS.map(k=>[k,{}]));
+  const DA={privReg:'149.1_SOR_PRIADO_OCTU_0_25',pub:'149.1_SOR_PUBICO_OCTU_0_14',totalReg:'149.1_TL_REGIADO_OCTU_0_16',nonReg:'149.1_SOR_PRIADO_OCTU_0_28',total:'149.1_TL_INDIIOS_OCTU_0_21'};
+  const lastOf=o=>Object.keys(o||{}).sort().at(-1)||'';
+  // Respaldo sólo si el CSV falló o quedó atrás (un pedido con las cinco series).
+  try{const j=await get(`${SERIES_API}?ids=${Object.values(DA).join(',')}&start_date=2015-10-01&limit=1000&format=json&metadata=none`,'json');let used=false;
+    const keys=Object.keys(DA);for(const r of j?.data||[]){const ym=String(r[0]).slice(0,7);keys.forEach((k,i)=>{const raw=r[i+1],v=Number(raw);if(raw!=null&&Number.isFinite(v)&&v>0&&M[k][ym]==null){M[k][ym]=v;used=true;}});}
+    if(used)src.push('Datos Argentina (respaldo)');}catch(e){errors.push(`Datos Argentina: ${String(e?.message||e).slice(0,80)}`);}
+  // Mes recién publicado desde el texto del informe (si el CSV todavía no lo tiene).
+  let news=null;try{const n=parseWagesNews(await indecNewsText());const prev=n?ymPrev(n.ym):null;
+    if(n&&n.ym>lastOf(M.total)&&M.total[prev]){for(const k of ['total','privReg','pub','nonReg'])if(Number.isFinite(n[k])&&M[k][prev])M[k][n.ym]=round(M[k][prev]*(1+n[k]/100),2);news={ym:n.ym,from:'informe INDEC'};src.push('informe de prensa INDEC');}}catch(e){}
+  const last=lastOf(M.total);if(!last)throw new Error(errors.join(' · ')||'índice de salarios sin datos');
+  return {status:'ok',source:`INDEC — Índice de salarios (base oct-2016=100)${src.length?` · ${src.join(', ')}`:''}`,sourceUrl:'https://www.indec.gob.ar/indec/web/Nivel4-Tema-4-31-61',monthly:M,latest:{ym:last,period:periodEs(last),...(news?.ym===last?{fromNews:true}:{})},...(errors.length?{warnings:errors}:{})};
+}
+const ymPrev=ym=>{let [y,m]=ym.split('-').map(Number);m--;if(!m){m=12;y--;}return `${y}-${String(m).padStart(2,'0')}`;};
 async function salaryRipte(){
   // Serie oficial Datos Argentina: mensual desde julio de 1994. Se completa con la publicación vigente de Seguridad Social.
   const seriesUrl=`https://apis.datos.gob.ar/series/api/series/?ids=158.1_REPTE_0_0_5&start_date=1994-07-01&end_date=${new Date().getUTCFullYear()+1}-12-31&limit=1000&sort=desc&format=json&metadata=none`;
@@ -1224,9 +1265,9 @@ async function bcraPurchasesHistorical(){
   if(Object.keys(monthly).length<200)throw new Error('compras BCRA: serie corta');
   return {status:'ok',source:'BCRA — compras netas de divisas: sector privado (var. 78, USD) y Tesoro Nacional (var. 48, $ convertidos al mayorista A3500)',sourceUrl:'https://api.bcra.gob.ar/estadisticas/v4.0/monetarias/78',lastDay:Object.keys(d).sort().at(-1),monthly,...(Object.keys(treasury).length?{treasury}:{})};
 }
-const JOBS={bcraPurchasesHistorical:()=>bcraPurchasesHistorical(),supermarkets:()=>supermarkets(),scentia:()=>scentiaLive(),ipcHistorical:()=>ipcHistorical(),gdpHistorical:()=>gdpHistorical(),emaeHistorical:()=>emaeHistorical(),industryHistorical:()=>industryHistorical(),unemploymentHistorical:()=>unemploymentHistorical(),tradeHistorical:()=>tradeHistorical(),financialHistorical:()=>financialHistorical(),exchangeHistorical:()=>exchangeHistorical(),ipc:()=>ipc(),arca:()=>arca(),icg:()=>icg(),bcra:()=>bcra(),rem:()=>rem(),salary:()=>salaryRipte(),icl:()=>icl(),contractIndices:()=>contractIndices(),isacHistorical:()=>isacHistorical(),creditHistorical:()=>creditHistorical(),arrearsHistorical:()=>arrearsHistorical(),activityPulse:()=>activityPulse(),ilaHistorical:()=>ilaHistorical(),igaHistorical:()=>igaHistorical(),bopHistorical:()=>bopHistorical(),autos:()=>autosLive(),ipcCaba:()=>ipcCabaLive(),poverty:()=>povertyLive(),cement:()=>cementLive(),came:()=>cameLive()};
+const JOBS={wages:()=>wagesIndec(),bcraPurchasesHistorical:()=>bcraPurchasesHistorical(),supermarkets:()=>supermarkets(),scentia:()=>scentiaLive(),ipcHistorical:()=>ipcHistorical(),gdpHistorical:()=>gdpHistorical(),emaeHistorical:()=>emaeHistorical(),industryHistorical:()=>industryHistorical(),unemploymentHistorical:()=>unemploymentHistorical(),tradeHistorical:()=>tradeHistorical(),financialHistorical:()=>financialHistorical(),exchangeHistorical:()=>exchangeHistorical(),ipc:()=>ipc(),arca:()=>arca(),icg:()=>icg(),bcra:()=>bcra(),rem:()=>rem(),salary:()=>salaryRipte(),icl:()=>icl(),contractIndices:()=>contractIndices(),isacHistorical:()=>isacHistorical(),creditHistorical:()=>creditHistorical(),arrearsHistorical:()=>arrearsHistorical(),activityPulse:()=>activityPulse(),ilaHistorical:()=>ilaHistorical(),igaHistorical:()=>igaHistorical(),bopHistorical:()=>bopHistorical(),autos:()=>autosLive(),ipcCaba:()=>ipcCabaLive(),poverty:()=>povertyLive(),cement:()=>cementLive(),came:()=>cameLive()};
 export const GROUPS={
-  core:['ipc','arca','icg','bcra','rem','salary','icl','contractIndices','autos','ipcCaba','came'],
+  core:['ipc','arca','icg','bcra','rem','salary','wages','icl','contractIndices','autos','ipcCaba','came'],
   history:['ipcHistorical','gdpHistorical','industryHistorical','unemploymentHistorical','tradeHistorical'],
   markets:['financialHistorical','exchangeHistorical'],
   activity:['emaeHistorical','isacHistorical','creditHistorical','activityPulse','cement','supermarkets','scentia'],
@@ -1240,7 +1281,7 @@ export const GROUPS={
 // v134 · "Último dato publicado" para la portada: se calcula con la misma función del navegador
 // (public/releases.js) sobre los snapshots guardados y se guarda chico en KV (release:latest).
 const RELEASE_KEY='release:latest:v198';
-const CARD_ORDER=[['ipi','IPI manufacturero','INDEC'],['isac','ISAC construcción','INDEC'],['cement','Despachos de cemento','AFCP'],['came','Ventas minoristas pyme','CAME'],['super','Consumo en supermercados','INDEC'],['scentia','Consumo masivo','Scentia'],['arca','Recaudación','ARCA'],['autos','Patentamientos 0 km','ACARA'],['bop','Balanza de pagos','INDEC'],['icg','Confianza gobierno','UTDT'],['ila','Índice Líder (ILA)','CICEc'],['poverty','Pobreza','INDEC'],['iga','IGA','OJF'],['emae','EMAE','INDEC'],['credit','Crédito privado','BCRA'],['arrears','Mora bancaria','BCRA'],['trade','Balanza comercial','INDEC'],['fiscal','Resultado fiscal','Economía'],['ipcCaba','Inflación CABA','IDECBA'],['ipc','Inflación nacional','INDEC']];
+const CARD_ORDER=[['ipi','IPI manufacturero','INDEC'],['isac','ISAC construcción','INDEC'],['cement','Despachos de cemento','AFCP'],['came','Ventas minoristas pyme','CAME'],['super','Consumo en supermercados','INDEC'],['scentia','Consumo masivo','Scentia'],['arca','Recaudación','ARCA'],['autos','Patentamientos 0 km','ACARA'],['bop','Balanza de pagos','INDEC'],['icg','Confianza gobierno','UTDT'],['ila','Índice Líder (ILA)','CICEc'],['poverty','Pobreza','INDEC'],['iga','IGA','OJF'],['emae','EMAE','INDEC'],['credit','Crédito privado','BCRA'],['arrears','Mora bancaria','BCRA'],['trade','Balanza comercial','INDEC'],['fiscal','Resultado fiscal','Economía'],['wages','Índice de salarios','INDEC'],['ipcCaba','Inflación CABA','IDECBA'],['ipc','Inflación nacional','INDEC']];
 const MES_CORTO=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
 export function topCardRelease(R,seen={}){
   const rows=[];

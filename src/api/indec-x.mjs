@@ -38,7 +38,7 @@ export async function indecXText(env, { force = false } = {}) {
         st.lastRead = fresh.length; st.lastError = null;
         // ¿Ya están todas las publicaciones de hoy? (una por evento del calendario; se buscan palabras clave del título)
         const todays = (st.posts || []).filter(p => new Date(Date.parse(p.at) - 3 * 3600e3).toISOString().slice(0, 10) === day);
-        const key = t => (String(t).match(/\(([A-ZÁÉÍÓÚ]{2,})\)/)?.[1] || String(t).split(/\s+/).slice(0, 2).join(' ')).toLowerCase();
+        const key = t => (String(t).match(/\(([A-ZÁÉÍÓÚ]{2,})\)/)?.[1] || String(t).split(/\s+/).slice(0, 3).join(' ')).toLowerCase();
         if (events.length && events.every(e => todays.some(p => p.text.toLowerCase().includes(key(e.title))))) st.doneDay = day;
       }
     } catch (e) { st.lastError = String(e?.message || e); }
