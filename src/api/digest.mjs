@@ -6,7 +6,7 @@
 //                      programadas (así no hace falta recorrer todos los usuarios cada 5 minutos)
 //   acct:dig:<fecha>:<am|pm>   marca de corrida de los resúmenes de ese horario
 //   mkt:closes         { 'YYYY-MM-DD': { dollar, bna, risk, merval } } — cierres propios para las variaciones semanales
-import { buildReleases } from '../../public/releases.js';
+import { cardSummaries } from './card-summary.mjs';
 import { latestMarketsBody } from './markets.mjs';
 import { agendaEvents } from './calendar-data.mjs';
 import { BUNDLED_SOURCES } from './bundled-history.mjs';
@@ -78,12 +78,23 @@ export async function digestData(env) {
   const markets = await freshMarkets(env);
   const closes = (await kvGet(env, 'mkt:closes')) || {};
   const fin = (await kvGet(env, 'macro:snapshot:v131:markets'))?.sources?.financialHistorical?.daily || {};
-  const R = {}, names = ['ipc', 'ipcCaba', 'arca', 'salary', 'icg', 'autos', 'rem', 'bopHistorical', 'activityPulse', 'came', 'industryHistorical', 'isacHistorical'];
-  for (const n of names) if (BUNDLED_SOURCES[n]) R[n] = BUNDLED_SOURCES[n];
-  for (const g of ['core', 'external', 'activity', 'history']) { const snap = await kvGet(env, `macro:snapshot:v131:${g}`); for (const n of names) if (snap?.sources?.[n]) R[n] = snap.sources[n]; }
-  let releases = []; try { releases = buildReleases(R).filter(r => r.title && r.value); } catch { }
-  // Una sola entrada por indicador (la más reciente).
-  const byTitle = new Map(); for (const r of releases) { const k = r.title, prev = byTitle.get(k); if (!prev || String(r.releaseDate) >= String(prev.releaseDate)) byTitle.set(k, r); }
+  // v216: todas las tarjetas del tablero (mismas fuentes, mismas fechas de publicación que el sitio).
+  const R = { ...BUNDLED_SOURCES };
+  for (const g of ['core', 'history', 'activity', 'banks', 'leading', 'external']) { const snap = await kvGet(env, `macro:snapshot:v131:${g}`); for (const [n, v] of Object.entries(snap?.sources || {})) if (v && v.status !== 'error') R[n] = v; }
+  const seen = (await kvGet(env, 'cards:seen')) || {};
+  let releases = []; try { releases = cardSummaries(R, seen); } catch (e) { console.log(`resumen: tarjetas ${e?.message || e}`); }
+  // v216: día en que el sitio tuvo cada período por primera vez (KV digest:arrivals). Un dato cuya fuente lo fecha antes
+  // del último resumen pero que llegó después (p. ej. crédito BCRA fechado el 7 y cargado el 22) igual entra en "Publicado".
+  try {
+    const today = todayAR(), A = (await kvGet(env, 'digest:arrivals')) || null, next = { ...(A || {}) }; let changed = !A;
+    for (const r of releases) {
+      const s = seen[r.key]?.ym === r.period ? seen[r.key].date : null;
+      if (!next[r.key] || String(r.period) > String(next[r.key].period)) { next[r.key] = { period: r.period, date: next[r.key] ? (s && s > String(r.releaseDate) ? s : today) : (s || String(r.releaseDate).slice(0, 10)) }; changed = true; }
+      const a = next[r.key].period === r.period ? next[r.key].date : null; r.arrivedDate = a && a > String(r.releaseDate).slice(0, 10) ? a : String(r.releaseDate).slice(0, 10);
+    }
+    if (changed) await kvPut(env, 'digest:arrivals', next);
+  } catch (e) { console.log(`resumen: llegadas ${e?.message || e}`); }
+  const byTitle = new Map(releases.map(r => [r.title, r]));
   const ipcLast = (Array.isArray(R.ipc?.monthly) ? R.ipc.monthly : []).filter(r => Number.isFinite(Number(r.value))).map(r => String(r.date).slice(0, 7)).sort().at(-1) || null;
   const agenda = await agendaEvents(env, { limit: 40 }).catch(() => []);
   return { agenda, ipcLast, markets, closes, fin, releases: [...byTitle.values()].sort((a, b) => String(b.releaseDate).localeCompare(String(a.releaseDate))), rem: R.rem || null };
@@ -145,8 +156,10 @@ export function buildDigest(env, kind, prefs, data, today, extra = {}) {
     if (rows.length) { parts.push(h2('BCRA') + table(rows)); text.push('BCRA', ...rows.map(r => r.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()), ''); }
   }
   if (items.has('published')) {
-    const list = data.releases.filter(r => String(r.releaseDate).slice(0, 10) > since && String(r.releaseDate).slice(0, 10) <= today);
-    parts.push(h2(weekly ? 'Publicado en la semana' : 'Publicado desde el último resumen') + (list.length ? table(list.map(r => row(`${r.title} · ${dayLabel(String(r.releaseDate).slice(0, 10))}`, esc(r.value)))) : small('No hubo publicaciones nuevas de los indicadores que sigue el sitio.')));
+    const inWin = d => { d = String(d || '').slice(0, 10); return d > since && d <= today; };
+    const list = data.releases.filter(r => inWin(r.releaseDate) || inWin(r.arrivedDate));
+    const when = r => { const d = String(r.arrivedDate || r.releaseDate).slice(0, 10); return r.basis === 'fuente' || !r.arrivedDate ? dayLabel(String(r.releaseDate).slice(0, 10)) : dayLabel(d); };
+    parts.push(h2(weekly ? 'Publicado en la semana' : 'Publicado desde el último resumen') + (list.length ? table(list.map(r => row(`${r.title} · ${when(r)}`, esc(r.value)))) : small('No hubo publicaciones nuevas de los indicadores que sigue el sitio.')));
     text.push(weekly ? 'PUBLICADO EN LA SEMANA' : 'PUBLICADO', ...(list.length ? list.map(r => `${r.title}: ${r.value}`) : ['Sin publicaciones nuevas.']), '');
     if (list.length) subjectBits.unshift(list.map(r => r.title.split(' · ')[0]).slice(0, 2).join(', '));
   }

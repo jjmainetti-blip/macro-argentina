@@ -1183,6 +1183,8 @@ function mergeSnapshot(oldValue,newValue){
     }
     return b.length>=a.length?b:a;
   }
+  // v215: un valor simple nuevo reemplaza a un objeto viejo (antes se conservaba el objeto, y un dato mal guardado no se corregía nunca).
+  if(isPlainObject(oldValue)&&newValue!==null&&newValue!==undefined&&typeof newValue!=='object')return newValue;
   if(isPlainObject(oldValue)||isPlainObject(newValue)){
     const out={...(isPlainObject(oldValue)?oldValue:{})};
     for(const [k,v] of Object.entries(isPlainObject(newValue)?newValue:{})){
@@ -1432,7 +1434,8 @@ function alignCards(sources){
     if(iy&&AP.isac&&iy[0]>(AP.isac.ym||'')){const sa=out.sources.isacHistorical?.monthlySaMom?.[iy[0]];AP.isac={...AP.isac,ym:iy[0],period:periodEs(iy[0]),yoy:iy[1],mom:Number.isFinite(Number(sa))?Number(sa):null};}
     const A=out.sources.arrearsHistorical;const at=lastOf(A?.monthlyTotal);
     if(at&&(!AP.arrears||at[0]>(AP.arrears.ym||ymFromPeriodEs(AP.arrears.period)||''))){const f=A.monthlyFamilies?.[at[0]],c=A.monthlyCompanies?.[at[0]];AP.arrears={...(AP.arrears||{}),ym:at[0],period:periodEs(at[0]),total:at[1],families:Number.isFinite(Number(f))?Number(f):null,companies:Number.isFinite(Number(c))?Number(c):null};}
-    /* v214: un AP.credit inválido (v213 guardó uno roto) se reemplaza */if(AP.credit&&!/^\d{4}-\d{2}$/.test(String(AP.credit.ym||'')))AP.credit={source:'BCRA',ym:''};if(AP.creditLatest&&!/^\d{4}-\d{2}$/.test(String(AP.creditLatest.ym||'')))delete AP.creditLatest;
+    /* v214/v215: un AP.credit o creditLatest inválido (v213 guardó uno roto) se reemplaza */const okCr=x=>x&&/^\d{4}-\d{2}$/.test(String(x.ym||''))&&Number.isFinite(Number(x.arsRealMom));if(AP.credit&&!okCr(AP.credit))AP.credit={source:'BCRA',ym:''};if(AP.creditLatest&&!okCr(AP.creditLatest))delete AP.creditLatest;
+    {const H=sources.creditHistorical?.monthlySaRealMom,k=Object.keys(H||{}).filter(x=>/^\d{4}-\d{2}$/.test(x)&&Number.isFinite(Number(H[x]))).sort().at(-1);if(k&&(!AP.creditLatest||k>AP.creditLatest.ym))AP.creditLatest={ym:k,period:periodEs(k),arsRealMom:Number(H[k])};}
     if(AP.creditLatest&&AP.credit&&AP.creditLatest.ym>(AP.credit.ym||'')){AP.credit={source:AP.credit.source,ym:AP.creditLatest.ym,period:AP.creditLatest.period,arsRealMom:AP.creditLatest.arsRealMom};}
   }
 }

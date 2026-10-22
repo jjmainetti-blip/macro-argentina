@@ -6,13 +6,13 @@ import { EVENTS } from './calendar-data.mjs';
 const MONTHS_ES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 const ymRe = /^\d{4}-(0[1-9]|1[0-2])$/;
 const lastKey = (o, re = ymRe) => Object.keys(o || {}).filter(k => re.test(k) && o[k] !== null && o[k] !== undefined).sort().at(-1) || null;
-const maxKey = (...ks) => ks.filter(Boolean).sort().at(-1) || null;
+const maxKey = (...ks) => ks.filter(k => k && /^\d{4}-(\d{2}|Q[1-4]|S[12])$/.test(String(k))).sort().at(-1) || null; // v215: ignora claves inválidas
 export function ymShift(ym, n) { let [y, m] = ym.split('-').map(Number); m += n; while (m < 1) { m += 12; y--; } while (m > 12) { m -= 12; y++; } return `${y}-${String(m).padStart(2, '0')}`; }
 const dd = (ym, day) => `${ym}-${String(Math.min(day, 28)).padStart(2, '0')}`;
 
 // group = grupo de /api/macro-data que la actualiza. lag = meses entre el período y la publicación; day = día habitual.
 // v169 · Organismo de cada tarjeta (para la agenda de próximas publicaciones).
-export const AGENCY = { ipc: 'INDEC', ipcCaba: 'IDECBA', arca: 'ARCA', icg: 'UTDT', autos: 'ACARA', came: 'CAME', super: 'INDEC', scentia: 'Scentia', emae: 'INDEC', isac: 'INDEC', fiscal: 'Ministerio de Economía', cement: 'AFCP', credit: 'BCRA', arrears: 'BCRA', ipi: 'INDEC', trade: 'INDEC', ila: 'CICEc', iga: 'OJF', bop: 'INDEC', poverty: 'INDEC' };
+export const AGENCY = { ipc: 'INDEC', ipcCaba: 'IDECBA', arca: 'ARCA', icg: 'UTDT', autos: 'ACARA', came: 'CAME', super: 'INDEC', scentia: 'Scentia', emae: 'INDEC', isac: 'INDEC', fiscal: 'Ministerio de Economía', cement: 'AFCP', credit: 'BCRA', arrears: 'BCRA', ipi: 'INDEC', trade: 'INDEC', ila: 'CICEc', iga: 'OJF', bop: 'INDEC', poverty: 'INDEC', wages: 'INDEC' };
 export const CARDS = [
   { key: 'ipc', title: 'Inflación nacional', group: 'core', freq: 'M', lag: 1, day: 15, cal: /precios al consumidor \(IPC\)/i, latest: S => lastKey(Object.fromEntries((S.ipc?.monthly || []).map(r => [String(r.date).slice(0, 7), r.value]))) },
   // v211 · Índice de salarios (INDEC): sale ~2 meses después del período.
