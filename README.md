@@ -389,6 +389,13 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 - `public/reserves-components.json`: swap con China (CNY y tipo de cambio), BIS y otros pasivos de corto plazo, SEDESA, oro (toneladas y precio), con notas y fuentes. Actualizar `through` y los componentes cuando cambien (p. ej., pagos del BIS o el swap).
 - `/api/status` → `reserves`: cuántos meses del FMI ya se cargaron y el último error.
 
+## v214 — Crédito: variación interanual en pesos (API BCRA, variable 117)
+
+- Arreglo: en v213 el resumen de actividad (`activityPulse`) leía mal el nuevo formato de `immCreditSaMom` y guardaba un `creditLatest` roto (`ym: "values"`), lo que dejaba la tarjeta con "Próximo dato (NaN-NaN)". Se corrige y se limpian los valores inválidos guardados.
+- Pestaña Sitio: al guardar o borrar un dato manual se vuelve a leer la fuente del grupo enseguida. Así, si se borra un dato manual igual al oficial, el oficial reaparece al instante (antes desaparecía hasta la siguiente revisión).
+- La variación interanual del crédito usaba la variable 26 de la API del BCRA, que incluye los préstamos en dólares convertidos a pesos. Ahora usa la 117 (préstamos al sector privado en pesos), que coincide con el Informe Monetario Mensual (septiembre 2026: +32,4% vs +32,5% del informe).
+- La variación mensual real sin estacionalidad sigue saliendo del Informe Monetario Mensual: la API no la publica y un ajuste estacional propio no replica el del BCRA (diferencias de hasta 1 p.p. en 2026).
+
 ## v213 — Crédito privado: lectura desde la planilla del Informe Monetario Mensual
 
 - El BCRA dejó de poner el número en el resumen de la página del Informe Monetario Mensual (septiembre 2026: sólo "contracción en términos reales"), y la tarjeta quedó en agosto. Ahora `immCreditSaMom` lee la planilla de indicadores (`informe-monetario-mensual-indicadores-AAAA-MM.xlsx`, hoja "Principales Variables", fila "Préstamos al sector privado no financiero", columna "Mensual · Real s.e."; parser `parseImmIndicators`); el texto de la página queda de respaldo. Septiembre 2026: −0,8% real s.e.

@@ -1056,10 +1056,11 @@ async function immCreditSaMom(){
   return {values:out,published};
 }
 async function creditHistorical(){
-  // v197: BCRA (API de Estadísticas, var. 26: préstamos al sector privado, promedio mensual) primario; Datos Argentina de respaldo.
-  const [bc,lv,imm]=await Promise.allSettled([bcraDaily(26,'2018-01-01'),seriesRows('91.1_PEFPC_0_0_35',{start:'2019-01-01'}),immCreditSaMom()]);
+  // v197: BCRA (API de Estadísticas) primario; Datos Argentina de respaldo. v214: var. 117 (préstamos al sector privado EN PESOS);
+  // antes se usaba la 26, que suma también los préstamos en dólares convertidos a pesos (crédito bimonetario).
+  const [bc,lv,imm]=await Promise.allSettled([bcraDaily(117,'2018-01-01'),seriesRows('91.1_PEFPC_0_0_35',{start:'2019-01-01'}),immCreditSaMom()]);
   const out={status:'ok',source:'BCRA — préstamos al sector privado'};
-  if(bc.status==='fulfilled'){const m=monthlyAvg(bc.value),last=Object.keys(bc.value).sort().at(-1);/* v213: el mes en curso nunca se usa (promedio incompleto) */const curM=new Date(Date.now()-3*3600e3).toISOString().slice(0,7);delete m[curM];if(last&&last.slice(0,7)<curM&&Number(last.slice(8))<20)delete m[last.slice(0,7)];out.monthlyYoy=yoyFromRows(Object.entries(m).map(([date,value])=>({date,value})));out.sourceUrl='https://api.bcra.gob.ar/estadisticas/v4.0/monetarias/26';}
+  if(bc.status==='fulfilled'){const m=monthlyAvg(bc.value),last=Object.keys(bc.value).sort().at(-1);/* v213: el mes en curso nunca se usa (promedio incompleto) */const curM=new Date(Date.now()-3*3600e3).toISOString().slice(0,7);delete m[curM];if(last&&last.slice(0,7)<curM&&Number(last.slice(8))<20)delete m[last.slice(0,7)];out.monthlyYoy=yoyFromRows(Object.entries(m).map(([date,value])=>({date,value})));out.sourceUrl='https://api.bcra.gob.ar/estadisticas/v4.0/monetarias/117';}
   if(lv.status==='fulfilled'){out.monthlyYoy=fillMissing(out.monthlyYoy||{},yoyFromRows(lv.value.rows));out.sourceUrl??=lv.value.url;}
   if(imm.status==='fulfilled'&&Object.keys(imm.value.values).length){out.monthlySaRealMom=imm.value.values;if(Object.keys(imm.value.published).length)out.published=imm.value.published;}
   if(!out.monthlyYoy&&!out.monthlySaRealMom)throw new Error('crédito sin datos');
@@ -1148,7 +1149,7 @@ async function activityPulse(){
   const out={status:'ok',source:'Economía / AFCP / INDEC / ACARA / BCRA'};
   // v117: ISAC y mora se toman de sus propias fuentes (mismo grupo) en el handler; aquí no se vuelven a descargar.
   const [fiscal,credit]=await Promise.allSettled([fiscalPctGdp(),immCreditSaMom()]);
-  if(credit.status==='fulfilled'){const e=Object.entries(credit.value).sort(([a],[b])=>a.localeCompare(b)).at(-1);if(e)out.creditLatest={ym:e[0],period:periodEs(e[0]),arsRealMom:e[1]};}
+  if(credit.status==='fulfilled'){const e=Object.entries(credit.value.values||{}).sort(([a],[b])=>a.localeCompare(b)).at(-1);if(e)out.creditLatest={ym:e[0],period:periodEs(e[0]),arsRealMom:e[1]};}
   if(fiscal.status==='fulfilled')out.fiscal=fiscal.value;
   return out;
 }
@@ -1431,6 +1432,7 @@ function alignCards(sources){
     if(iy&&AP.isac&&iy[0]>(AP.isac.ym||'')){const sa=out.sources.isacHistorical?.monthlySaMom?.[iy[0]];AP.isac={...AP.isac,ym:iy[0],period:periodEs(iy[0]),yoy:iy[1],mom:Number.isFinite(Number(sa))?Number(sa):null};}
     const A=out.sources.arrearsHistorical;const at=lastOf(A?.monthlyTotal);
     if(at&&(!AP.arrears||at[0]>(AP.arrears.ym||ymFromPeriodEs(AP.arrears.period)||''))){const f=A.monthlyFamilies?.[at[0]],c=A.monthlyCompanies?.[at[0]];AP.arrears={...(AP.arrears||{}),ym:at[0],period:periodEs(at[0]),total:at[1],families:Number.isFinite(Number(f))?Number(f):null,companies:Number.isFinite(Number(c))?Number(c):null};}
+    /* v214: un AP.credit inválido (v213 guardó uno roto) se reemplaza */if(AP.credit&&!/^\d{4}-\d{2}$/.test(String(AP.credit.ym||'')))AP.credit={source:'BCRA',ym:''};if(AP.creditLatest&&!/^\d{4}-\d{2}$/.test(String(AP.creditLatest.ym||'')))delete AP.creditLatest;
     if(AP.creditLatest&&AP.credit&&AP.creditLatest.ym>(AP.credit.ym||'')){AP.credit={source:AP.credit.source,ym:AP.creditLatest.ym,period:AP.creditLatest.period,arsRealMom:AP.creditLatest.arsRealMom};}
   }
 }

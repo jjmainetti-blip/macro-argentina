@@ -86,6 +86,9 @@ export async function adminApi(request, env, ctx, url, user) {
     const next = { entries, updatedAt: new Date().toISOString() };
     await kvPut(env, OVERRIDES_KEY, next); setOverridesMemo(next);
     let applied = null; try { const M = await import('./macro-data.mjs'); applied = await M.applyOverridesNow(env, S.group); } catch (e) { applied = `error: ${String(e?.message || e).slice(0, 120)}`; }
+    // v214: además se vuelve a leer la fuente del grupo, así un dato borrado que la fuente ya publicó (con el mismo valor)
+    // reaparece enseguida en lugar de esperar a la próxima revisión.
+    try { const M = await import('./macro-data.mjs'); ctx?.waitUntil?.(M.default(env, null, new Request(`https://admin.invalid/api/macro-data?group=${S.group}`), { force: true }).then(() => M.latestReleaseFor(env, null, { force: true })).catch(() => { })); } catch { }
     return json({ ok: true, applied, ...(await dataView(env)) });
   }
   // Forzar la actualización de un grupo de fuentes (lo mismo que hace la revisión programada).
