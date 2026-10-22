@@ -95,7 +95,7 @@ export function pickLatest(releases) {
 // (window.__CARD_PUB__, registrada por el Worker); (3) calendario habitual del organismo (rezago en meses desde el
 // último mes del período + día habitual). ym = último mes del período (trimestre/semestre: su mes final).
 export const PUB_RULES = { super: [2, 22], scentia: [1, 22], ipc: [1, 13], ipcCaba: [1, 8], arca: [1, 2], icg: [0, 26], autos: [1, 2], came: [1, 5], emae: [2, 22], isac: [2, 7], fiscal: [1, 17],
-  cement: [1, 6], credit: [1, 20], arrears: [2, 20], ipi: [2, 7], trade: [1, 19], ila: [1, 28], iga: [1, 22], bop: [3, 23], poverty: [3, 26], wages: [2, 14] };
+  cement: [1, 6], credit: [1, 8], arrears: [2, 20], ipi: [2, 7], trade: [1, 19], ila: [1, 28], iga: [1, 22], bop: [3, 23], poverty: [3, 26], wages: [2, 14] };
 export function cardPublication(key, ymEnd, S = {}, seen = {}) {
   if (!/^\d{4}-\d{2}$/.test(String(ymEnd || ''))) return null;
   const ok = d => /^\d{4}-\d{2}-\d{2}/.test(String(d || '')) ? String(d).slice(0, 10) : null;
@@ -109,6 +109,7 @@ export function cardPublication(key, ymEnd, S = {}, seen = {}) {
   if (key === 'scentia') exact = ok(S.scentia?.published?.[ymEnd]) || (S.scentia?.latest?.ym === ymEnd ? ok(S.scentia.latest.published) : null);
   if (key === 'ipi' && S.industryHistorical?.latest?.ym === ymEnd) exact = ok(S.industryHistorical.latest.published);
   if (key === 'isac' && S.isacHistorical?.latest?.ym === ymEnd) exact = ok(S.isacHistorical.latest.published);
+  if (key === 'credit') exact = ok(S.creditHistorical?.published?.[ymEnd]);
   if (key === 'icg' && S.icg?.latest && ymFromSpanishPeriod(S.icg.latest.period || '') === ymEnd) exact = ok(S.icg.publicationDate);
   if (key === 'bop' && S.bopHistorical?.quarterly?.CA) { const q = Object.keys(S.bopHistorical.quarterly.CA).sort().at(-1); if (q && `${q.slice(0, 4)}-${String(+q.slice(-1) * 3).padStart(2, '0')}` === ymEnd) exact = ok(S.bopHistorical.prepared); }
   if (exact) return { date: exact, basis: 'fuente' };

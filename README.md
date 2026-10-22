@@ -389,6 +389,13 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 - `public/reserves-components.json`: swap con China (CNY y tipo de cambio), BIS y otros pasivos de corto plazo, SEDESA, oro (toneladas y precio), con notas y fuentes. Actualizar `through` y los componentes cuando cambien (p. ej., pagos del BIS o el swap).
 - `/api/status` → `reserves`: cuántos meses del FMI ya se cargaron y el último error.
 
+## v213 — Crédito privado: lectura desde la planilla del Informe Monetario Mensual
+
+- El BCRA dejó de poner el número en el resumen de la página del Informe Monetario Mensual (septiembre 2026: sólo "contracción en términos reales"), y la tarjeta quedó en agosto. Ahora `immCreditSaMom` lee la planilla de indicadores (`informe-monetario-mensual-indicadores-AAAA-MM.xlsx`, hoja "Principales Variables", fila "Préstamos al sector privado no financiero", columna "Mensual · Real s.e."; parser `parseImmIndicators`); el texto de la página queda de respaldo. Septiembre 2026: −0,8% real s.e.
+- Se guarda la fecha de publicación del informe ("Publicado el 7 Oct 2026") en `creditHistorical.published` y la tarjeta la usa para ordenarse. Calendario habitual del crédito: día 8 del mes siguiente (antes 20).
+- La variación interanual del crédito ya no incluye el mes en curso (promedio incompleto).
+- `get(url,'buf')` devuelve ArrayBuffer.
+
 ## v212 — "La economía cuando naciste" se actualiza sola
 
 - **Nuevo endpoint** `/api/birth-update` (`birthExtension` en `macro-data.mjs`; copia en el edge renovada cada 6 h): últimos 24 meses de IPC (snapshot `core`), IPC de EE.UU. (BLS), dólar oficial y libre (promedio mensual de los cierres diarios de `exchangeHistorical`), RIPTE y precios promedio de INDEC para GBA (`sh_ipc_precios_promedio.xls`, parser `parseAvgPrices` en `indec-official.mjs` que detecta la orientación de la hoja; respaldo: Datos Argentina serie 105.1). Factores de unidad: manteca ×5 (200 g → 1 kg), café ×0,5 (500 g → 250 g).

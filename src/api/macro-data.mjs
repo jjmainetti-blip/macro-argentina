@@ -33,7 +33,7 @@ async function get(url,type='text'){
     const c=new AbortController(); const t=setTimeout(()=>c.abort(),25000);
     // v118: algunos sitios oficiales (BCRA) rechazan agentes no-navegador; se usa uno estándar.
     const ua=/bcra\.gob\.ar|argentina\.gob\.ar|indec\.gob\.ar|arca\.gob\.ar|afip\.gob\.ar/.test(url)?'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36':'Macrodatos/1.0 (+https://macrodatos.ar)';
-    try{const r=await fetch(url,{signal:c.signal,headers:{'user-agent':ua,'accept-language':'es-AR,es;q=.9'}});if(!r.ok)throw new Error(`${r.status} ${r.statusText}`);return type==='json'?r.json():r.text();}
+    try{const r=await fetch(url,{signal:c.signal,headers:{'user-agent':ua,'accept-language':'es-AR,es;q=.9'}});if(!r.ok)throw new Error(`${r.status} ${r.statusText}`);return type==='json'?r.json():type==='buf'?r.arrayBuffer():r.text();}
     finally{clearTimeout(t)}
   })();
   GET_CACHE.set(key,{promise,at:Date.now()});
@@ -1017,27 +1017,51 @@ async function igaHistorical(){
 }
 
 // v114: variación mensual real s.e. de los préstamos en pesos, según el Informe Monetario Mensual del BCRA.
+// v213 · Crédito en pesos al sector privado, variación mensual real sin estacionalidad, del Informe Monetario Mensual del
+// BCRA. Primaria: planilla de indicadores del informe (fila "Préstamos al sector privado no financiero", columna
+// "Mensual · Real s.e."); el resumen de la página dejó de traer el número (ej. septiembre 2026: sólo "contracción").
+// Respaldo: el texto de la página, como antes. También se guarda la fecha de publicación ("Publicado el 7 Oct 2026").
+const MES_ABR={ene:1,feb:2,mar:3,abr:4,may:5,jun:6,jul:7,ago:8,sep:9,set:9,oct:10,nov:11,dic:12};
+export function parseImmIndicators(rows){
+  const hdr=rows.findIndex(r=>(r||[]).some(v=>/^real s\.?\s?e\.?$/i.test(String(v??'').trim())));if(hdr<0)throw new Error('IMM: encabezado "Real s.e." no encontrado');
+  const top=rows.slice(0,hdr).reverse().find(r=>(r||[]).some(v=>/^mensual$/i.test(String(v??'').trim())))||[];
+  const mCol=top.findIndex(v=>/^mensual$/i.test(String(v??'').trim()));
+  let col=-1;for(let c=Math.max(0,mCol);c<(rows[hdr]||[]).length;c++)if(/^real s\.?\s?e\.?$/i.test(String(rows[hdr][c]??'').trim())){col=c;break;}
+  if(col<0)throw new Error('IMM: columna mensual real s.e. no encontrada');
+  const row=rows.slice(hdr+1).find(r=>/^pr[eé]stamos al sector privado no financiero\s*\d*$/i.test(String(r?.[0]??'').trim()));
+  const v=Number(row?.[col]);if(!Number.isFinite(v)||Math.abs(v)>0.5)throw new Error('IMM: valor de préstamos inválido');
+  return round(v*100,1)+0;
+}
 async function immCreditSaMom(){
   const monthsEs=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
-  const now=new Date(),out={};
+  const now=new Date(),out={},published={};
   const tries=[];for(let i=1;i<=3;i++){const d=new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth()-i,1));tries.push([`${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}`,monthsEs[d.getUTCMonth()],d.getUTCFullYear()]);}
   await Promise.allSettled(tries.map(async([k,mon,y])=>{
-    let html=null;for(const slug of [`informe-monetario-mensual-${mon}-de-${y}`,`informe-monetario-mensual-${mon}-${y}`]){try{html=strip(await get(`https://www.bcra.gob.ar/publicaciones/${slug}/`));break;}catch{}}
+    let html=null,page=null;for(const slug of [`informe-monetario-mensual-${mon}-de-${y}`,`informe-monetario-mensual-${mon}-${y}`]){try{page=await get(`https://www.bcra.gob.ar/publicaciones/${slug}/`);html=strip(page);break;}catch{}}
+    const pm=String(html||'').match(/Publicado el (\d{1,2}) (ene|feb|mar|abr|may|jun|jul|ago|sep|set|oct|nov|dic)[a-z]* (20\d{2})/i);
+    if(pm)published[k]=`${pm[3]}-${String(MES_ABR[pm[2].toLowerCase()]).padStart(2,'0')}-${pm[1].padStart(2,'0')}`;
+    // 1) Planilla de indicadores (link de la página o nombre habitual).
+    const urls=[...new Set([...(String(page||'').match(/https?:\/\/www\.bcra\.gob\.ar\/[^"' ]*informe-monetario-mensual-indicadores[^"' ]*\.xlsx/gi)||[]),`https://www.bcra.gob.ar/archivos/Pdfs/PublicacionesEstadisticas/informes/informe-monetario-mensual-indicadores-${k}.xlsx`])];
+    for(const url of urls){try{const buf=await get(url,'buf');const wb=XLSX.read(buf,{type:'array',dense:true,cellStyles:false,cellHTML:false,cellFormula:false});
+      const name=wb.SheetNames.find(n=>/principales variables/i.test(n))||wb.SheetNames[0];
+      out[k]=parseImmIndicators(XLSX.utils.sheet_to_json(wb.Sheets[name],{header:1,raw:true,defval:null}));if(!published[k])published[k]=null;return;}catch(e){}}
+    // 2) Respaldo: texto de la página.
     if(!html)return;
     const sentences=html.split(/(?<=\.)\s+(?=[A-ZÁÉÍÓÚ])/);
     for(const s of sentences){if(!/(pr[eé]stamos|cr[eé]dito) (?:bancarios? )?en pesos al sector privado/i.test(s)||!/(s\.\s?e|estacionalidad)/i.test(s))continue;
       const m=s.match(/(-?\d{1,2}(?:,\d)?)\s?%/);if(!m)continue;let v=Number(m[1].replace(',','.'));
       if(v>0&&/(ca[ií]d|cay[oe]|contraj|contrac|disminu|merma|retroc)/i.test(s.slice(0,m.index)))v=-v;out[k]=round(v,1)+0;break;}
   }));
-  return out;
+  for(const k of Object.keys(published))if(out[k]==null||!published[k])delete published[k];
+  return {values:out,published};
 }
 async function creditHistorical(){
   // v197: BCRA (API de Estadísticas, var. 26: préstamos al sector privado, promedio mensual) primario; Datos Argentina de respaldo.
   const [bc,lv,imm]=await Promise.allSettled([bcraDaily(26,'2018-01-01'),seriesRows('91.1_PEFPC_0_0_35',{start:'2019-01-01'}),immCreditSaMom()]);
   const out={status:'ok',source:'BCRA — préstamos al sector privado'};
-  if(bc.status==='fulfilled'){const m=monthlyAvg(bc.value),last=Object.keys(bc.value).sort().at(-1);if(last&&Number(last.slice(8))<20)delete m[last.slice(0,7)];/* mes en curso incompleto */out.monthlyYoy=yoyFromRows(Object.entries(m).map(([date,value])=>({date,value})));out.sourceUrl='https://api.bcra.gob.ar/estadisticas/v4.0/monetarias/26';}
+  if(bc.status==='fulfilled'){const m=monthlyAvg(bc.value),last=Object.keys(bc.value).sort().at(-1);/* v213: el mes en curso nunca se usa (promedio incompleto) */const curM=new Date(Date.now()-3*3600e3).toISOString().slice(0,7);delete m[curM];if(last&&last.slice(0,7)<curM&&Number(last.slice(8))<20)delete m[last.slice(0,7)];out.monthlyYoy=yoyFromRows(Object.entries(m).map(([date,value])=>({date,value})));out.sourceUrl='https://api.bcra.gob.ar/estadisticas/v4.0/monetarias/26';}
   if(lv.status==='fulfilled'){out.monthlyYoy=fillMissing(out.monthlyYoy||{},yoyFromRows(lv.value.rows));out.sourceUrl??=lv.value.url;}
-  if(imm.status==='fulfilled'&&Object.keys(imm.value).length)out.monthlySaRealMom=imm.value;
+  if(imm.status==='fulfilled'&&Object.keys(imm.value.values).length){out.monthlySaRealMom=imm.value.values;if(Object.keys(imm.value.published).length)out.published=imm.value.published;}
   if(!out.monthlyYoy&&!out.monthlySaRealMom)throw new Error('crédito sin datos');
   return out;
 }
