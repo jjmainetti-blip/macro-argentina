@@ -389,6 +389,19 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 - `public/reserves-components.json`: swap con China (CNY y tipo de cambio), BIS y otros pasivos de corto plazo, SEDESA, oro (toneladas y precio), con notas y fuentes. Actualizar `through` y los componentes cuando cambien (p. ej., pagos del BIS o el swap).
 - `/api/status` → `reserves`: cuántos meses del FMI ya se cargaron y el último error.
 
+## v219 — Anticipo del EMAE en Expectativas
+
+- IGA-OJF e ILA-ARG salen de Pulso económico; la tarjeta "EMAE anticipado" de la v218 también. En Expectativas, bloque "Anticipo del EMAE" con tres tarjetas: estimación Macrodatos (1ª cemento · 2ª + electricidad · 3ª + IVA DGI, sin IGA), IGA-OJF (su variación mensual s.e.) e ILA-ARG (regresión del EMAE sobre la variación mensual del índice líder).
+- Cada tarjeta muestra los dos meses que todavía no cubre el EMAE: zona (probable baja ≤ −0,5% · sin señal clara · probable suba ≥ +0,5%), valor estimado y porcentaje de aciertos histórico de esa zona (pruebas fuera de muestra; en "sin señal clara", acierto = el EMAE varió menos de ±0,5%). Clic: gráfico estimación vs EMAE.
+- `public/emae-signal.js` ahora exporta `emaeNowcast(S)`.
+
+## v218 — EMAE anticipado (señal mensual)
+
+- Tarjeta nueva "EMAE anticipado" en Pulso económico, al lado del EMAE: estima la variación mensual desestacionalizada de los meses que INDEC todavía no publicó (`public/emae-signal.js`, misma función en navegador y Worker).
+- Insumos (`src/api/nowcast-inputs.mjs`, job `nowcastInputs` del grupo `leading`): CSV de Datos Argentina con demanda eléctrica de grandes usuarios + comercial/industrial (CAMMESA), cemento (insumo del ISAC, extendido con la interanual de AFCP), IVA DGI, IPC empalmado y EMAE s.e. de respaldo. Además usa `cement`, `ipc`, `igaHistorical` y `emaeHistorical` del sitio.
+- Etapas: cemento → + electricidad → + IVA DGI; si ya salió el IGA-OJF del mes, promedio simple modelo/IGA. Zonas: ≤ −0,5% probable baja, ≥ +0,5% probable suba, en el medio sin señal clara; la tarjeta muestra los aciertos históricos de la zona.
+- Prueba fuera de muestra y decisiones: `research/emae-nowcast/README.md`.
+
 ## v217 — Carga manual del acumulado de Scentia
 
 - La pestaña Sitio suma dos series para cargar a mano: "Consumo masivo (Scentia) · acumulado del año" (`scentia.ytd`, la línea del gráfico y el detalle de la tarjeta) y "· variación mensual" (`scentia.monthlyMom`). Antes sólo se podía cargar la interanual.

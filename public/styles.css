@@ -292,3 +292,9 @@ body.modal-open{overflow:hidden}
 .site-refresh{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.site-refresh select{font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:#fff;max-width:100%}
 @media (max-width:640px){.site-cols,.site-form{grid-template-columns:1fr}.site-tile b{font-size:22px}.site-users th:nth-child(2),.site-users td:nth-child(2){display:none}}
 .acct{grid-template-columns:minmax(0,1fr)}.acct>*{min-width:0}
+/* v219 · Anticipo del EMAE (Expectativas) */
+.nowcast{margin-top:34px}.nowcast-head{display:flex;justify-content:space-between;align-items:end;gap:24px;margin-bottom:14px}.nowcast-head h3{margin:0;font-size:22px;letter-spacing:-.02em}.nowcast-head p{margin:0;max-width:560px;color:var(--muted);font-size:12px;text-align:right}
+.nowcast-grid{grid-template-columns:repeat(3,1fr)}.now-card{border-top:4px solid #c9d6e4}.now-card.now-up{border-top-color:var(--green)}.now-card.now-down{border-top-color:var(--red)}.now-card.now-flat{border-top-color:#d5a021}
+.now-card.now-up>strong{color:var(--green)}.now-card.now-down>strong{color:var(--red)}.now-card.now-flat>strong{color:#a07610}.now-card>strong{font-size:26px}
+.now-list{list-style:none;margin:12px 0 0;padding:0;display:grid;gap:10px}.now-list li{display:grid;gap:2px;padding-top:10px;border-top:1px solid var(--line);font-size:12px}.now-list b{font-size:12px}.now-list span{font-weight:800}.now-list span.now-up{color:var(--green)}.now-list span.now-down{color:var(--red)}.now-list span.now-flat{color:#a07610}.now-list small{color:var(--muted);font-size:11px;line-height:1.4}.now-foot{font-size:10px!important}
+@media(max-width:900px){.nowcast-grid{grid-template-columns:1fr}.nowcast-head{flex-direction:column;align-items:start}.nowcast-head p{text-align:left}}
