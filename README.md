@@ -389,6 +389,10 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 - `public/reserves-components.json`: swap con China (CNY y tipo de cambio), BIS y otros pasivos de corto plazo, SEDESA, oro (toneladas y precio), con notas y fuentes. Actualizar `through` y los componentes cuando cambien (p. ej., pagos del BIS o el swap).
 - `/api/status` → `reserves`: cuántos meses del FMI ya se cargaron y el último error.
 
+## v217 — Carga manual del acumulado de Scentia
+
+- La pestaña Sitio suma dos series para cargar a mano: "Consumo masivo (Scentia) · acumulado del año" (`scentia.ytd`, la línea del gráfico y el detalle de la tarjeta) y "· variación mensual" (`scentia.monthlyMom`). Antes sólo se podía cargar la interanual.
+
 ## v216 — Resúmenes por mail con todos los datos nuevos
 
 - "Publicado desde el último resumen" y "Panorama" se arman ahora con todas las tarjetas de Pulso económico (`src/api/card-summary.mjs`) y las mismas fechas de publicación que el tablero. Antes se usaba una lista reducida (sin EMAE, salarios, crédito, mora, balanza comercial, cemento, fiscal, etc.) fechada con días habituales.

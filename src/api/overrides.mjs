@@ -21,6 +21,8 @@ export const SERIES = [
   { id: 'superYoy', label: 'Supermercados (INDEC) · variación interanual real', unit: '%', group: 'activity', path: ['supermarkets', 'monthlyYoy'], card: 'super' },
   { id: 'superMom', label: 'Supermercados (INDEC) · variación mensual desest.', unit: '%', group: 'activity', path: ['supermarkets', 'monthlySaMom'], card: 'super' },
   { id: 'scentia', label: 'Consumo masivo (Scentia) · variación interanual', unit: '%', group: 'activity', path: ['scentia', 'monthlyYoy'], card: 'scentia' },
+  { id: 'scentiaYtd', label: 'Consumo masivo (Scentia) · acumulado del año', unit: '%', group: 'activity', path: ['scentia', 'ytd'], card: 'scentia' },
+  { id: 'scentiaMom', label: 'Consumo masivo (Scentia) · variación mensual', unit: '%', group: 'activity', path: ['scentia', 'monthlyMom'], card: 'scentia' },
   { id: 'credit', label: 'Crédito privado en pesos (BCRA) · variación mensual real desest.', unit: '%', group: 'activity', path: ['creditHistorical', 'monthlySaRealMom'], card: 'credit' },
   { id: 'arrears', label: 'Mora bancaria (BCRA) · total', unit: '% de la cartera', group: 'banks', path: ['arrearsHistorical', 'monthlyTotal'], card: 'arrears' }
 ];
