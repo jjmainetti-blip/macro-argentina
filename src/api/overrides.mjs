@@ -24,7 +24,8 @@ export const SERIES = [
   { id: 'scentiaYtd', label: 'Consumo masivo (Scentia) · acumulado del año', unit: '%', group: 'activity', path: ['scentia', 'ytd'], card: 'scentia' },
   { id: 'scentiaMom', label: 'Consumo masivo (Scentia) · variación mensual', unit: '%', group: 'activity', path: ['scentia', 'monthlyMom'], card: 'scentia' },
   { id: 'credit', label: 'Crédito privado en pesos (BCRA) · variación mensual real desest.', unit: '%', group: 'activity', path: ['creditHistorical', 'monthlySaRealMom'], card: 'credit' },
-  { id: 'arrears', label: 'Mora bancaria (BCRA) · total', unit: '% de la cartera', group: 'banks', path: ['arrearsHistorical', 'monthlyTotal'], card: 'arrears' }
+  { id: 'arrears', label: 'Mora bancaria (BCRA) · total', unit: '% de la cartera', group: 'banks', path: ['arrearsHistorical', 'monthlyTotal'], card: 'arrears' },
+  { id: 'equilibra', label: 'Equilibra · anticipo del EMAE, variación mensual s.e.', unit: '%', group: 'nowcast', path: ['equilibraActivity', 'monthlySaMom'], card: 'nowEq' }
 ];
 export const SERIES_BY_ID = Object.fromEntries(SERIES.map(s => [s.id, s]));
 export const YM_RE = /^(19|20)\d{2}-(0[1-9]|1[0-2])$/;

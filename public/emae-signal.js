@@ -6,7 +6,7 @@
 //    despachos de cemento · 2ª: + IVA DGI real y electricidad (grandes usuarios + comercios/industrias medianas) ·
 //    3ª: + IPI manufacturero e ISAC. Sin IGA.
 //  · IGA-OJF: su variación mensual desestacionalizada, tal cual.
-//  · ILA-ARG (CICEc): regresión del EMAE sobre la variación mensual del índice líder del mismo mes.
+//  · Equilibra (v222, reemplaza al ILA-ARG): su anticipo de la variación mensual s.e., tal como lo publica.
 // Zonas: estimación ≤ −0,5% "probable baja"; ≥ +0,5% "probable suba"; en el medio "sin señal clara".
 // Aciertos de cada zona, en pruebas fuera de muestra (cada mes estimado sólo con lo conocido hasta dos meses antes):
 // baja → el EMAE bajó; suba → subió; sin señal clara → varió menos de ±0,5%.
@@ -51,7 +51,8 @@ function inputs(S) {
   for (const t of Object.keys(E)) { const v = lm(E, t); if (v !== null) target[t] = r2((Math.exp(v / 100) - 1) * 100); }
   for (const [t, v] of Object.entries(S?.emaeHistorical?.monthlySaMom || {})) if (YM.test(t) && num(v) !== null) target[t] = num(v);
   const iga = {}; for (const [t, r] of Object.entries(S?.igaHistorical?.monthly || {})) if (YM.test(t) && num(r?.momSa) !== null) iga[t] = num(r.momSa);
-  const ila = {}; for (const [t, r] of Object.entries(S?.ilaHistorical?.monthly || {})) if (YM.test(t) && num(r?.mom) !== null) ila[t] = num(r.mom);
+  // v222 · Equilibra: anticipo privado de la variación mensual s.e. del EMAE (primera publicación).
+  const eq = {}; for (const [t, v] of Object.entries(S?.equilibraActivity?.monthlySaMom || {})) if (YM.test(t) && num(v) !== null) eq[t] = num(v);
   // v221 · Impuesto a los débitos y créditos (cheque) del mes, real. Si INDEC todavía no publicó el IPC del mes, se usa el
   // IPC del mes anterior por la inflación esperada en el REM.
   const rem = S?.rem?.cpiExpected?.monthly || {};
@@ -63,7 +64,7 @@ function inputs(S) {
   for (const [t, m0] of Object.entries(S?.industryHistorical?.monthlySaMom || {}).sort()) { const m = num(m0), b = ipiSa[ymShift(t, -1)]; if (YM.test(t) && ipiSa[t] === undefined && m !== null && b > 0) ipiSa[t] = b * (1 + m / 100); }
   // Electricidad: grandes usuarios + comercios e industrias medianas (CAMMESA vía Datos Argentina).
   const elec = N.elecInd || {};
-  return { elec, cem, iva, chq, isac, ipiSa, target, iga, ila };
+  return { elec, cem, iva, chq, isac, ipiSa, target, iga, eq };
 }
 
 export const ZONES = { down: 'Probable baja', flat: 'Sin señal clara', up: 'Probable suba' };
@@ -116,11 +117,12 @@ export function emaeNowcast(S) {
     if (back.length >= 12) { const stats = zoneStats(back); const perMonth = {}; for (const t of months) perMonth[t] = I.iga[t] !== undefined ? point(I.iga[t], stats) : null; out.indicators.iga = { key: 'nowIga', title: 'IGA-OJF', source: 'Orlando J. Ferreres & Asociados', perMonth, stats: [stats], history: back.map(b => ({ ...b, est: r2(b.est) })) }; }
   }
   // ILA-ARG: regresión del EMAE sobre la variación mensual del índice líder.
-  if (Object.keys(I.ila).length >= 60) {
-    const R = regression(I, t => I.ila[t] !== undefined ? [I.ila[t]] : null, { from: '2005-01', backFrom: '2016-01' });
-    const stats = zoneStats(R.back); const perMonth = {}; for (const t of months) { const v = R.predict(t); perMonth[t] = v === null ? null : point(v, stats, { raw: I.ila[t] }); }
-    out.indicators.ila = { key: 'nowIla', title: 'Índice Líder (ILA-ARG)', source: 'CICEc — Bolsas de Comercio de Santa Fe y Rosario', perMonth, stats: [stats], history: R.back.map(b => ({ ym: b.ym, est: r2(b.est), actual: b.actual })) };
+  // Equilibra: su estimación de la variación mensual s.e., tal cual.
+  {
+    const back = Object.keys(I.eq).filter(t => I.target[t] !== undefined && !covid(t) && !covid(ymShift(t, -1))).sort().map(t => ({ ym: t, est: I.eq[t], actual: I.target[t] }));
+    if (back.length >= 12) { const stats = zoneStats(back); const perMonth = {}; for (const t of months) perMonth[t] = I.eq[t] !== undefined ? point(I.eq[t], stats) : null; out.indicators.eq = { key: 'nowEq', title: 'Equilibra', source: 'Equilibra — Anticipo de Actividad Económica', perMonth, stats: [stats], history: back.map(b => ({ ...b, est: r2(b.est) })) }; }
   }
+
   return out;
 }
 if (typeof window !== 'undefined') window.MacroEmaeSignal = { emaeNowcast, zoneOf, ZONES };

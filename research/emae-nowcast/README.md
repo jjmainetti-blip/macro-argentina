@@ -82,3 +82,8 @@ Variación mensual s.e. (derivada del nivel): sin capacidad predictiva (MAE 1,4�
   3ª + IPI s.e. + ISAC: 0,73 (0,59) · 0,92 (0,68) · 0,72 (0,86) · 70% (76%) · baja 16/18, suba 17/18.
   Electricidad CAMMESA (GUMA sin ALUAR) sobre cheque + cemento: MAE 0,925 → 0,931, corr 0,51 → 0,49 (mejora 37 de 73 meses;
   t=0,83) → descartada. Cheque solo: corr 0,05. Cheque deflactado con IPC efectivo en la prueba (en tiempo real, REM).
+- v222 (24-oct): reemplazo del ILA-ARG (corr 0,33) por un estimador privado. Candidatos con anticipo mensual del EMAE: Equilibra
+  (posts públicos "Anticipo de Actividad Económica", ~día 21–30 del mes siguiente), Analytica (sólo prensa), OJF (ya está), FIEL
+  (sólo industria). Equilibra, primera publicación, jul-2024 a jul-2026 (n=24; faltan oct-2025 y ago-2026): MAE 0,94 (0: 1,10),
+  RMSE 1,17, corr 0,61, signo 16/24; zonas: baja 6/8, sin señal 4/7, suba 8/9. IGA-OJF mismo período (valores REVISADOS, optimista):
+  MAE 0,71, corr 0,80. Ojo: el IGA de julio-2026 se publicó −0,9% y hoy figura −2,3%.
