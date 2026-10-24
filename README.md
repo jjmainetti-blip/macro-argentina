@@ -389,6 +389,10 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 - `public/reserves-components.json`: swap con China (CNY y tipo de cambio), BIS y otros pasivos de corto plazo, SEDESA, oro (toneladas y precio), con notas y fuentes. Actualizar `through` y los componentes cuando cambien (p. ej., pagos del BIS o el swap).
 - `/api/status` → `reserves`: cuántos meses del FMI ya se cargaron y el último error.
 
+## v223 — Arreglo: Anticipo del EMAE "sin datos"
+
+- El snapshot del grupo `leading` seguía guardando la copia de `nowcastInputs` de la v218 (cuando ese job estaba ahí), y en el navegador a veces pisaba a la nueva del grupo `nowcast` (sin cheque, ISAC ni IPI → la estimación Macrodatos quedaba vacía). Ahora cada snapshot conserva sólo las fuentes de su grupo, y el navegador toma `nowcastInputs`/`equilibraActivity` sólo del grupo `nowcast`.
+
 ## v222 — Equilibra reemplaza al ILA en el Anticipo del EMAE
 
 - Nuevo job `equilibraActivity` (`src/api/equilibra.mjs`, grupo `nowcast`): lee el sitemap de equilibra.ar y los posts "Anticipo de Actividad Económica <mes> <año>" más nuevos que todavía no están en la historia incluida (jul-2024 en adelante, valores de la primera publicación). Saca del texto la variación mensual desestacionalizada del EMAE agregado; si no la puede leer, avisa en `warnings` y se puede cargar a mano desde la pestaña Sitio (serie "Equilibra · anticipo del EMAE").

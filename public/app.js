@@ -813,6 +813,7 @@ async function loadOfficialSeriesFallback(){
 
 // v117: la API se pide por grupos (cada uno con pocos pedidos externos) y cada grupo se procesa al llegar.
 const MACRO_GROUPS=['core','history','markets','activity','leading','external','banks','nowcast'];
+const SOURCE_GROUP={nowcastInputs:'nowcast',equilibraActivity:'nowcast',cammesaDemand:'nowcast'};
 const MACRO_LS_KEY='macrodatosSnapshotV131';
 // Series históricas (dólar, riesgo país, Merval, tasa, RIPTE, PIB, industria, desempleo, comercio).
 // Recibe la fusión histórico local + API, así los gráficos funcionan aunque la API no responda.
@@ -952,7 +953,9 @@ async function pullMacroGroups(groups,retry=0){
     const text=await r.text();const d=JSON.parse(text);if(!d?.sources)throw new Error(`API ${g} sin fuentes`);
     received++;if(r.headers.get('x-macrodatos-cache')==='kv-stale')stale.push(g);
     const sig=`${d.generatedAt}|${text.length}`;if(macroSig[g]===sig)return;macroSig[g]=sig;changed=true;
-    apiKpiSources={...apiKpiSources,...d.sources};if(!macroLastGen||String(d.generatedAt)>String(macroLastGen))macroLastGen=d.generatedAt;
+    // v223: una fuente que se mudó de grupo puede seguir en el snapshot viejo del grupo anterior: se toma sólo del suyo.
+    const own=Object.fromEntries(Object.entries(d.sources).filter(([k])=>!SOURCE_GROUP[k]||SOURCE_GROUP[k]===g));
+    apiKpiSources={...apiKpiSources,...own};if(!macroLastGen||String(d.generatedAt)>String(macroLastGen))macroLastGen=d.generatedAt;
   }));
   macroLastPull=Date.now();
   if(changed){rebuildKpiSourceCache();applyMacroSources(fmtWhenAR(macroLastGen));setTimeout(()=>{try{localStorage.setItem(MACRO_LS_KEY,JSON.stringify({generatedAt:macroLastGen,sources:apiKpiSources}));}catch{}},1500);}

@@ -1401,7 +1401,9 @@ const macroData=async(env={},ctx=null,request=null,opts={})=>{
     else if(old){out.sources[name]={...old,status:old.status==='error'?'snapshot':'ok',snapshotFallback:true,refreshError:String(j.reason?.message||j.reason)};}
     else out.sources[name]={status:'error',error:String(j.reason?.message||j.reason)};
   });
-  for(const [name,old] of Object.entries(previous?.sources||{}))if(!out.sources[name])out.sources[name]=old;
+  // v223: sólo se conservan fuentes del grupo (antes quedaban copias viejas de fuentes que se mudaron de grupo, p. ej.
+  // nowcastInputs en 'leading', que pisaban a las nuevas en el navegador).
+  for(const [name,old] of Object.entries(previous?.sources||{}))if(!out.sources[name]&&(group==='all'||names.includes(name)))out.sources[name]=old;
   repairHistorical(out.sources);
   // v210: datos cargados a mano desde la pestaña "Sitio" (sólo el administrador).
   try{const OV=await readOverrides(env);const manual={};for(const g of group==='all'?Object.keys(GROUPS):[group])Object.assign(manual,applyOverrides(out.sources,g,OV.entries,stored?.manual));if(Object.keys(manual).length)out.manual=manual;}catch(e){console.warn('datos manuales',e);}
