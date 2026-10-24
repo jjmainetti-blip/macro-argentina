@@ -389,9 +389,15 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 - `public/reserves-components.json`: swap con China (CNY y tipo de cambio), BIS y otros pasivos de corto plazo, SEDESA, oro (toneladas y precio), con notas y fuentes. Actualizar `through` y los componentes cuando cambien (p. ej., pagos del BIS o el swap).
 - `/api/status` → `reserves`: cuántos meses del FMI ya se cargaron y el último error.
 
+## v221 — Anticipo del EMAE: tres etapas (cheque + cemento → + IVA y electricidad → + IPI e ISAC)
+
+- Se saca la lectura de CAMMESA de la v220 (`src/api/cammesa.mjs` borrado; el grupo `nowcast` queda sólo con `nowcastInputs`): la demanda de grandes usuarios del MEM no mejoraba la estimación (prueba en `research/emae-nowcast/README.md`).
+- `nowcastInputs` suma impuesto a los débitos y créditos (CSV de recursos tributarios), ISAC nivel general e IPI desestacionalizado (Datos Argentina). En el navegador: el cheque del mes se deflacta con el IPC o, si todavía no salió, con el IPC anterior × REM; ISAC e IPI se extienden con lo que el sitio ya tiene de INDEC.
+- Etapas: 1ª cheque + cemento · 2ª + IVA DGI + electricidad (grandes usuarios + comercios/industrias medianas, Datos Argentina) · 3ª + IPI e ISAC.
+
 ## v220 — Electricidad desde CAMMESA
 
-- Nuevo job `cammesaDemand` (`src/api/cammesa.mjs`) y grupo `nowcast` (junto con `nowcastInputs`, que sale de `leading`). Lee las bases diarias de CAMMESA ("Comportamiento de la Demanda de Energía Eléctrica en el MEM"): Base Demanda Diaria 2017–2026 (definitiva) y Base de datos GU Semanal (operativa, incluye el mes en curso). Arma el promedio mensual de los Grandes Usuarios del MEM sin ALUAR, sólo meses completos; el definitivo pisa al operativo.
+- Nuevo job `cammesaDemand` (`src/api/cammesa.mjs`) y grupo `nowcast` (junto con `nowcastInputs`, que sale de `leading`). Lee las bases diarias de CAMMESA ("Comportamiento de la Demanda de Energía Eléctrica en el MEM"): Base Demanda Diaria 2017–2026 (definitiva) y Base de datos GU Semanal (operativa, incluye el mes en curso). Arma el promedio mensual de los Grandes Usuarios del MEM sin ALUAR, sólo meses completos; el definitivo pisa al operativo. El nombre del archivo definitivo lleva el último año ("2017 2026"): se prueban el año en curso, el anterior y el siguiente. Si el dato guardado ya tiene el mes anterior completo, el job no vuelve a bajar los archivos hasta que termine el mes en curso; desde el día 1 reintenta en cada revisión hasta encontrarlo (cada job recibe ahora su dato anterior).
 - La 2ª estimación del Anticipo del EMAE usa esa serie desde 2017 (antes, grandes usuarios de Datos Argentina reescalados). El mes queda disponible a los pocos días de terminado, en lugar de 3–4 semanas después.
 
 ## v219 — Anticipo del EMAE en Expectativas

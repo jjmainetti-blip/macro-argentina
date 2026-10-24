@@ -76,3 +76,9 @@ Variación mensual s.e. (derivada del nivel): sin capacidad predictiva (MAE 1,4�
   Se elige GUMA sin ALUAR: pierde algo de ajuste (la serie de Datos Argentina incluye comercios/industrias medianas de las
   distribuidoras, que CAMMESA no detalla a diario) a cambio de ~3 semanas de anticipación. Extender la serie de Datos
   Argentina con el crecimiento de CAMMESA (sólo el último mes) da peor (corr 0,43): mezcla dos fuentes en la variación.
+- v221 (24-oct): etapas definitivas. Prueba 2019-03 a 2026-08 (n=73; entre paréntesis 2023-08 a 2026-08, n=37), "0": MAE 1,04 (0,98):
+  1ª cheque + cemento: MAE 0,92 (0,91) · RMSE 1,14 (1,08) · corr 0,51 (0,57) · signo 67% (68%) · baja 16/20, suba 14/17.
+  2ª + IVA + electricidad Datos Arg.: 0,88 (0,81) · 1,09 (0,98) · 0,57 (0,69) · 71% (73%) · baja 16/17, suba 14/18.
+  3ª + IPI s.e. + ISAC: 0,73 (0,59) · 0,92 (0,68) · 0,72 (0,86) · 70% (76%) · baja 16/18, suba 17/18.
+  Electricidad CAMMESA (GUMA sin ALUAR) sobre cheque + cemento: MAE 0,925 → 0,931, corr 0,51 → 0,49 (mejora 37 de 73 meses;
+  t=0,83) → descartada. Cheque solo: corr 0,05. Cheque deflactado con IPC efectivo en la prueba (en tiempo real, REM).

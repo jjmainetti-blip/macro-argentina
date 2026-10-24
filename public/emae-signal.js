@@ -1,9 +1,10 @@
 // v219 · Anticipo del EMAE (sección Expectativas). Misma función en el navegador y en el Worker. S = fuentes fusionadas.
 // Tres indicadores, cada uno traducido a una estimación de la variación mensual desestacionalizada del EMAE para los
 // dos meses que INDEC todavía no publicó:
-//  · Macrodatos: regresión sobre cemento, electricidad (Grandes Usuarios del MEM sin ALUAR, CAMMESA) e IVA DGI, cada uno
-//    desestacionalizado (variación mensual menos el promedio del mismo mes en los 5 años previos) + días hábiles.
-//    1ª estimación: cemento · 2ª: + electricidad · 3ª: + IVA DGI. Sin IGA.
+//  · Macrodatos (v221): regresión sobre indicadores desestacionalizados (variación mensual menos el promedio del mismo mes
+//    en los 5 años previos; el IPI, con la serie s.e. de INDEC) + días hábiles. 1ª estimación: impuesto al cheque real y
+//    despachos de cemento · 2ª: + IVA DGI real y electricidad (grandes usuarios + comercios/industrias medianas) ·
+//    3ª: + IPI manufacturero e ISAC. Sin IGA.
 //  · IGA-OJF: su variación mensual desestacionalizada, tal cual.
 //  · ILA-ARG (CICEc): regresión del EMAE sobre la variación mensual del índice líder del mismo mes.
 // Zonas: estimación ≤ −0,5% "probable baja"; ≥ +0,5% "probable suba"; en el medio "sin señal clara".
@@ -51,14 +52,18 @@ function inputs(S) {
   for (const [t, v] of Object.entries(S?.emaeHistorical?.monthlySaMom || {})) if (YM.test(t) && num(v) !== null) target[t] = num(v);
   const iga = {}; for (const [t, r] of Object.entries(S?.igaHistorical?.monthly || {})) if (YM.test(t) && num(r?.momSa) !== null) iga[t] = num(r.momSa);
   const ila = {}; for (const [t, r] of Object.entries(S?.ilaHistorical?.monthly || {})) if (YM.test(t) && num(r?.mom) !== null) ila[t] = num(r.mom);
-  // Electricidad (v220): demanda de Grandes Usuarios del MEM sin ALUAR (CAMMESA, diaria, sale a los pocos días de cerrado el
-  // mes) desde 2017; antes, grandes usuarios de Datos Argentina, reescalados para empalmar en 2017. Sin CAMMESA, la serie
-  // de Datos Argentina (grandes usuarios + comercial/industrial).
-  let elec = N.elecInd || {};
-  const G = S?.cammesaDemand?.gumaExAluar || {}, GU = N.elecGU || {};
-  const ov = Object.keys(G).filter(k => k < '2018-01' && G[k] > 0 && GU[k] > 0);
-  if (Object.keys(G).length >= 48 && ov.length >= 6) { const sc = ov.reduce((s, k) => s + GU[k] / G[k], 0) / ov.length; elec = {}; for (const [k, v] of Object.entries(GU)) if (k < '2017-01') elec[k] = v; for (const [k, v] of Object.entries(G)) if (v > 0) elec[k] = v * sc; }
-  return { elec, cem, iva, target, iga, ila };
+  // v221 · Impuesto a los débitos y créditos (cheque) del mes, real. Si INDEC todavía no publicó el IPC del mes, se usa el
+  // IPC del mes anterior por la inflación esperada en el REM.
+  const rem = S?.rem?.cpiExpected?.monthly || {};
+  const chq = {}; for (const [t, v] of Object.entries(N.chq || {})) { let p = ipc[t]; if (!(p > 0)) { const e = num(rem[t]), q = ipc[ymShift(t, -1)]; if (e !== null && q > 0) p = q * (1 + e / 100); } if (v > 0 && p > 0) chq[t] = v / p; }
+  // ISAC (nivel general, original) extendido con la interanual del sitio; IPI desestacionalizado extendido con la mensual s.e.
+  const isac = { ...(N.isac || {}) };
+  for (const [t, y0] of Object.entries(S?.isacHistorical?.monthlyYoy || {}).sort()) { const y = num(y0), b = isac[ymShift(t, -12)]; if (YM.test(t) && isac[t] === undefined && y !== null && b > 0) isac[t] = b * (1 + y / 100); }
+  const ipiSa = { ...(N.ipiSa || {}) };
+  for (const [t, m0] of Object.entries(S?.industryHistorical?.monthlySaMom || {}).sort()) { const m = num(m0), b = ipiSa[ymShift(t, -1)]; if (YM.test(t) && ipiSa[t] === undefined && m !== null && b > 0) ipiSa[t] = b * (1 + m / 100); }
+  // Electricidad: grandes usuarios + comercios e industrias medianas (CAMMESA vía Datos Argentina).
+  const elec = N.elecInd || {};
+  return { elec, cem, iva, chq, isac, ipiSa, target, iga, ila };
 }
 
 export const ZONES = { down: 'Probable baja', flat: 'Sin señal clara', up: 'Probable suba' };
@@ -82,9 +87,9 @@ function regression(I, feats, { from = '2008-01', backFrom = '2019-01', minTrain
 }
 
 const STAGES = [
-  { id: 1, label: '1ª estimación', inputs: 'cemento', feats: ['cem'] },
-  { id: 2, label: '2ª estimación', inputs: 'cemento y electricidad', feats: ['cem', 'elec'] },
-  { id: 3, label: '3ª estimación', inputs: 'cemento, electricidad e IVA', feats: ['cem', 'elec', 'iva'] }
+  { id: 1, label: '1ª estimación', inputs: 'cheque y cemento', feats: ['chq', 'cem'] },
+  { id: 2, label: '2ª estimación', inputs: 'cheque, cemento, IVA y electricidad', feats: ['chq', 'cem', 'iva', 'elec'] },
+  { id: 3, label: '3ª estimación', inputs: 'cheque, cemento, IVA, electricidad, IPI e ISAC', feats: ['chq', 'cem', 'iva', 'elec', 'ipiSa', 'isac'] }
 ];
 
 export function emaeNowcast(S) {
@@ -96,14 +101,14 @@ export function emaeNowcast(S) {
 
   // Macrodatos (tres etapas).
   if (Object.keys(I.cem).length >= 60) {
-    const fx = fs => t => { const x = []; for (const f of fs) { const v = dsm(I[f], t); if (v === null || !Number.isFinite(v)) return null; x.push(v); } x.push(dwd(t)); return x; };
+    const fx = fs => t => { const x = []; for (const f of fs) { const v = f === 'ipiSa' ? lm(I.ipiSa, t) : dsm(I[f], t); if (v === null || !Number.isFinite(v)) return null; x.push(v); } x.push(dwd(t)); return x; };
     const stages = STAGES.map(st => { const R = regression(I, fx(st.feats)); return { ...st, R, stats: zoneStats(R.back) }; });
     const perMonth = {};
     for (const t of months) {
       const list = stages.map(st => { const v = st.R.predict(t); return v === null ? null : point(v, st.stats, { stage: st.id, label: st.label, inputs: st.inputs }); }).filter(Boolean);
       perMonth[t] = list.length ? { ...list.at(-1), stages: list } : null;
     }
-    out.indicators.model = { key: 'nowModel', title: 'Estimación Macrodatos', source: 'Macrodatos con CAMMESA, AFCP, INDEC y ARCA', perMonth, stats: stages.map(s => ({ id: s.id, ...s.stats })), history: stages[1].R.back.map(b => ({ ym: b.ym, est: r2(b.est), actual: b.actual })) };
+    out.indicators.model = { key: 'nowModel', title: 'Estimación Macrodatos', source: 'Macrodatos con ARCA, AFCP, CAMMESA e INDEC', perMonth, stats: stages.map(s => ({ id: s.id, ...s.stats })), history: stages[1].R.back.map(b => ({ ym: b.ym, est: r2(b.est), actual: b.actual })) };
   }
   // IGA-OJF: la variación mensual s.e. del IGA como estimación directa del EMAE.
   {
