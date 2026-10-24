@@ -12,6 +12,7 @@ import { EVENTS } from './calendar-data.mjs';
 import { ipcMonthlyChain, ipcAnnualAvg, ipcAnnualAvgInflation } from './ipc-chain.mjs';
 import { indecXText, parseIndecIca } from './indec-x.mjs';
 import { nowcastInputs } from './nowcast-inputs.mjs';
+import { cammesaDemand } from './cammesa.mjs';
 /* Macrodatos (antes Macro Argentina) v8 — stable server-side data contract.
    Each adapter fails independently. The browser keeps its bundled last-known value
    when a source is temporarily unavailable or changes format. */
@@ -1293,14 +1294,15 @@ async function bcraPurchasesHistorical(){
   if(Object.keys(monthly).length<200)throw new Error('compras BCRA: serie corta');
   return {status:'ok',source:'BCRA — compras netas de divisas: sector privado (var. 78, USD) y Tesoro Nacional (var. 48, $ convertidos al mayorista A3500)',sourceUrl:'https://api.bcra.gob.ar/estadisticas/v4.0/monetarias/78',lastDay:Object.keys(d).sort().at(-1),monthly,...(Object.keys(treasury).length?{treasury}:{})};
 }
-const JOBS={wages:()=>wagesIndec(),bcraPurchasesHistorical:()=>bcraPurchasesHistorical(),supermarkets:()=>supermarkets(),scentia:()=>scentiaLive(),ipcHistorical:()=>ipcHistorical(),gdpHistorical:()=>gdpHistorical(),emaeHistorical:()=>emaeHistorical(),industryHistorical:()=>industryHistorical(),unemploymentHistorical:()=>unemploymentHistorical(),tradeHistorical:()=>tradeHistorical(),financialHistorical:()=>financialHistorical(),exchangeHistorical:()=>exchangeHistorical(),ipc:()=>ipc(),arca:()=>arca(),icg:()=>icg(),bcra:()=>bcra(),rem:()=>rem(),salary:()=>salaryRipte(),icl:()=>icl(),contractIndices:()=>contractIndices(),isacHistorical:()=>isacHistorical(),creditHistorical:()=>creditHistorical(),arrearsHistorical:()=>arrearsHistorical(),activityPulse:()=>activityPulse(),ilaHistorical:()=>ilaHistorical(),igaHistorical:()=>igaHistorical(),nowcastInputs:()=>nowcastInputs(get),bopHistorical:()=>bopHistorical(),autos:()=>autosLive(),ipcCaba:()=>ipcCabaLive(),poverty:()=>povertyLive(),cement:()=>cementLive(),came:()=>cameLive()};
+const JOBS={wages:()=>wagesIndec(),bcraPurchasesHistorical:()=>bcraPurchasesHistorical(),supermarkets:()=>supermarkets(),scentia:()=>scentiaLive(),ipcHistorical:()=>ipcHistorical(),gdpHistorical:()=>gdpHistorical(),emaeHistorical:()=>emaeHistorical(),industryHistorical:()=>industryHistorical(),unemploymentHistorical:()=>unemploymentHistorical(),tradeHistorical:()=>tradeHistorical(),financialHistorical:()=>financialHistorical(),exchangeHistorical:()=>exchangeHistorical(),ipc:()=>ipc(),arca:()=>arca(),icg:()=>icg(),bcra:()=>bcra(),rem:()=>rem(),salary:()=>salaryRipte(),icl:()=>icl(),contractIndices:()=>contractIndices(),isacHistorical:()=>isacHistorical(),creditHistorical:()=>creditHistorical(),arrearsHistorical:()=>arrearsHistorical(),activityPulse:()=>activityPulse(),ilaHistorical:()=>ilaHistorical(),igaHistorical:()=>igaHistorical(),nowcastInputs:()=>nowcastInputs(get),cammesaDemand:()=>cammesaDemand(get),bopHistorical:()=>bopHistorical(),autos:()=>autosLive(),ipcCaba:()=>ipcCabaLive(),poverty:()=>povertyLive(),cement:()=>cementLive(),came:()=>cameLive()};
 export const GROUPS={
   core:['ipc','arca','icg','bcra','rem','salary','wages','icl','contractIndices','autos','ipcCaba','came'],
   history:['ipcHistorical','gdpHistorical','industryHistorical','unemploymentHistorical','tradeHistorical'],
   markets:['financialHistorical','exchangeHistorical'],
   activity:['emaeHistorical','isacHistorical','creditHistorical','activityPulse','cement','supermarkets','scentia'],
   banks:['arrearsHistorical','bcraPurchasesHistorical'], // v131: grupo propio (anexo xlsx del BCRA, pesado en memoria)
-  leading:['ilaHistorical','igaHistorical','nowcastInputs'], // v218: insumos de la señal mensual del EMAE
+  leading:['ilaHistorical','igaHistorical'],
+  nowcast:['nowcastInputs','cammesaDemand'], // v220: insumos del anticipo del EMAE (CSV de Datos Argentina + bases diarias de CAMMESA)
   external:['bopHistorical','poverty'] // v122/v128: XML de INDEC y pobreza en un grupo propio
 };
 // v128: estado de frescura de todas las tarjetas (lee el último snapshot de cada grupo).

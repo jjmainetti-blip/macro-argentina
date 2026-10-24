@@ -34,7 +34,7 @@ export async function nowcastInputs(get) {
   const warn = [], res = {};
   const job = async (k, f) => { try { res[k] = await f(); } catch (e) { warn.push(`${k}: ${String(e?.message || e).slice(0, 80)}`); } };
   await Promise.all([
-    job('elec', async () => { const c = csvColumns(await get(URLS.elec), ['grandes_usuarios', 'comercio_e_industria']); const o = {}; for (const [k, v] of Object.entries(c.grandes_usuarios)) if (c.comercio_e_industria[k] > 0) o[k] = v + c.comercio_e_industria[k]; return o; }),
+    job('elec', async () => { const c = csvColumns(await get(URLS.elec), ['grandes_usuarios', 'comercio_e_industria']); const o = {}; for (const [k, v] of Object.entries(c.grandes_usuarios)) if (c.comercio_e_industria[k] > 0) o[k] = v + c.comercio_e_industria[k]; res.elecGU = c.grandes_usuarios; return o; }),
     job('cem', async () => csvColumns(await get(URLS.isac), ['isac_cemento_portland']).isac_cemento_portland),
     job('iva', async () => csvColumns(await get(URLS.tax), ['iva_dgi']).iva_dgi),
     job('ipc', async () => { const c = csvColumns(await get(URLS.ipc), ['ipc_nivel_general_nacional']).ipc_nivel_general_nacional; const M = ipcMonthlyChain(Object.entries(c).map(([date, index]) => ({ date, index }))); return Object.fromEntries(Object.entries(M).filter(([k]) => k >= FROM)); }),
@@ -44,7 +44,7 @@ export async function nowcastInputs(get) {
   if (n('elec') < 120 || n('cem') < 60) throw new Error(`insumos insuficientes (${warn.join('; ') || 'series cortas'})`);
   return {
     status: 'ok', source: 'Datos Argentina — CAMMESA, INDEC (ISAC insumos, EMAE), Secretaría de Hacienda (recaudación)', sourceUrl: 'https://datos.gob.ar/',
-    elecInd: r4(res.elec), cemIsac: r4(res.cem || {}), ivaDgi: r4(res.iva || {}), ipcIdx: r4(res.ipc || {}), emaeSa: r4(res.emae || {}),
+    elecInd: r4(res.elec), elecGU: r4(res.elecGU || {}), cemIsac: r4(res.cem || {}), ivaDgi: r4(res.iva || {}), ipcIdx: r4(res.ipc || {}), emaeSa: r4(res.emae || {}),
     ...(warn.length ? { warnings: warn } : {})
   };
 }

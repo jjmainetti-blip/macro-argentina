@@ -1,7 +1,7 @@
 // v219 · Anticipo del EMAE (sección Expectativas). Misma función en el navegador y en el Worker. S = fuentes fusionadas.
 // Tres indicadores, cada uno traducido a una estimación de la variación mensual desestacionalizada del EMAE para los
 // dos meses que INDEC todavía no publicó:
-//  · Macrodatos: regresión sobre cemento, electricidad (grandes usuarios + comercial/industrial) e IVA DGI, cada uno
+//  · Macrodatos: regresión sobre cemento, electricidad (Grandes Usuarios del MEM sin ALUAR, CAMMESA) e IVA DGI, cada uno
 //    desestacionalizado (variación mensual menos el promedio del mismo mes en los 5 años previos) + días hábiles.
 //    1ª estimación: cemento · 2ª: + electricidad · 3ª: + IVA DGI. Sin IGA.
 //  · IGA-OJF: su variación mensual desestacionalizada, tal cual.
@@ -51,7 +51,14 @@ function inputs(S) {
   for (const [t, v] of Object.entries(S?.emaeHistorical?.monthlySaMom || {})) if (YM.test(t) && num(v) !== null) target[t] = num(v);
   const iga = {}; for (const [t, r] of Object.entries(S?.igaHistorical?.monthly || {})) if (YM.test(t) && num(r?.momSa) !== null) iga[t] = num(r.momSa);
   const ila = {}; for (const [t, r] of Object.entries(S?.ilaHistorical?.monthly || {})) if (YM.test(t) && num(r?.mom) !== null) ila[t] = num(r.mom);
-  return { elec: N.elecInd || {}, cem, iva, target, iga, ila };
+  // Electricidad (v220): demanda de Grandes Usuarios del MEM sin ALUAR (CAMMESA, diaria, sale a los pocos días de cerrado el
+  // mes) desde 2017; antes, grandes usuarios de Datos Argentina, reescalados para empalmar en 2017. Sin CAMMESA, la serie
+  // de Datos Argentina (grandes usuarios + comercial/industrial).
+  let elec = N.elecInd || {};
+  const G = S?.cammesaDemand?.gumaExAluar || {}, GU = N.elecGU || {};
+  const ov = Object.keys(G).filter(k => k < '2018-01' && G[k] > 0 && GU[k] > 0);
+  if (Object.keys(G).length >= 48 && ov.length >= 6) { const sc = ov.reduce((s, k) => s + GU[k] / G[k], 0) / ov.length; elec = {}; for (const [k, v] of Object.entries(GU)) if (k < '2017-01') elec[k] = v; for (const [k, v] of Object.entries(G)) if (v > 0) elec[k] = v * sc; }
+  return { elec, cem, iva, target, iga, ila };
 }
 
 export const ZONES = { down: 'Probable baja', flat: 'Sin señal clara', up: 'Probable suba' };

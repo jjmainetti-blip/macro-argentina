@@ -69,3 +69,10 @@ Variación mensual s.e. (derivada del nivel): sin capacidad predictiva (MAE 1,4�
 - Integrado en v218 (public/emae-signal.js + src/api/nowcast-inputs.mjs).
 - v219: el IGA ya no se promedia con el modelo; se muestran por separado modelo (3 etapas), IGA e ILA. ILA: regresión
   EMAE s.e. sobre ILA mensual del mismo mes (corr 0,33; las estimaciones caen casi siempre en "sin señal clara").
+- v220 (24-oct): electricidad desde CAMMESA (bases diarias del informe "Comportamiento de la Demanda", GUMA + autogeneradores
+  sin ALUAR, mes completo disponible a los ~2 días). Prueba 2019–ago 2026, modelo cemento + electricidad: Datos Argentina
+  GU + comercial/industrial MAE 0,92 / corr 0,53; CAMMESA GUMA sin ALUAR (empalmada con GU antes de 2017) 0,94 / 0,46;
+  GUMA total 0,95 / 0,44; industrias + comercio 0,94 / 0,46; GUMA sin ALUAR + distribuidores 0,93 / 0,49.
+  Se elige GUMA sin ALUAR: pierde algo de ajuste (la serie de Datos Argentina incluye comercios/industrias medianas de las
+  distribuidoras, que CAMMESA no detalla a diario) a cambio de ~3 semanas de anticipación. Extender la serie de Datos
+  Argentina con el crecimiento de CAMMESA (sólo el último mes) da peor (corr 0,43): mezcla dos fuentes en la variación.
