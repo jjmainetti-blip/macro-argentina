@@ -589,6 +589,7 @@ async function arca(){
 }
 // v224: fechas de publicación del ICG verificadas (UTDT). Un mes nuevo sin fecha conocida no hereda la del anterior.
 const ICG_PUB_DATES={'2026-09':'2026-09-28'};
+function ymFromSpanishPeriodSrv(p){const M={ene:'01',feb:'02',mar:'03',abr:'04',may:'05',jun:'06',jul:'07',ago:'08',sep:'09',oct:'10',nov:'11',dic:'12'};const z=String(p||'').toLowerCase().match(/(ene|feb|mar|abr|may|jun|jul|ago|sep|oct|nov|dic)[a-z]*\s+(20\d{2})/);return z?`${z[2]}-${M[z[1]]}`:null;}
 async function icg(){
   const history={'2025-09':1.943966,'2025-10':2.10,'2025-11':2.47,'2025-12':2.46,'2026-01':2.40,'2026-02':2.38,'2026-03':2.30,'2026-04':2.02,'2026-05':1.99,'2026-06':2.07,'2026-07':1.94,'2026-08':2.06,'2026-09':1.94};
   // Backfill histórico público (fuente primaria UTDT). Resolver el dataset por catálogo,
@@ -646,11 +647,11 @@ async function icg(){
         history[x.ym]=x.value;
         // v224: la fecha de publicación sólo se informa si se conoce para ese mes; si no, el sitio usa la fecha en que detectó el dato.
         const pubDate=ICG_PUB_DATES[x.ym];
-        return {status:historicalError?'partial':'ok',source:'Universidad Torcuato Di Tella — ICG',sourceUrl:URLS.icg,...(pubDate?{publicationDate:pubDate}:{}),history,historicalCount:Object.keys(history).length,historicalError,latest:{value:x.value,mom:x.mom,period:x.period}};
+        return {status:historicalError?'partial':'ok',source:'Universidad Torcuato Di Tella — ICG',sourceUrl:URLS.icg,...(pubDate?{publicationDate:pubDate,publicationYm:x.ym}:{}),history,historicalCount:Object.keys(history).length,historicalError,latest:{value:x.value,mom:x.mom,period:x.period}};
       }
     }
   }catch{}
-  return {status:historicalError?'partial':'ok',source:'Universidad Torcuato Di Tella — ICG',sourceUrl:URLS.icg,publicationDate:'2026-09-28',history,historicalCount:Object.keys(history).length,historicalError,latest:{value:1.94,mom:-5.9,period:'sep 2026'},note:'Fallback verificado para septiembre 2026; el parser toma automáticamente la publicación más reciente cuando UTDT actualiza la página.'};
+  return {status:historicalError?'partial':'ok',source:'Universidad Torcuato Di Tella — ICG',sourceUrl:URLS.icg,publicationDate:'2026-09-28',publicationYm:'2026-09',history,historicalCount:Object.keys(history).length,historicalError,latest:{value:1.94,mom:-5.9,period:'sep 2026'},note:'Fallback verificado para septiembre 2026; el parser toma automáticamente la publicación más reciente cuando UTDT actualiza la página.'};
 }
 async function bcra(){
   const text=strip(await get(URLS.bcra));
@@ -1409,6 +1410,8 @@ const macroData=async(env={},ctx=null,request=null,opts={})=>{
   // nowcastInputs en 'leading', que pisaban a las nuevas en el navegador).
   for(const [name,old] of Object.entries(previous?.sources||{}))if(!out.sources[name]&&(group==='all'||names.includes(name)))out.sources[name]=old;
   repairHistorical(out.sources);
+  // v225: el snapshot conserva campos viejos al fusionar; la fecha de publicación del ICG sólo vale para su mes.
+  {const I=out.sources.icg;if(I?.latest){const ym=ymFromSpanishPeriodSrv(I.latest.period);if(I.publicationYm!==ym){delete I.publicationDate;delete I.publicationYm;}}}
   // v210: datos cargados a mano desde la pestaña "Sitio" (sólo el administrador).
   try{const OV=await readOverrides(env);const manual={};for(const g of group==='all'?Object.keys(GROUPS):[group])Object.assign(manual,applyOverrides(out.sources,g,OV.entries,stored?.manual));if(Object.keys(manual).length)out.manual=manual;}catch(e){console.warn('datos manuales',e);}
   alignCards(out.sources);

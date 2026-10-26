@@ -763,3 +763,7 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 ## v224 — Confianza en el gobierno primero y semáforo con el mes en curso
 - `icg` (macro-data): la fecha de publicación estaba fija en 2026-09-28 y la heredaba cualquier mes nuevo, así que el dato de octubre quedaba ordenado como si fuera de septiembre y no llegaba a "Último dato publicado". Ahora la fecha sólo se informa para meses verificados (`ICG_PUB_DATES`); un mes nuevo usa la fecha en que el sitio detectó el dato.
 - Semáforo económico: siempre 5 columnas, terminando en el mes más reciente con al menos un dato (antes empezaba a buscar en el mes anterior y pedía 3 indicadores). Con la confianza de octubre, las columnas pasan a jun–oct.
+
+## v225 — Confianza en el gobierno (orden) y compras del BCRA en cero
+- La v224 no alcanzaba: al fusionar con el snapshot guardado se conservaba la `publicationDate` vieja del ICG. Ahora la fecha viaja con su mes (`publicationYm`); el Worker la borra si no coincide con el último período y `releases.js` sólo la usa si coincide. Sin fecha de la fuente, la tarjeta usa la fecha en que se detectó el dato.
+- Compras del BCRA: los titulares de días sin compras ("no compró", "frenó las compras", "decidió no comprar reservas hoy") cuentan como US$ 0 M para esa rueda, en lugar de seguir mostrando la rueda anterior. La tarjeta dice "Sin compras el dd/mm/aaaa".

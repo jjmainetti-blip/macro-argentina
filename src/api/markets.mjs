@@ -95,12 +95,18 @@ let BCRA_FX={at:0,value:null};
 // distintos. Se marca como preliminar y se reemplaza por el dato oficial apenas el BCRA lo publica.
 const AR_OFFSET=-3*3600e3;
 const prevBizDay=d=>{const x=new Date(d+'T12:00:00Z');do{x.setUTCDate(x.getUTCDate()-1);}while([0,6].includes(x.getUTCDay()));return x.toISOString().slice(0,10);};
+export const BCRA_ZERO_RE=/(?:BCRA|Banco Central)\s+(?:[a-záéíóúñ]+\s+){0,2}?(?:no\s+(?:compró|adquirió|sumó|registró\s+compras)|frenó\s+(?:sus\s+|las\s+)?compras|decidió\s+no\s+comprar|cerró\s+sin\s+compras|se\s+mantuvo\s+al\s+margen)/i;
 export function bcraPressDays(rss){
   const votes={};
   for(const m of String(rss||'').matchAll(/<item>[\s\S]*?<title>([\s\S]*?)<\/title>[\s\S]*?<pubDate>([\s\S]*?)<\/pubDate>/g)){
     const title=m[1].replace(/<!\[CDATA\[|\]\]>/g,'').replace(/&amp;/g,'&').replace(/&quot;/g,'"'),pub=Date.parse(m[2]);if(!Number.isFinite(pub))continue;
     const head=title.replace(/\s+-\s+[^-]+$/,''),source=(title.match(/\s+-\s+([^-]+)$/)||[])[1]||'';
     if(/en lo que va|acumul|en la semana|en una semana|semanal/i.test(head))continue;
+    // v225: días sin compras ("El BCRA no compró…", "frenó las compras", "decidió no comprar reservas hoy") → 0.
+    if(BCRA_ZERO_RE.test(head)&&!/ritmo|en lo que va|semana|en el mes|en el año|ayer/i.test(head)){
+      const ar=new Date(pub+AR_OFFSET);let day=ar.toISOString().slice(0,10);if(ar.getUTCHours()<15)day=prevBizDay(day);
+      if(![0,6].includes(new Date(day+'T12:00:00Z').getUTCDay()))((votes[day]??={})[0]??=new Set()).add(source.trim().toLowerCase()||title);
+      continue;}
     const x=head.match(/(?:BCRA|Banco Central)\s+(?:[a-záéíóúñ]+\s+){0,3}?(compró|adquirió|sumó|vendió|se desprendió de)\s+(?:otros\s+|unos?\s+)?(?:(?:US\$|U\$S|u\$s|USD|US)\s?)?([\d.,]+)\s*(?:millones|milones|M)\b(?:\s+de\s+d[oó]lares)?(.{0,40})/i);if(!x)continue;
     if(/^\s*(en|durante)\s+(la|el|lo|una|dos|tres|cuatro|cinco|\d+)\s+(semana|mes|d[ií]as|ruedas|jornadas|año)/i.test(x[3]))continue;
     if(!/(US\$|U\$S|u\$s|USD|US|d[oó]lares)/i.test(x[0]))continue;
