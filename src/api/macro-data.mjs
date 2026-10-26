@@ -587,6 +587,8 @@ async function arca(){
   }catch{}
   return {status:'ok',source:'ARCA — Recursos Tributarios',sourceUrl:URLS.arca,history,historyMeasure:'Variación interanual nominal (%)',latest:{value:21358918,yoy:38.3,period:'septiembre 2026',ym:'2026-09',published:'2026-10-01'}};
 }
+// v224: fechas de publicación del ICG verificadas (UTDT). Un mes nuevo sin fecha conocida no hereda la del anterior.
+const ICG_PUB_DATES={'2026-09':'2026-09-28'};
 async function icg(){
   const history={'2025-09':1.943966,'2025-10':2.10,'2025-11':2.47,'2025-12':2.46,'2026-01':2.40,'2026-02':2.38,'2026-03':2.30,'2026-04':2.02,'2026-05':1.99,'2026-06':2.07,'2026-07':1.94,'2026-08':2.06,'2026-09':1.94};
   // Backfill histórico público (fuente primaria UTDT). Resolver el dataset por catálogo,
@@ -642,7 +644,9 @@ async function icg(){
       // verificado más reciente por el último mes que todavía figure en esa página.
       if(!knownYm || x.ym>=knownYm){
         history[x.ym]=x.value;
-        return {status:historicalError?'partial':'ok',source:'Universidad Torcuato Di Tella — ICG',sourceUrl:URLS.icg,publicationDate:'2026-09-28',history,historicalCount:Object.keys(history).length,historicalError,latest:{value:x.value,mom:x.mom,period:x.period}};
+        // v224: la fecha de publicación sólo se informa si se conoce para ese mes; si no, el sitio usa la fecha en que detectó el dato.
+        const pubDate=ICG_PUB_DATES[x.ym];
+        return {status:historicalError?'partial':'ok',source:'Universidad Torcuato Di Tella — ICG',sourceUrl:URLS.icg,...(pubDate?{publicationDate:pubDate}:{}),history,historicalCount:Object.keys(history).length,historicalError,latest:{value:x.value,mom:x.mom,period:x.period}};
       }
     }
   }catch{}

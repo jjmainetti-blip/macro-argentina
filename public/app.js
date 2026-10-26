@@ -1482,9 +1482,10 @@ function semaforoRows(S){
 function renderSemaforo(){
   const box=document.getElementById('semaforoTable');if(!box)return;
   let rows=[];try{rows=semaforoRows(kpiSourceCache||{});}catch(e){console.warn('semaforo',e);return;}
-  // Columnas: los 5 meses más recientes con algún dato (el último mes con datos de al menos 3 indicadores).
+  // v224: columnas = siempre 5 meses, terminando en el mes más reciente con al menos un dato publicado
+  // (incluye el mes en curso: la confianza en el gobierno se publica dentro del mismo mes).
   const cur=new Date(Date.now()-3*3600e3),curYm=`${cur.getUTCFullYear()}-${String(cur.getUTCMonth()+1).padStart(2,'0')}`;
-  let last=null;for(let k=ymShift(curYm,-1),i=0;i<6&&!last;i++,k=ymShift(k,-1)){if(rows.filter(r=>{try{return r.fn(k)}catch{return null}}).length>=3)last=k;}
+  let last=null;for(let k=curYm,i=0;i<7&&!last;i++,k=ymShift(k,-1)){if(rows.some(r=>{try{return r.fn(k)}catch{return null}}))last=k;}
   if(!last){box.innerHTML='<p class="chart-empty">Cargando indicadores…</p>';return;}
   const months=[4,3,2,1,0].map(d=>ymShift(last,-d));
   const LBL={green:'Favorable',yellow:'Neutral',red:'Desfavorable'},esc=t=>String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
