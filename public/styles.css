@@ -298,3 +298,12 @@ body.modal-open{overflow:hidden}
 .now-card.now-up>strong{color:var(--green)}.now-card.now-down>strong{color:var(--red)}.now-card.now-flat>strong{color:#a07610}.now-card>strong{font-size:26px}
 .now-list{list-style:none;margin:12px 0 0;padding:0;display:grid;gap:10px}.now-list li{display:grid;gap:2px;padding-top:10px;border-top:1px solid var(--line);font-size:12px}.now-list b{font-size:12px}.now-list span{font-weight:800}.now-list span.now-up{color:var(--green)}.now-list span.now-down{color:var(--red)}.now-list span.now-flat{color:#a07610}.now-list small{color:var(--muted);font-size:11px;line-height:1.4}.now-foot{font-size:10px!important}
 @media(max-width:900px){.nowcast-grid{grid-template-columns:1fr}.nowcast-head{flex-direction:column;align-items:start}.nowcast-head p{text-align:left}}
+/* v226 · Conversor de monedas (pestaña Dólar) */
+.fxc-card{margin-top:22px}.fxc-controls{display:flex;flex-wrap:wrap;gap:6px 22px;margin-top:16px}.fxc-controls .inflation-controls{margin:0}
+.fxc-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr) 44px minmax(0,1.2fr);gap:12px;align-items:end;margin-top:18px}
+.fxc-field{display:grid;gap:6px;font-size:11px;font-weight:800;color:#40556e}.fxc-field input,.fxc-field select{width:100%;padding:12px;border:1px solid #cfdbe8;border-radius:9px;background:#fff;font:inherit;color:var(--ink)}
+.fxc-swap{height:46px;width:44px;border:1px solid #cfdbe8;border-radius:9px;background:#fff;color:var(--blue);font-size:18px;font-weight:800;cursor:pointer}.fxc-swap:hover{background:var(--sky)}
+.fxc-result strong{font-size:26px}.fxc-result small{color:var(--muted)}
+.fxc-quotes{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:14px}.fxc-quote{display:grid;gap:2px;text-align:left;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:#fff;font:inherit;font-size:12px;color:var(--muted);cursor:pointer}.fxc-quote b{color:var(--ink);font-size:13px}.fxc-quote.active{border-color:var(--blue);box-shadow:0 0 0 2px rgba(11,91,211,.15)}.fxc-quote.active b{color:var(--blue)}
+.fxc-note{margin:14px 0 0;color:var(--muted);font-size:12px}
+@media(max-width:700px){.fxc-row{grid-template-columns:1fr 44px}.fxc-row .fxc-field:first-child{grid-column:1/-1}.fxc-row .fxc-field:last-child{grid-column:1/-1}.fxc-swap{grid-row:2;grid-column:2}.fxc-quotes{grid-template-columns:repeat(2,minmax(0,1fr))}}

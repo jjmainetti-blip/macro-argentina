@@ -7,6 +7,7 @@ import reservesData, { imfBackfill } from './api/reserves.mjs';
 import tradeMonthly from './api/trade-monthly.mjs';
 import cementMonthly from './api/cement-monthly.mjs';
 import uvaLoans from './api/uva-loans.mjs';
+import fxConverter from './api/fx-converter.mjs';
 import { accountApi, runReminders, remindersStatus } from './api/account.mjs';
 import { digestTick, checkAlerts, digestStatus } from './api/digest.mjs';
 import { indecXStatus } from './api/indec-x.mjs';
@@ -63,6 +64,10 @@ export default {
     // v139: tasas de créditos hipotecarios UVA por banco (BCRA, Régimen de Transparencia).
     if (request.method === 'GET' && url.pathname === '/api/uva-loans') {
       return withHeaders(await uvaLoans(env, ctx));
+    }
+    // v226: conversor de monedas (pestaña Dólar): dólar BNA/MEP/blue/CCL y monedas contra el dólar. 5 min fresco.
+    if (request.method === 'GET' && url.pathname === '/api/fx-converter') {
+      return withHeaders(await edgeSwr(ctx, 'fx-converter', 300, 86400, () => fxConverter()));
     }
     if (request.method === 'GET' && url.pathname === '/api/trade-monthly') {
       return withHeaders(await edgeSwr(ctx, 'trade-monthly', 3600, 86400 * 7, () => tradeMonthly()));

@@ -767,3 +767,10 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 ## v225 — Confianza en el gobierno (orden) y compras del BCRA en cero
 - La v224 no alcanzaba: al fusionar con el snapshot guardado se conservaba la `publicationDate` vieja del ICG. Ahora la fecha viaja con su mes (`publicationYm`); el Worker la borra si no coincide con el último período y `releases.js` sólo la usa si coincide. Sin fecha de la fuente, la tarjeta usa la fecha en que se detectó el dato.
 - Compras del BCRA: los titulares de días sin compras ("no compró", "frenó las compras", "decidió no comprar reservas hoy") cuentan como US$ 0 M para esa rueda, en lugar de seguir mostrando la rueda anterior. La tarjeta dice "Sin compras el dd/mm/aaaa".
+
+## v226 — Conversor de monedas en la pestaña Dólar
+- Nueva tarjeta "Conversor de monedas" debajo del gráfico del dólar (`public/fx-converter.js`, estilos `.fxc-*`).
+- Dólar de referencia: BNA, MEP, blue o CCL; cotización de compra, venta o promedio. Monedas: ARS, USD y 15 más (EUR, BRL, UYU, CLP, PYG, BOB, PEN, COP, MXN, GBP, CHF, JPY, CNY, CAD, AUD).
+- Otras monedas usan el dólar elegido como puente: pesos por unidad = dólar elegido ÷ (unidades de la moneda por 1 USD).
+- Datos: `/api/fx-converter` (`src/api/fx-converter.mjs`): DolarApi (BNA vía Ámbito, MEP, blue, CCL) y ExchangeRate-API (open.er-api.com), con el BCE (Frankfurter) de respaldo. Caché de borde de 5 minutos.
+- Recuerda en el navegador el último dólar, punta y par de monedas elegidos.

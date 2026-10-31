@@ -14,12 +14,12 @@
   <meta name="theme-color" content="#071b35">
   <title>Macrodatos | Indicadores económicos de Argentina</title>
   <link rel="icon" type="image/svg+xml" href="favicon.svg?v=174">
-  <link rel="stylesheet" href="styles.css?v=219">
+  <link rel="stylesheet" href="styles.css?v=226">
   <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
   <script type="module" src="releases.js?v=225"></script>
   <script type="module" src="emae-signal.js?v=222"></script>
   <script defer src="tabs.js?v=173"></script>
-  <script defer src="app.js?v=225"></script><script defer src="share.js?v=189"></script>
+  <script defer src="app.js?v=225"></script><script defer src="fx-converter.js?v=226"></script><script defer src="share.js?v=189"></script>
   <script defer src="uva-calc.js?v=139b"></script>
   <script defer src="update-schedule.js?v=152"></script>
   <script defer src="account.js?v=210"></script>
@@ -116,6 +116,22 @@
     <div id="fxSummary" class="period-summary"></div>
     <div class="method-note"><strong>Metodología:</strong> se prioriza la cotización libre/de mercado cuando existió. La cotización oficial se muestra por separado y la brecha es (libre/oficial − 1) × 100. Los períodos de controles se documentan como una capa opcional. No se supone que oficial = libre cuando existieron restricciones.</div>
   </div>
+  <div class="chart-card fxc-card" id="fxConv">
+    <div class="chart-meta"><div><h3>Conversor de monedas</h3><p>Pesos, dólares y otras monedas, con el dólar que elijas como base.</p></div><span id="fxcSource">DolarApi · ExchangeRate-API</span></div>
+    <div class="fxc-controls">
+      <div class="inflation-controls"><span>Dólar</span><div class="segmented compact" role="group" aria-label="Dólar de referencia"><button type="button" class="active" data-fxc-dollar="bna">BNA</button><button type="button" data-fxc-dollar="mep">MEP</button><button type="button" data-fxc-dollar="blue">Blue</button><button type="button" data-fxc-dollar="ccl">CCL</button></div></div>
+      <div class="inflation-controls"><span>Cotización</span><div class="segmented compact" role="group" aria-label="Punta de la cotización"><button type="button" data-fxc-side="buy">Compra</button><button type="button" class="active" data-fxc-side="sell">Venta</button><button type="button" data-fxc-side="mid">Promedio</button></div></div>
+    </div>
+    <div class="fxc-row">
+      <label class="fxc-field">Monto<input id="fxcAmount" type="text" inputmode="decimal" autocomplete="off" value="1.000"></label>
+      <label class="fxc-field">De<select id="fxcFrom"><option value="USD">USD · Dólar</option><option value="ARS">ARS · Peso argentino</option></select></label>
+      <button type="button" class="fxc-swap" id="fxcSwap" aria-label="Invertir monedas" title="Invertir monedas">⇄</button>
+      <label class="fxc-field">A<select id="fxcTo"><option value="ARS">ARS · Peso argentino</option><option value="USD">USD · Dólar</option></select></label>
+    </div>
+    <div class="result fxc-result" id="fxcResult" aria-live="polite">Cargando cotizaciones…</div>
+    <div id="fxcQuotes" class="fxc-quotes" aria-label="Cotizaciones del dólar"></div>
+    <p class="fxc-note" id="fxcNote">Para otras monedas se usa el dólar elegido como puente: el precio en pesos de 1 unidad es el dólar elegido dividido por cuántas unidades de esa moneda vale 1 USD en el mercado internacional.</p>
+  </div>
 </section>
 
 <section class="section alt" id="historicos" data-tab="historicos">
@@ -209,7 +225,7 @@
 </section>
 
 </main>
-<footer><div class="brand"><span class="brand-mark" aria-hidden="true"><img src="logo.svg?v=174" alt="" width="34" height="34"></span><span><strong>MACRODATOS</strong><small>ECONOMÍA ARGENTINA</small></span></div><p>Información económica para análisis. No constituye asesoramiento financiero.</p><a href="#inicio">Volver arriba ↑</a><span class="build-version">macrodatos.ar · v225</span></footer>
+<footer><div class="brand"><span class="brand-mark" aria-hidden="true"><img src="logo.svg?v=174" alt="" width="34" height="34"></span><span><strong>MACRODATOS</strong><small>ECONOMÍA ARGENTINA</small></span></div><p>Información económica para análisis. No constituye asesoramiento financiero.</p><a href="#inicio">Volver arriba ↑</a><span class="build-version">macrodatos.ar · v226</span></footer>
 
 <div id="kpiModal" class="kpi-modal" hidden aria-hidden="true">
   <div class="kpi-modal-backdrop" data-kpi-close></div>
