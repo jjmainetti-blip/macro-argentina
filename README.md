@@ -774,3 +774,12 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 - Otras monedas usan el dólar elegido como puente: pesos por unidad = dólar elegido ÷ (unidades de la moneda por 1 USD).
 - Datos: `/api/fx-converter` (`src/api/fx-converter.mjs`): DolarApi (BNA vía Ámbito, MEP, blue, CCL) y ExchangeRate-API (open.er-api.com), con el BCE (Frankfurter) de respaldo. Caché de borde de 5 minutos.
 - Recuerda en el navegador el último dólar, punta y par de monedas elegidos.
+
+## v227 — Recaudación de ARCA desde X
+- `src/api/arca-x.mjs`: lee las publicaciones de @Arca_informa (texto y descripción de imágenes) con el mismo token de X que el BCRA y el INDEC. Sólo consulta cuando se espera el dato: el día del calendario (calendar-data, ARCA) y hasta 3 días hábiles después si se demora; de 18 a 23 h; una consulta cada 5 minutos como máximo; deja de consultar cuando captura el mes esperado. Estado en KV `x:arca`; diagnóstico en `/api/status` (`xArca`).
+- `arca()` (macro-data): el texto de X se interpreta con el mismo lector de la novedad de ARCA (`parseArcaRelease`); si trae un mes más nuevo que la novedad del sitio, manda X (fuente "ARCA — publicación en X", fecha de publicación = día del posteo).
+- `pickCronGroup`: de 18 a 23 h, mientras se espera la recaudación, una de cada dos revisiones programadas va a su grupo.
+
+## v228 — Recaudación de ARCA: lectura de la placa en X
+- ARCA publica el dato en una imagen. `readArcaCard` (arca-x.mjs) lee la placa con Workers AI (binding `AI`, mismos modelos que la placa del BCRA) y devuelve mes, año, monto y variación interanual; se agrega al texto del posteo como frase normalizada, que interpreta `parseArcaRelease`.
+- Sólo se leen imágenes de posteos que hablan de recaudación / ingresos tributarios y cuyo texto no trae ya el dato; como máximo 3 imágenes por consulta. Diagnóstico en `/api/status` → `xArca` (`via: imagen|texto`, `aiError`).

@@ -89,6 +89,9 @@ export function pickCronGroup(statuses, groups, tick) {
   const ar = new Date(Date.now() - 3 * 3600e3), h = ar.getUTCHours(), today = ar.toISOString().slice(0, 10);
   const dueToday = [...new Set(statuses.filter(s => s.state === 'esperando' && s.expected === today).map(s => s.group))].filter(g => groups.includes(g));
   if (dueToday.length && h >= 16 && h < 19) return { group: dueToday[tick % dueToday.length], reason: 'publicación de hoy' };
+  // v227: ARCA anuncia la recaudación en X desde las 18 h: hasta las 23 h, una de cada dos revisiones va a su grupo.
+  const arcaWait = statuses.find(s => s.key === 'arca' && s.state === 'esperando' && s.expected && s.expected <= today);
+  if (arcaWait && groups.includes(arcaWait.group) && h >= 18 && h < 23 && tick % 2 === 0) return { group: arcaWait.group, reason: 'recaudación en X' };
   const waiting = [...new Set(statuses.filter(s => s.state === 'esperando').map(s => s.group))].filter(g => groups.includes(g));
   if (waiting.length && tick % 3 !== 2) return { group: waiting[(tick - Math.floor(tick / 3)) % waiting.length], reason: 'esperando publicación' };
   const others = groups.filter(g => g !== 'core');

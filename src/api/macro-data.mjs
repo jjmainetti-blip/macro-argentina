@@ -11,6 +11,7 @@ import { cardStatus, CARDS, periodEndYm, todayAR, ymShift } from './freshness.mj
 import { EVENTS } from './calendar-data.mjs';
 import { ipcMonthlyChain, ipcAnnualAvg, ipcAnnualAvgInflation } from './ipc-chain.mjs';
 import { indecXText, parseIndecIca } from './indec-x.mjs';
+import { arcaXPosts } from './arca-x.mjs';
 import { nowcastInputs } from './nowcast-inputs.mjs';
 import { equilibraActivity } from './equilibra.mjs';
 /* Macrodatos (antes Macro Argentina) v8 — stable server-side data contract.
@@ -187,6 +188,7 @@ async function saMomFromLevels(id,start='2020-06-01'){const x=await seriesRows(i
 // índice ... cayó 3,2% respecto a igual mes de 2025 ... la serie desestacionalizada subió 1,9% ..."). Se usa para
 // incorporar el mes nuevo ni bien sale; cuando Datos Argentina lo publica, su serie lo reemplaza.
 let INDEC_NEWS={at:0,text:''};
+let ARCA_X_POSTS=[]; // v227: publicaciones de @Arca_informa en X (se cargan antes de correr los jobs)
 let INDEC_X_TEXT=''; // v205: publicaciones de @INDECArgentina en X (se cargan antes de correr los jobs)
 async function indecNewsText(){try{const t=await indecPortadaText();return INDEC_X_TEXT?`${INDEC_X_TEXT} . ${t}`:t;}catch(e){if(INDEC_X_TEXT)return INDEC_X_TEXT;throw e;}}
 async function indecPortadaText(){
@@ -575,6 +577,7 @@ async function arca(){
   // Antes se leía siempre la misma página (id fija), por eso el sitio quedaba en el mes anterior.
   // Ahora se lee la última novedad conocida y su recuadro "Últimas novedades", se siguen los enlaces
   // de recaudación y se toma el mes más reciente. El dato se agrega también al histórico.
+  let pageBest=null;
   try{
     const base=URLS.arca,pages=[{url:base,html:await get(base)}];
     const re=/titulo-noticia-anterior">\s*Recaudaci(?:ó|o|&oacute;)n tributaria de [^<]*<\/h3>\s*<a href="(ver\.aspx\?id=(\d+))"/gi;let m;const seen=new Set([base]);
@@ -583,8 +586,13 @@ async function arca(){
     let best=null;
     for(const pg of pages){const text=strip(pg.html);const pub=text.match(/publicado:?\s*(\d{1,2})\/(\d{1,2})\/(20\d{2})/i);const ref=pub?new Date(Date.UTC(+pub[3],+pub[2]-1,+pub[1])):new Date();
       const p=parseArcaRelease(text,ref);if(p&&(!best||p.ym>best.ym))best={...p,url:pg.url,published:pub?ref.toISOString().slice(0,10):null};}
-    if(best){history[best.ym]=best.yoy;return {status:'ok',source:'ARCA — Recursos Tributarios',sourceUrl:best.url,history,historyMeasure:'Variación interanual nominal (%)',latest:{value:best.value,yoy:best.yoy,period:best.period,ym:best.ym,published:best.published}};}
+    if(best)pageBest=best;
   }catch{}
+  // v227: la publicación de ARCA en X (@Arca_informa) llega antes que la novedad del sitio. Manda la del mes más nuevo.
+  let xBest=null;
+  for(const p of ARCA_X_POSTS||[]){try{const r=parseArcaRelease(p.text,new Date(p.at));if(r&&(!xBest||r.ym>xBest.ym))xBest={...r,url:`https://x.com/Arca_informa/status/${p.id}`,published:new Date(Date.parse(p.at)-3*3600e3).toISOString().slice(0,10),viaX:true};}catch{}}
+  const best=xBest&&(!pageBest||xBest.ym>pageBest.ym)?xBest:pageBest;
+  if(best){history[best.ym]=best.yoy;return {status:'ok',source:best.viaX?'ARCA — publicación en X (@Arca_informa)':'ARCA — Recursos Tributarios',sourceUrl:best.url,history,historyMeasure:'Variación interanual nominal (%)',latest:{value:best.value,yoy:best.yoy,period:best.period,ym:best.ym,published:best.published,...(best.viaX?{viaX:true}:{})}};}
   return {status:'ok',source:'ARCA — Recursos Tributarios',sourceUrl:URLS.arca,history,historyMeasure:'Variación interanual nominal (%)',latest:{value:21358918,yoy:38.3,period:'septiembre 2026',ym:'2026-09',published:'2026-10-01'}};
 }
 // v224: fechas de publicación del ICG verificadas (UTDT). Un mes nuevo sin fecha conocida no hereda la del anterior.
@@ -1399,6 +1407,7 @@ const macroData=async(env={},ctx=null,request=null,opts={})=>{
   const previous=mergeSnapshot({version:131,sources:bundled},stored||{});
   const out={version:131,group,generatedAt:new Date().toISOString(),snapshotMode:env?.MACRO_STORE?.get?'kv+bundled':'bundled+isolate',sources:{}};
   try{INDEC_X_TEXT=await indecXText(env);}catch{}
+  if(names.includes('arca'))try{ARCA_X_POSTS=await arcaXPosts(env,(t,d)=>parseArcaRelease(t,d));}catch{}
   const results=await Promise.allSettled(names.map(n=>Promise.resolve().then(JOBS[n])));
   results.forEach((j,i)=>{
     const name=names[i],old=previous?.sources?.[name];
