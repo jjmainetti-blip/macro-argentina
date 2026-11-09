@@ -800,3 +800,6 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 - Nuevo grupo `mortgage` (`mortgageCredit` + `mortgageFlows`); `mortgageCredit` sale de `markets`. En el navegador ambas fuentes se toman sólo de su grupo.
 - Tarjeta: créditos nuevos del último mes en USD, en pesos y variación interanual en USD constantes (señal ±2%); modal con los últimos 60 meses en barras. También semáforo, agenda (publicación ~día 5 del mes siguiente) y resumen diario. Octubre de 2026: US$ 333 M ($ 482.329 M; UVA $ 438.148 M), −19% interanual en USD constantes.
 - La serie histórica sigue mostrando el stock (USD constantes y % del PIB).
+
+## v233 — Créditos hipotecarios: sólo UVA (error 1102)
+- El grupo `mortgage` fallaba con "Worker exceeded resource limits" (1102): leer `preser_mon.xls` (≈25 MB) superaba la memoria del Worker. Se dejó de leer; la tarjeta muestra los créditos hipotecarios UVA nuevos de cada mes (`preser_uva.xls`), hoy cerca del 90% del total (octubre 2026: $ 438.148 M de $ 482.329 M; US$ 287 M).

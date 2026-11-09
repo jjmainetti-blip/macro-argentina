@@ -1134,8 +1134,8 @@ async function mortgageFlows(){
   let uva={},tradArs={},tradUsd={},tradErr=null;
   {const R=preserRows(await bcraXls('preser_uva.xls'),['Datos']);uva=preserCol(R.Datos,3);}
   if(!Object.keys(uva).length)throw new Error('preser_uva: sin montos');
-  try{let buf=await bcraXls('preser_mon.xls');const R=preserRows(buf,['Montos_$_sector_privado','Montos_u$s_sector_privado']);buf=null;
-    tradArs=preserCol(R['Montos_$_sector_privado'],51);tradUsd=preserCol(R['Montos_u$s_sector_privado'],51);}catch(e){tradErr=String(e?.message||e).slice(0,120);}
+  // v233: preser_mon.xls (≈25 MB, hipotecarios tradicionales) superaba la memoria del Worker (error 1102) y tumbaba todo el
+  // grupo: se dejó de leer. Los créditos UVA son hoy ~90% de los hipotecarios nuevos (octubre 2026: $ 438.148 M de $ 482.329 M).
   let fxM={};try{fxM=monthlyAvg(await bcraDaily(5,'2002-03-01'));}catch{}
   const fxAt=ym=>ym<'2002-01'?1:FX_2002_EARLY_AVG[ym]??fxM[ym]??null;
   let usM={};try{usM=(await usCpiMonthly()).monthly||{};}catch{}
@@ -1149,10 +1149,9 @@ async function mortgageFlows(){
     const c=cpiAt(ym);if(c&&base)totalUsdConst[ym]=round(t/x*base/c,1);
   }
   // Si preser_mon se atrasa respecto de preser_uva, los meses sin tradicionales quedan marcados (sólo UVA).
-  const lastTrad=Object.keys(tradArs).sort().at(-1)||null,uvaOnly=Object.keys(uva).filter(k=>!lastTrad||k>lastTrad);
-  return {status:'ok',source:'BCRA — montos operados de préstamos hipotecarios (UVA y tradicionales, en pesos y en dólares) · A3500 · CPI-U',sourceUrl:'https://www.bcra.gob.ar/tasas-de-interes/',
+  return {status:'ok',source:'BCRA — montos operados de préstamos hipotecarios UVA · A3500 · CPI-U',sourceUrl:'https://www.bcra.gob.ar/tasas-de-interes/',
     cpiBase:baseYm||null,monthlyUva:uva,monthlyTradArs:tradArs,monthlyTradUsd:tradUsd,monthlyTotalArs:totalArs,monthlyTotalUsd:totalUsd,monthlyTotalUsdConst:totalUsdConst,monthlyUvaShare:uvaShare,
-    ...(uvaOnly.length?{uvaOnlyMonths:uvaOnly}:{}),...(tradErr?{tradError:tradErr}:{})};
+    uvaOnly:true};
 }
 async function arrearsFromOfficialWorkbook(){
   // v114: hoja "Calidad de Cartera (por líneas)": secciones "1. Total Sector Privado", "2. Familias - Total", "3. Empresas - Total";
