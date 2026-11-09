@@ -815,3 +815,8 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 - Desde el 19/10/2026 el Merval lo calcula MSCI y la fuente (zion.ar) lo publica en una base nueva (≈3,5% del nivel del S&P Merval), incluso para los días anteriores. Al mezclarlo con el histórico S&P (`markets-daily.json`) la serie histórica mostraba una caída de ~96% el 1/10/2025.
 - `app.js` guarda por separado el histórico S&P y el dato nuevo y los empalma (`spliceMerval`): el S&P se multiplica por el cociente MSCI/S&P del último día en común (hoy 30/09/2026: 0,03503 en puntos y 0,03486 en USD) y desde ese día se usa el MSCI Merval. Las variaciones quedan intactas y el último valor coincide con la cotización actual. Si no hubiera día en común se usa ese cociente fijo.
 - Aplica a puntos, USD y USD constantes (TCR). Subtítulos y metodología lo aclaran.
+
+## v236 — Tasa de interés: anual, mensual y diaria
+- `financialHistorical.interestRate` suma `monthly.nominal` (TNA promedio del mes), `monthly.real` (tasa real del mes anualizada: ((1+TNA×30/365)/(1+π_mes))^12 − 1) y `daily` (TNA de cada día hábil, BCRA var. 12).
+- En Series históricas, la tasa tiene selector Anual / Mensual / Diaria; la diaria es sólo nominal (el botón "Real" se desactiva).
+- Se quitó la "variación acumulada" de la tasa: ahora el resumen muestra promedio, máximo y mínimo del período elegido.

@@ -386,13 +386,18 @@ async function financialHistorical(){
   // v201: tasa real = rendimiento de renovar el plazo fijo a 30 días cada mes del año (TNA del mes × 30/365) contra la
   // inflación de esos mismos meses (cadena mensual del IPC): ∏(1+i_m)/∏(1+π_m) − 1. Si al año le faltan meses de tasa,
   // se usa Fisher con la tasa promedio y la inflación promedio del año.
-  try{let bc={},bcUrl=null,bcM={};try{const d=await bcraDaily(12,'1990-01-01');bc=annualAvg(d);bcM=monthlyAvg(d);bcUrl='https://api.bcra.gob.ar/estadisticas/v4.0/monetarias/12';}catch(e){errors.push('tasa BCRA: '+e.message);}
+  try{let bc={},bcUrl=null,bcM={},bcD={};try{const d=await bcraDaily(12,'1990-01-01');bcD=d;bc=annualAvg(d);bcM=monthlyAvg(d);bcUrl='https://api.bcra.gob.ar/estadisticas/v4.0/monetarias/12';}catch(e){errors.push('tasa BCRA: '+e.message);}
     let x=null;try{x=await seriesRows('89.1_TIPF35D_0_0_35',{start:'1990-01-01'});}catch(e){if(!Object.keys(bc).length)throw e;}
     result.interestRate.nominal=fillMissing({...bc},x?annualAvgGeneric(x.rows.map(r=>({fecha:r.date,valor:r.value}))):{});result.interestRate.source=bcUrl?'BCRA — tasa de depósitos a plazo fijo a 30 días (API de Estadísticas)':'Datos Argentina (respaldo)';x={url:bcUrl||x.url};const IM=await liveIpcChain(),INF=ipcAnnualAvgInflation(IM);
     for(const [y,i] of Object.entries(result.interestRate.nominal)){let g=1,ok=true;
       for(let m=1;m<=12;m++){const k=`${y}-${String(m).padStart(2,'0')}`,pk=m===1?`${+y-1}-12`:`${y}-${String(m-1).padStart(2,'0')}`;if(!Number.isFinite(bcM[k])||!IM[k]||!IM[pk]){ok=false;break;}g*=(1+bcM[k]/100*30/365)/(IM[k]/IM[pk]);}
       if(ok){result.interestRate.real[y]=round((g-1)*100,2);continue;}
-      const pi=INF[y];if(pi==null)continue;result.interestRate.real[y]=round(((1+i/100)/(1+pi/100)-1)*100,2);}result.interestRate.sourceUrl=x.url;if(Object.keys(result.interestRate.nominal).length<10)throw new Error('cobertura tasa insuficiente');}catch(e){errors.push('tasa: '+e.message)}
+      const pi=INF[y];if(pi==null)continue;result.interestRate.real[y]=round(((1+i/100)/(1+pi/100)-1)*100,2);}result.interestRate.sourceUrl=x.url;
+    // v236: además del promedio anual, la serie mensual (TNA promedio del mes y tasa real del mes, anualizada como
+    // rendimiento efectivo de renovar 12 veces) y la diaria (TNA de cada día hábil, sin promediar).
+    {const mn={},mr={};for(const [k,i] of Object.entries(bcM)){if(!Number.isFinite(i))continue;mn[k]=round(i,2);const [yy,mm]=k.split('-').map(Number),pk=mm===1?`${yy-1}-12`:`${yy}-${String(mm-1).padStart(2,'0')}`;if(IM[k]&&IM[pk]){const g=(1+i/100*30/365)/(IM[k]/IM[pk]);mr[k]=round((g**12-1)*100,2);}}
+     result.interestRate.monthly={nominal:mn,real:mr};const dd={};for(const [d,v] of Object.entries(bcD))if(/^\d{4}-\d{2}-\d{2}$/.test(d)&&Number.isFinite(Number(v)))dd[d]=round(Number(v),2);result.interestRate.daily=dd;}
+    if(Object.keys(result.interestRate.nominal).length<10)throw new Error('cobertura tasa insuficiente');}catch(e){errors.push('tasa: '+e.message)}
   result.errors=errors; if(!Object.keys(result.countryRisk).length&&!Object.keys(result.mervalUsdCcl).length&&!Object.keys(result.freeDollar.nominal).length&&!Object.keys(result.interestRate.nominal).length)throw new Error(errors.join('; ')||'sin series financieras');
   return result;
 }
