@@ -1120,6 +1120,40 @@ async function mortgageCredit(){
     lastDay,cpiBase:baseYm||null,monthlyTotalArs:totalArs,monthlyUsd:usdCur,monthlyUsdConst:usdConst,monthlyUsdShare:usdShare,quarterlyPctGdp:pctQ,annualPctGdp:pctA,
     ...(usd.status!=='fulfilled'?{warning:'sin préstamos en dólares'}:{}),...(fx.status!=='fulfilled'?{warningFx:'sin tipo de cambio A3500'}:{})};
 }
+// v232 · Créditos hipotecarios NUEVOS por mes (montos operados, BCRA — Tasas de interés por préstamos al sector privado):
+// UVA (preser_uva.xls, "Balance flows" del total de préstamos hipotecarios UVA, desde 2016) + hipotecarios tradicionales en
+// pesos y en dólares (preser_mon.xls, hoja de montos del sector privado, columna "Mortgage loans · Total", desde 1993).
+// Miles de $ / miles de US$ → millones. A dólares con el mayorista A3500 promedio del mes (hasta 2001, 1 a 1) y a dólares
+// constantes con el CPI-U. preser_mon pesa ~25 MB: se lee aparte, sólo sus dos hojas, y si falla queda el dato UVA.
+const BCRA_XLS='https://www.bcra.gob.ar/archivos/Pdfs/PublicacionesEstadisticas/';
+const FX_2002_EARLY_AVG={'2002-01':1.70,'2002-02':2.08};
+function preserRows(buf,sheets){const wb=XLSX.read(buf,{type:'array',dense:true,sheets,cellStyles:false,cellHTML:false,cellFormula:false,cellText:false,cellDates:false});return Object.fromEntries(sheets.map(n=>[n,wb.Sheets[n]?XLSX.utils.sheet_to_json(wb.Sheets[n],{header:1,raw:true,defval:null}):[]]));}
+function preserCol(rows,col){const o={};for(const r of rows||[]){const c=String(r?.[2]??'');if(!/^(19|20)\d{2}(0[1-9]|1[0-2])$/.test(c))continue;const v=Number(r[col]);if(Number.isFinite(v))o[`${c.slice(0,4)}-${c.slice(4)}`]=round(v/1000,1);}return o;}
+async function bcraXls(name){const c=new AbortController(),t=setTimeout(()=>c.abort(),30000);try{const r=await fetch(BCRA_XLS+name,{signal:c.signal,headers:{'user-agent':'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36'}});if(!r.ok)throw new Error(`${name} ${r.status}`);return await r.arrayBuffer();}finally{clearTimeout(t);}}
+async function mortgageFlows(){
+  let uva={},tradArs={},tradUsd={},tradErr=null;
+  {const R=preserRows(await bcraXls('preser_uva.xls'),['Datos']);uva=preserCol(R.Datos,3);}
+  if(!Object.keys(uva).length)throw new Error('preser_uva: sin montos');
+  try{let buf=await bcraXls('preser_mon.xls');const R=preserRows(buf,['Montos_$_sector_privado','Montos_u$s_sector_privado']);buf=null;
+    tradArs=preserCol(R['Montos_$_sector_privado'],51);tradUsd=preserCol(R['Montos_u$s_sector_privado'],51);}catch(e){tradErr=String(e?.message||e).slice(0,120);}
+  let fxM={};try{fxM=monthlyAvg(await bcraDaily(5,'2002-03-01'));}catch{}
+  const fxAt=ym=>ym<'2002-01'?1:FX_2002_EARLY_AVG[ym]??fxM[ym]??null;
+  let usM={};try{usM=(await usCpiMonthly()).monthly||{};}catch{}
+  const usA=usCpiAnnual(),baseYm=Object.keys(usM).sort().at(-1),base=usM[baseYm]??usA[Math.max(...Object.keys(usA).map(Number))];
+  const cpiAt=ym=>usM[ym]??usA[ym.slice(0,4)]??usM[Object.keys(usM).filter(k=>k.startsWith(ym.slice(0,4))).sort().at(-1)]??null;
+  const totalArs={},totalUsd={},totalUsdConst={},uvaShare={};
+  for(const ym of [...new Set([...Object.keys(uva),...Object.keys(tradArs),...Object.keys(tradUsd)])].sort()){
+    const x=fxAt(ym);if(!x)continue;const u=uva[ym]??0,a=tradArs[ym]??0,d=tradUsd[ym]??0;
+    if(uva[ym]==null&&tradArs[ym]==null&&tradUsd[ym]==null)continue;
+    const t=u+a+d*x;totalArs[ym]=round(t,0);totalUsd[ym]=round(t/x,1);if(t>0)uvaShare[ym]=round(u/t*100,1);
+    const c=cpiAt(ym);if(c&&base)totalUsdConst[ym]=round(t/x*base/c,1);
+  }
+  // Si preser_mon se atrasa respecto de preser_uva, los meses sin tradicionales quedan marcados (sólo UVA).
+  const lastTrad=Object.keys(tradArs).sort().at(-1)||null,uvaOnly=Object.keys(uva).filter(k=>!lastTrad||k>lastTrad);
+  return {status:'ok',source:'BCRA — montos operados de préstamos hipotecarios (UVA y tradicionales, en pesos y en dólares) · A3500 · CPI-U',sourceUrl:'https://www.bcra.gob.ar/tasas-de-interes/',
+    cpiBase:baseYm||null,monthlyUva:uva,monthlyTradArs:tradArs,monthlyTradUsd:tradUsd,monthlyTotalArs:totalArs,monthlyTotalUsd:totalUsd,monthlyTotalUsdConst:totalUsdConst,monthlyUvaShare:uvaShare,
+    ...(uvaOnly.length?{uvaOnlyMonths:uvaOnly}:{}),...(tradErr?{tradError:tradErr}:{})};
+}
 async function arrearsFromOfficialWorkbook(){
   // v114: hoja "Calidad de Cartera (por líneas)": secciones "1. Total Sector Privado", "2. Familias - Total", "3. Empresas - Total";
   // en cada una, la fila "Cartera irregular total" y la fila de fechas ("En porcentaje", fechas seriales de Excel).
@@ -1346,11 +1380,12 @@ async function bcraPurchasesHistorical(){
   if(Object.keys(monthly).length<200)throw new Error('compras BCRA: serie corta');
   return {status:'ok',source:'BCRA — compras netas de divisas: sector privado (var. 78, USD) y Tesoro Nacional (var. 48, $ convertidos al mayorista A3500)',sourceUrl:'https://api.bcra.gob.ar/estadisticas/v4.0/monetarias/78',lastDay:Object.keys(d).sort().at(-1),monthly,...(Object.keys(treasury).length?{treasury}:{})};
 }
-const JOBS={mortgageCredit:()=>mortgageCredit(),wages:()=>wagesIndec(),bcraPurchasesHistorical:()=>bcraPurchasesHistorical(),supermarkets:()=>supermarkets(),scentia:()=>scentiaLive(),ipcHistorical:()=>ipcHistorical(),gdpHistorical:()=>gdpHistorical(),emaeHistorical:()=>emaeHistorical(),industryHistorical:()=>industryHistorical(),unemploymentHistorical:()=>unemploymentHistorical(),tradeHistorical:()=>tradeHistorical(),financialHistorical:()=>financialHistorical(),exchangeHistorical:()=>exchangeHistorical(),ipc:()=>ipc(),arca:()=>arca(),icg:()=>icg(),bcra:()=>bcra(),rem:()=>rem(),salary:()=>salaryRipte(),icl:()=>icl(),contractIndices:()=>contractIndices(),isacHistorical:()=>isacHistorical(),creditHistorical:()=>creditHistorical(),arrearsHistorical:()=>arrearsHistorical(),activityPulse:()=>activityPulse(),ilaHistorical:()=>ilaHistorical(),igaHistorical:()=>igaHistorical(),nowcastInputs:()=>nowcastInputs(get),equilibraActivity:()=>equilibraActivity(get),bopHistorical:()=>bopHistorical(),autos:()=>autosLive(),ipcCaba:()=>ipcCabaLive(),poverty:()=>povertyLive(),cement:()=>cementLive(),came:()=>cameLive()};
+const JOBS={mortgageCredit:()=>mortgageCredit(),mortgageFlows:()=>mortgageFlows(),wages:()=>wagesIndec(),bcraPurchasesHistorical:()=>bcraPurchasesHistorical(),supermarkets:()=>supermarkets(),scentia:()=>scentiaLive(),ipcHistorical:()=>ipcHistorical(),gdpHistorical:()=>gdpHistorical(),emaeHistorical:()=>emaeHistorical(),industryHistorical:()=>industryHistorical(),unemploymentHistorical:()=>unemploymentHistorical(),tradeHistorical:()=>tradeHistorical(),financialHistorical:()=>financialHistorical(),exchangeHistorical:()=>exchangeHistorical(),ipc:()=>ipc(),arca:()=>arca(),icg:()=>icg(),bcra:()=>bcra(),rem:()=>rem(),salary:()=>salaryRipte(),icl:()=>icl(),contractIndices:()=>contractIndices(),isacHistorical:()=>isacHistorical(),creditHistorical:()=>creditHistorical(),arrearsHistorical:()=>arrearsHistorical(),activityPulse:()=>activityPulse(),ilaHistorical:()=>ilaHistorical(),igaHistorical:()=>igaHistorical(),nowcastInputs:()=>nowcastInputs(get),equilibraActivity:()=>equilibraActivity(get),bopHistorical:()=>bopHistorical(),autos:()=>autosLive(),ipcCaba:()=>ipcCabaLive(),poverty:()=>povertyLive(),cement:()=>cementLive(),came:()=>cameLive()};
 export const GROUPS={
   core:['ipc','arca','icg','bcra','rem','salary','wages','icl','contractIndices','autos','ipcCaba','came'],
   history:['ipcHistorical','gdpHistorical','industryHistorical','unemploymentHistorical','tradeHistorical'],
-  markets:['financialHistorical','exchangeHistorical','mortgageCredit'], // v230: crédito hipotecario
+  markets:['financialHistorical','exchangeHistorical'],
+  mortgage:['mortgageCredit','mortgageFlows'], // v230–v232: crédito hipotecario (stock y créditos nuevos por mes)
   activity:['emaeHistorical','isacHistorical','creditHistorical','activityPulse','cement','supermarkets','scentia'],
   banks:['arrearsHistorical','bcraPurchasesHistorical'], // v131: grupo propio (anexo xlsx del BCRA, pesado en memoria)
   leading:['ilaHistorical','igaHistorical'],

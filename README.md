@@ -793,3 +793,10 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 - Salidas: `monthlyUsd` (USD corrientes), `monthlyUsdConst` (USD constantes al último CPI-U), `quarterlyPctGdp` (stock a fin de trimestre / PIB nominal de los últimos 4 trimestres, INDEC cuadro 8 con base incluida de respaldo) y `annualPctGdp` (diciembre; 1996–2003 con PIB base 1993; año en curso, último trimestre con PIB).
 - Series históricas: botón "Crédito hipotecario" con selector USD constantes / % del PIB (anual, fin de año). Ejemplos: 6,0% del PIB en 2001, 0,36% en 2024, 0,91% en el 2.º trimestre de 2026; US$ 30.300 M constantes en dic-2001, US$ 970 M en dic-2023, US$ 7.100 M en oct-2026.
 - Pulso económico: tarjeta "Crédito hipotecario" (BCRA): stock en USD del último mes completo, % del PIB del último trimestre y variación interanual en USD constantes (señal ±1%). También en el semáforo, la agenda (`freshness`), "Último dato publicado" y el resumen diario.
+
+## v232 — Crédito hipotecario: la tarjeta muestra los créditos nuevos de cada mes
+- (La v231 se descartó; esta versión parte de la v230.)
+- Nuevo job `mortgageFlows`: montos operados de préstamos hipotecarios al sector privado (BCRA, "Tasas de interés por préstamos"): UVA desde 2016 (`preser_uva.xls`, total "Balance flows") + tradicionales en pesos y en dólares desde 1993 (`preser_mon.xls`, columna "Mortgage loans · Total"). A dólares con el A3500 promedio del mes y a dólares constantes con el CPI-U. Si `preser_mon` (≈25 MB) falla, queda el dato UVA y el mes se marca "sólo UVA".
+- Nuevo grupo `mortgage` (`mortgageCredit` + `mortgageFlows`); `mortgageCredit` sale de `markets`. En el navegador ambas fuentes se toman sólo de su grupo.
+- Tarjeta: créditos nuevos del último mes en USD, en pesos y variación interanual en USD constantes (señal ±2%); modal con los últimos 60 meses en barras. También semáforo, agenda (publicación ~día 5 del mes siguiente) y resumen diario. Octubre de 2026: US$ 333 M ($ 482.329 M; UVA $ 438.148 M), −19% interanual en USD constantes.
+- La serie histórica sigue mostrando el stock (USD constantes y % del PIB).

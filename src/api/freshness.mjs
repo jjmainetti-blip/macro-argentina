@@ -30,8 +30,7 @@ export const CARDS = [
   { key: 'fiscal', title: 'Resultado fiscal', group: 'activity', freq: 'M', lag: 1, day: 18, cal: /Resultado fiscal/i, latest: S => lastKey(S.activityPulse?.fiscal?.historyPctGDP?.primary) },
   { key: 'cement', title: 'Despachos de cemento', group: 'activity', freq: 'M', lag: 1, day: 4, latest: S => lastKey(S.cement?.monthlyYoy) },
   { key: 'credit', title: 'Crédito privado', group: 'activity', freq: 'M', lag: 1, day: 8, latest: S => maxKey(lastKey(S.creditHistorical?.monthlySaRealMom), S.activityPulse?.creditLatest?.ym) },
-  // v230: stock diario del BCRA; la tarjeta muestra el último mes completo.
-  { key: 'mortgage', title: 'Crédito hipotecario', group: 'markets', freq: 'M', lag: 1, day: 3, latest: S => { const cur = new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 7); return Object.keys(S.mortgageCredit?.monthlyUsd || {}).filter(k => ymRe.test(k) && k < cur).sort().at(-1) || null; } },
+  { key: 'mortgage', title: 'Crédito hipotecario', group: 'mortgage', freq: 'M', lag: 1, day: 5, latest: S => lastKey(S.mortgageFlows?.monthlyTotalUsd) }, // v232: créditos nuevos por mes (BCRA, montos operados)
   { key: 'arrears', title: 'Mora bancaria', group: 'banks', freq: 'M', lag: 2, day: 20, latest: S => lastKey(S.arrearsHistorical?.monthlyTotal) },
   { key: 'ipi', title: 'IPI manufacturero', group: 'history', freq: 'M', lag: 2, day: 10, cal: /producci[oó]n industrial manufacturero/i, latest: S => maxKey(lastKey(S.industryHistorical?.monthlySaMom), lastKey(S.industryHistorical?.monthlyYoy)) },
   { key: 'trade', title: 'Balanza comercial', group: 'history', freq: 'M', lag: 1, day: 20, cal: /Intercambio comercial argentino/i, latest: S => lastKey(S.tradeHistorical?.monthlyBalance) },
