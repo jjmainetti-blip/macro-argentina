@@ -1,9 +1,10 @@
+// v234: #fxConv (conversor de monedas) abre la pestaña Dólar, para el acceso directo de la portada.
 // v161 · Pestañas: "Dólar", "Series históricas", "Cuando naciste" y "Calculadoras" se ven en su propia pestaña; el
 // resto del sitio queda en "Inicio". La pestaña se elige por el enlace (#tipo-cambio, #historicos, #reservas,
 // #nacimiento o #nacimiento-AAAA-MM, #calculadoras); así siguen funcionando los enlaces compartidos.
 (() => {
   const root = document.documentElement;
-  const MAP = { 'tipo-cambio': 'dolar', dolar: 'dolar', historicos: 'historicos', reservas: 'historicos', nacimiento: 'naciste', calculadoras: 'calculadoras', updateCalc: 'calculadoras', uvaCalc: 'calculadoras' };
+  const MAP = { 'tipo-cambio': 'dolar', dolar: 'dolar', fxConv: 'dolar', historicos: 'historicos', reservas: 'historicos', nacimiento: 'naciste', calculadoras: 'calculadoras', updateCalc: 'calculadoras', uvaCalc: 'calculadoras' };
   const FIRST = { dolar: 'tipo-cambio', historicos: 'historicos', naciste: 'nacimiento', calculadoras: 'calculadoras', cuenta: 'cuenta', inicio: 'inicio' };
   const tabFor = h => MAP[h] || (/^nacimiento-/.test(h) ? 'naciste' : /^(cuenta|acceso=|confirmar=|baja=)/.test(h) ? 'cuenta' : 'inicio');
   // v163: en "Inicio" se marca también la sección que se está viendo (Semáforo, Expectativas o Agenda).

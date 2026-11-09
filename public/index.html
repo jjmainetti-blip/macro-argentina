@@ -14,18 +14,19 @@
   <meta name="theme-color" content="#071b35">
   <title>Macrodatos | Indicadores económicos de Argentina</title>
   <link rel="icon" type="image/svg+xml" href="favicon.svg?v=174">
-  <link rel="stylesheet" href="styles.css?v=226">
+  <link rel="stylesheet" href="styles.css?v=234">
   <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
   <script type="module" src="releases.js?v=232"></script>
   <script type="module" src="emae-signal.js?v=222"></script>
-  <script defer src="tabs.js?v=173"></script>
+  <script defer src="tabs.js?v=234"></script>
   <script defer src="app.js?v=233"></script><script defer src="fx-converter.js?v=226"></script><script defer src="share.js?v=189"></script>
   <script defer src="uva-calc.js?v=139b"></script>
   <script defer src="update-schedule.js?v=152"></script>
   <script defer src="account.js?v=210"></script>
   <script defer src="birth.js?v=212"></script>
   <script defer src="efemerides.js?v=135"></script>
-<script>(function(){var h=(location.hash||'').slice(1),m={'tipo-cambio':'dolar',dolar:'dolar',historicos:'historicos',reservas:'historicos',nacimiento:'naciste',calculadoras:'calculadoras',updateCalc:'calculadoras',uvaCalc:'calculadoras'};var t=m[h]||(/^nacimiento-/.test(h)?'naciste':/^(cuenta|acceso=|confirmar=|baja=)/.test(h)?'cuenta':'inicio');document.documentElement.setAttribute('data-tab',t);})();</script>
+  <script defer src="home-ui.js?v=234"></script>
+<script>(function(){var h=(location.hash||'').slice(1),m={'tipo-cambio':'dolar',dolar:'dolar',fxConv:'dolar',historicos:'historicos',reservas:'historicos',nacimiento:'naciste',calculadoras:'calculadoras',updateCalc:'calculadoras',uvaCalc:'calculadoras'};var t=m[h]||(/^nacimiento-/.test(h)?'naciste':/^(cuenta|acceso=|confirmar=|baja=)/.test(h)?'cuenta':'inicio');document.documentElement.setAttribute('data-tab',t);})();</script>
 </head>
 <body>
 <a class="skip-link" href="#main">Saltar al contenido</a>
@@ -34,6 +35,7 @@
     <span class="brand-mark" aria-hidden="true"><img src="logo.svg?v=174" alt="" width="34" height="34"></span>
     <span><strong>MACRODATOS</strong><small>ECONOMÍA ARGENTINA</small></span>
   </a>
+  <a class="nav-cta" href="#cuenta" aria-label="Recibir alertas por mail"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg><span>Recibir alertas</span></a>
   <button class="menu-btn" id="menuBtn" aria-expanded="false" aria-controls="nav">☰<span class="sr-only">Abrir menú</span></button>
   <nav id="nav" aria-label="Navegación principal">
     <a href="#inicio" data-tab-link="inicio">Inicio</a><a href="#semaforo" data-tab-link="inicio" class="sub">Semáforo</a><a href="#expectativas" data-tab-link="inicio" class="sub">Expectativas</a><a href="#agenda" data-tab-link="inicio" class="sub">Agenda</a><span class="nav-sep" aria-hidden="true"></span><a href="#tipo-cambio" data-tab-link="dolar">Dólar</a><a href="#historicos" data-tab-link="historicos">Series históricas</a><a href="#nacimiento" data-tab-link="naciste">Cuando naciste</a><a href="#calculadoras" data-tab-link="calculadoras">Calculadoras</a><a href="#cuenta" data-tab-link="cuenta" class="nav-account" id="navAccount">Mi cuenta</a>
@@ -44,9 +46,8 @@
 <section class="hero" id="inicio">
   <div class="hero-copy">
     <span class="eyebrow">Datos macroeconómicos · Argentina</span>
-    <h1>La economía argentina,<br><span>en perspectiva.</span></h1>
-    <p>Indicadores oficiales, series históricas, expectativas privadas y herramientas de cálculo en un solo lugar.</p>
-    <div class="hero-actions"><a class="btn primary" href="#tablero">Ver indicadores</a><a class="btn ghost" href="#calculadoras">Usar calculadoras</a></div>
+    <h1>La economía argentina,<br><span>de un vistazo.</span></h1>
+    <p>Indicadores oficiales ni bien se publican, series históricas, expectativas y calculadoras en un solo lugar.</p>
     <div class="update-status"><i></i><div id="autoStatus"><strong>Datos verificados</strong><small>Conectando con fuentes…</small></div></div>
   </div>
   <div class="hero-panel market-hero" aria-label="Indicadores financieros actualizados">
@@ -58,12 +59,35 @@
       <div class="market-card"><span>Dólar oficial BNA</span><strong id="heroBna">—</strong><em id="heroBnaChange" class="market-change neutral"></em><small id="heroBnaDate">Consultando…</small></div>
       <div class="market-card"><span>Compras BCRA</span><strong id="heroBcra">—</strong><em id="heroBcraChange" class="market-change neutral"></em><small id="heroBcraDate">Consultando…</small></div>
     </div>
-    <div class="latest-release"><span>Último dato publicado</span><strong id="latestReleaseTitle">Consultando fuentes…</strong><p id="latestReleaseValue">—</p><small id="latestReleaseDate"></small></div>
+  </div>
+  <a class="latest-release" href="#tablero"><span>Último dato publicado</span><strong id="latestReleaseTitle">Consultando fuentes…</strong><p id="latestReleaseValue">—</p><small id="latestReleaseDate"></small><em class="lr-more">Ver todos los indicadores →</em></a>
+</section>
+
+<section class="section home-key" id="clave" aria-labelledby="keyTitle">
+  <div class="home-head"><h2 id="keyTitle">Indicadores clave</h2><a href="#tablero">Ver los 20 indicadores →</a></div>
+  <div class="key-grid" id="keyGrid">
+    <button type="button" class="key-tile" data-key="ipc"><span class="key-label">Inflación</span><strong class="key-value">—</strong><span class="key-sub"><i></i><b>Cargando…</b></span></button>
+    <button type="button" class="key-tile" data-key="bna"><span class="key-label">Dólar oficial BNA</span><strong class="key-value">—</strong><span class="key-sub"><i></i><b>Cargando…</b></span></button>
+    <button type="button" class="key-tile" data-key="risk"><span class="key-label">Riesgo país</span><strong class="key-value">—</strong><span class="key-sub"><i></i><b>Cargando…</b></span></button>
+    <button type="button" class="key-tile" data-key="emae"><span class="key-label">Actividad · EMAE</span><strong class="key-value">—</strong><span class="key-sub"><i></i><b>Cargando…</b></span></button>
+    <a class="key-tile" data-key="reserves" href="#reservas"><span class="key-label">Reservas BCRA</span><strong class="key-value">—</strong><span class="key-sub"><i></i><b>Cargando…</b></span></a>
+  </div>
+</section>
+
+<section class="section home-tools" id="herramientas" aria-labelledby="toolsTitle">
+  <div class="home-head"><h2 id="toolsTitle">Herramientas</h2></div>
+  <div class="tools-grid">
+    <a class="tool-tile" href="#calculadoras"><span class="tool-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M8 6h8M8 11h.01M12 11h.01M16 11h.01M8 15h.01M12 15h.01M16 15h.01M8 19h8"/></svg></span><b>Calculadoras</b><small>Actualizá alquileres por IPC, ICL, CER o UVA y calculá la cuota de un hipotecario.</small></a>
+    <a class="tool-tile" href="#fxConv"><span class="tool-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h13l-4-4M17 17H4l4 4"/></svg></span><b>Conversor de monedas</b><small>Pesos, dólares y otras monedas con el dólar BNA, MEP, blue o CCL.</small></a>
+    <a class="tool-tile" href="#historicos"><span class="tool-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 6-7"/></svg></span><b>Series históricas</b><small>Inflación, PBI, dólar, salarios, reservas y más, desde hace décadas.</small></a>
+    <a class="tool-tile tool-warm" href="#nacimiento"><span class="tool-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></span><b>La economía cuando naciste</b><small>Quién gobernaba, cuánto subían los precios y cuánto rendía un sueldo.</small></a>
+    <a class="tool-tile" href="#cuenta"><span class="tool-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg></span><b>Alertas y resumen por mail</b><small>Recibí los datos que elijas y el nuevo monto de tus contratos.</small></a>
+    <a class="tool-tile" href="#agenda"><span class="tool-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span><b>Agenda de publicaciones</b><small>Qué dato sale y cuándo: INDEC, BCRA, ARCA y privados.</small></a>
   </div>
 </section>
 
 <section class="section" id="tablero">
-  <div class="section-title"><div><span class="eyebrow">Pulso económico</span><h2>Últimos datos disponibles</h2></div><p>El período de referencia varía según cada publicación.</p></div>
+  <div class="section-title"><div><span class="eyebrow">Pulso económico</span><h2>Todos los indicadores</h2></div><p>Lo publicado más recientemente aparece primero. Tocá una tarjeta para ver su evolución.</p></div>
   <div class="kpi-grid" id="kpiGrid">
     <article class="kpi signal-red" data-kpi="ipi" data-ym="2026-08"><div class="kpi-top"><span>IPI manufacturero</span><b>INDEC</b></div><strong data-value="">−5,0%</strong><p data-period="">jul 2026 · mensual s.e.</p><em data-detail="">−4,9% interanual</em><div data-signal="" class="kpi-signal" data-level="red" title="Industria manufacturera: cayó 5,0% mensual sin estacionalidad." aria-label="Desfavorable: Industria manufacturera: cayó 5,0% mensual sin estacionalidad."><i aria-hidden="true"></i>Desfavorable</div><div class="data-health cached" data-health="">Último dato verificado</div></article>
     <article class="kpi signal-red" data-kpi="isac" data-ym="2026-08"><div class="kpi-top"><span>ISAC construcción</span><b>INDEC</b></div><strong data-value="">−4,6%</strong><p data-period="">jul 2026 · mensual s.e.</p><em data-detail="" class="">−4,5% interanual</em><div data-signal="" class="kpi-signal" data-level="red" title="Construcción: cayó 4,6% mensual sin estacionalidad." aria-label="Desfavorable: Construcción: cayó 4,6% mensual sin estacionalidad."><i aria-hidden="true"></i>Desfavorable</div><div class="data-health cached" data-health="">Último dato verificado</div></article>
@@ -83,6 +107,12 @@
     <article class="kpi signal-yellow" data-kpi="wages" data-ym="2026-08"><div class="kpi-top"><span>Índice de salarios</span><b>INDEC</b></div><strong data-value="">+2,7%</strong><p data-period="">ago 2026 · mensual nominal</p><em data-detail="">35,6% interanual</em><div class="data-health cached" data-health="">Último dato verificado</div></article>
     <article class="kpi signal-green" data-kpi="ipcCaba" data-ym="2026-08"><div class="kpi-top"><span>Inflación CABA</span><b>IDECBA</b></div><strong data-value="">1,7%</strong><p data-period="">ago 2026 · mensual</p><em data-detail="">−1,2 p.p. vs jul 2026 · 33,4% interanual</em><div data-signal="" class="kpi-signal" data-level="green" title="La inflación mensual bajó 1,2 p.p. respecto de jul 2026." aria-label="Favorable: La inflación mensual bajó 1,2 p.p. respecto de jul 2026."><i aria-hidden="true"></i>Favorable</div><div class="data-health cached" data-health="">Último dato verificado</div></article>
     <article class="kpi signal-green" data-kpi="ipc" data-ym="2026-08"><div class="kpi-top"><span>Inflación nacional</span><b>INDEC</b></div><strong data-value="">1,7%</strong><p data-period="">ago 2026 · mensual</p><em data-detail="">−0,4 p.p. vs jul 2026 · 33,5% interanual</em><div data-signal="" class="kpi-signal" data-level="green" title="La inflación mensual bajó 0,4 p.p. respecto de jul 2026." aria-label="Favorable: La inflación mensual bajó 0,4 p.p. respecto de jul 2026."><i aria-hidden="true"></i>Favorable</div><div class="data-health cached" data-health="">Último dato verificado</div></article>
+  </div>
+  <div class="kpi-more-wrap"><button type="button" class="kpi-more" id="kpiMore" aria-controls="kpiGrid" aria-expanded="false" hidden>Ver todos los indicadores</button></div>
+  <div class="home-teasers">
+    <a class="teaser teaser-dark" href="#semaforo"><b>Semáforo económico</b><span>Cómo vienen los últimos 5 meses, indicador por indicador.</span><em>Ver el semáforo →</em></a>
+    <a class="teaser" href="#expectativas"><b>Qué espera el mercado</b><span>Inflación, PBI y dólar según el REM del BCRA, y el anticipo de actividad.</span><em>Ver expectativas →</em></a>
+    <a class="teaser" href="#agenda"><b>Próximas publicaciones</b><span class="teaser-agenda" id="teaserAgenda">Calendario de datos oficiales y privados.</span><em>Ver la agenda →</em></a>
   </div>
 </section>
 
@@ -226,7 +256,7 @@
 </section>
 
 </main>
-<footer><div class="brand"><span class="brand-mark" aria-hidden="true"><img src="logo.svg?v=174" alt="" width="34" height="34"></span><span><strong>MACRODATOS</strong><small>ECONOMÍA ARGENTINA</small></span></div><p>Información económica para análisis. No constituye asesoramiento financiero.</p><a href="#inicio">Volver arriba ↑</a><span class="build-version">macrodatos.ar · v233</span></footer>
+<footer><div class="brand"><span class="brand-mark" aria-hidden="true"><img src="logo.svg?v=174" alt="" width="34" height="34"></span><span><strong>MACRODATOS</strong><small>ECONOMÍA ARGENTINA</small></span></div><p>Información económica para análisis. No constituye asesoramiento financiero.</p><a href="#inicio">Volver arriba ↑</a><span class="build-version">macrodatos.ar · v234</span></footer>
 
 <div id="kpiModal" class="kpi-modal" hidden aria-hidden="true">
   <div class="kpi-modal-backdrop" data-kpi-close></div>

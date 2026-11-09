@@ -803,3 +803,10 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 
 ## v233 — Créditos hipotecarios: sólo UVA (error 1102)
 - El grupo `mortgage` fallaba con "Worker exceeded resource limits" (1102): leer `preser_mon.xls` (≈25 MB) superaba la memoria del Worker. Se dejó de leer; la tarjeta muestra los créditos hipotecarios UVA nuevos de cada mes (`preser_uva.xls`), hoy cerca del 90% del total (octubre 2026: $ 438.148 M de $ 482.329 M; US$ 287 M).
+
+## v234 — Portada nueva (sólo diseño)
+- Encabezado con botón "Recibir alertas" (lleva a Mi cuenta). Título "La economía argentina, de un vistazo." y el último dato publicado en una tarjeta destacada al lado.
+- Nueva franja "Indicadores clave": inflación, dólar oficial BNA, riesgo país, actividad (EMAE) y reservas. `public/home-ui.js` copia los valores que ya muestran las tarjetas del pulso y la franja de mercados (no consulta fuentes); al tocar una tarjeta se abre el mismo gráfico que la original, y Reservas lleva a su serie histórica.
+- Nuevo bloque "Herramientas" con accesos a calculadoras, conversor de monedas (`#fxConv`, ahora abre la pestaña Dólar), series históricas, cuando naciste, alertas por mail y agenda.
+- "Pulso económico" más compacto: se ven las 8 tarjetas publicadas más recientemente (6 en celular) y el resto con "Ver los N indicadores restantes". Debajo, accesos al semáforo, las expectativas y las próximas publicaciones.
+- En celular, la franja de mercados se desliza de costado y los botones tienen al menos 44 px.
