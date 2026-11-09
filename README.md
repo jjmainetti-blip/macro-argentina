@@ -783,3 +783,7 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 ## v228 — Recaudación de ARCA: lectura de la placa en X
 - ARCA publica el dato en una imagen. `readArcaCard` (arca-x.mjs) lee la placa con Workers AI (binding `AI`, mismos modelos que la placa del BCRA) y devuelve mes, año, monto y variación interanual; se agrega al texto del posteo como frase normalizada, que interpreta `parseArcaRelease`.
 - Sólo se leen imágenes de posteos que hablan de recaudación / ingresos tributarios y cuyo texto no trae ya el dato; como máximo 3 imágenes por consulta. Diagnóstico en `/api/status` → `xArca` (`via: imagen|texto`, `aiError`).
+
+## v229 — Despachos de cemento: cifras provisorias de AFCP
+- Las páginas de AFCP están en windows-1252. Leídas como UTF-8, "Año" y los espacios duros quedaban como caracteres inválidos y no se encontraba la línea "Var. Año anterior": las cifras provisorias nunca entraban, y cada mes recién aparecía con la cifra definitiva, semanas después.
+- `cement-monthly.mjs`: `readText` decodifica según el charset (encabezado o `<meta>`), `textify` limpia espacios duros y caracteres inválidos, y el lector acepta "Año" con cualquier codificación. Probado con las páginas provisorias reales de agosto (−8,1%), septiembre (+4,5%) y octubre de 2026 (−8,9%, 886.987 t).
