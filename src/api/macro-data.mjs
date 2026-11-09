@@ -1081,6 +1081,45 @@ async function creditHistorical(){
   if(!out.monthlyYoy&&!out.monthlySaRealMom)throw new Error('crédito sin datos');
   return out;
 }
+// v230 · Crédito hipotecario al sector privado (BCRA, API de Estadísticas): stock en pesos (var. 1348) + stock en dólares
+// (var. 1362) convertido al tipo de cambio mayorista A3500 (var. 5), al último día de cada mes desde abril de 1996.
+// Se expresa (1) en millones de USD corrientes y constantes (CPI-U de EE.UU., al último mes disponible) y (2) como % del
+// PIB nominal: stock a fin de trimestre / PIB de los últimos 4 trimestres (INDEC, cuadro 8; 1996–2003, PIB anual base 1993).
+const GDP_NOMINAL_1996_2003={1996:272150,1997:292859,1998:298948,1999:283523,2000:284204,2001:268697,2002:312580,2003:375910}; // millones de $ (INDEC base 1993, vía Banco Mundial)
+const GDP_NOMINAL_2004_2025={2004:485115,2005:582538,2006:715904,2007:896980,2008:1149646,2009:1247929,2010:1661721,2011:2179024,2012:2637914,2013:3348308,2014:4579086,2015:5954511,2016:8228160,2017:10660228,2018:14744811,2019:21558444,2020:27209814,2021:46219084,2022:82810045,2023:192408248,2024:583909615,2025:847622873}; // INDEC base 2004 vía Banco Mundial (respaldo)
+const FX_2002_EARLY={'2002-01':2.05,'2002-02':2.15}; // dólar libre a fin de mes, antes de la serie A3500 (marzo de 2002)
+async function mortgageCredit(){
+  const [ars,usd,fx,pib]=await Promise.allSettled([bcraDaily(1348,'1996-04-01'),bcraDaily(1362,'1996-04-01'),bcraDaily(5,'2002-03-01'),indecPib(8)]);
+  if(ars.status!=='fulfilled')throw new Error(`hipotecarios: ${String(ars.reason?.message||ars.reason).slice(0,80)}`);
+  const monthEnd=d=>{const o={};for(const k of Object.keys(d).sort())o[k.slice(0,7)]=[k,d[k]];return o;};
+  const A=monthEnd(ars.value),U=usd.status==='fulfilled'?monthEnd(usd.value):{},F=fx.status==='fulfilled'?monthEnd(fx.value):{};
+  const fxAt=ym=>ym<'2002-01'?1:FX_2002_EARLY[ym]??F[ym]?.[1]??null;
+  // CPI-U: mensual de BLS cuando está; si no, el promedio anual (base incluida); el mes base es el último publicado.
+  let usM={};try{usM=(await usCpiMonthly()).monthly||{};}catch{}
+  const usA=usCpiAnnual(),baseYm=Object.keys(usM).sort().at(-1),base=usM[baseYm]??usA[Math.max(...Object.keys(usA).map(Number))];
+  const cpiAt=ym=>usM[ym]??usA[ym.slice(0,4)]??usM[Object.keys(usM).filter(k=>k.startsWith(ym.slice(0,4))).sort().at(-1)]??null;
+  const totalArs={},usdCur={},usdConst={},usdShare={};
+  for(const ym of Object.keys(A).sort()){
+    const a=A[ym][1],u=U[ym]?.[1]??0,x=fxAt(ym);if(!Number.isFinite(x)||!x)continue;
+    const t=a+u*x;totalArs[ym]=Math.round(t);usdCur[ym]=round(t/x,0);usdShare[ym]=round(u*x/t*100,1);
+    const c=cpiAt(ym);if(c&&base)usdConst[ym]=round(t/x*base/c,0);
+  }
+  // PIB nominal anualizado por trimestre (INDEC cuadro 8, igual que el resultado fiscal), con la base incluida de respaldo.
+  const Q={};for(const [k,v] of Object.entries(FISCAL_BASE.gdpQ||{})){const [y,m]=k.split('-');Q[`${y}-Q${(Number(m)+2)/3}`]=v;}
+  if(pib.status==='fulfilled')Object.assign(Q,pib.value.quarters);
+  const qKeys=Object.keys(Q).sort(),pctQ={};
+  for(let i=3;i<qKeys.length;i++){const k=qKeys[i],[y,q]=k.split('-Q'),ym=`${y}-${String(q*3).padStart(2,'0')}`;if(totalArs[ym]==null)continue;
+    const g=(Q[qKeys[i]]+Q[qKeys[i-1]]+Q[qKeys[i-2]]+Q[qKeys[i-3]])/4;if(g>0)pctQ[k]=round(totalArs[ym]/g*100,2);}
+  const pctA={};
+  for(const [y,g] of Object.entries(GDP_NOMINAL_1996_2003)){const v=totalArs[`${y}-12`];if(v!=null)pctA[y]=round(v/g*100,2);}
+  for(const k of Object.keys(pctQ))if(k.endsWith('-Q4'))pctA[k.slice(0,4)]=pctQ[k];
+  for(const [y,g] of Object.entries(GDP_NOMINAL_2004_2025)){const v=totalArs[`${y}-12`];if(pctA[y]==null&&v!=null)pctA[y]=round(v/g*100,2);} // respaldo si no carga el cuadro 8
+  const lastQ=Object.keys(pctQ).sort().at(-1);if(lastQ&&!lastQ.endsWith('-Q4'))pctA[lastQ.slice(0,4)]=pctQ[lastQ]; // año en curso: último trimestre
+  const lastDay=Object.keys(ars.value).sort().at(-1);
+  return {status:'ok',source:'BCRA — préstamos hipotecarios al sector privado (pesos y dólares) · PIB nominal: INDEC · CPI-U: BLS',sourceUrl:'https://api.bcra.gob.ar/estadisticas/v4.0/monetarias/1348',
+    lastDay,cpiBase:baseYm||null,monthlyTotalArs:totalArs,monthlyUsd:usdCur,monthlyUsdConst:usdConst,monthlyUsdShare:usdShare,quarterlyPctGdp:pctQ,annualPctGdp:pctA,
+    ...(usd.status!=='fulfilled'?{warning:'sin préstamos en dólares'}:{}),...(fx.status!=='fulfilled'?{warningFx:'sin tipo de cambio A3500'}:{})};
+}
 async function arrearsFromOfficialWorkbook(){
   // v114: hoja "Calidad de Cartera (por líneas)": secciones "1. Total Sector Privado", "2. Familias - Total", "3. Empresas - Total";
   // en cada una, la fila "Cartera irregular total" y la fila de fechas ("En porcentaje", fechas seriales de Excel).
@@ -1307,11 +1346,11 @@ async function bcraPurchasesHistorical(){
   if(Object.keys(monthly).length<200)throw new Error('compras BCRA: serie corta');
   return {status:'ok',source:'BCRA — compras netas de divisas: sector privado (var. 78, USD) y Tesoro Nacional (var. 48, $ convertidos al mayorista A3500)',sourceUrl:'https://api.bcra.gob.ar/estadisticas/v4.0/monetarias/78',lastDay:Object.keys(d).sort().at(-1),monthly,...(Object.keys(treasury).length?{treasury}:{})};
 }
-const JOBS={wages:()=>wagesIndec(),bcraPurchasesHistorical:()=>bcraPurchasesHistorical(),supermarkets:()=>supermarkets(),scentia:()=>scentiaLive(),ipcHistorical:()=>ipcHistorical(),gdpHistorical:()=>gdpHistorical(),emaeHistorical:()=>emaeHistorical(),industryHistorical:()=>industryHistorical(),unemploymentHistorical:()=>unemploymentHistorical(),tradeHistorical:()=>tradeHistorical(),financialHistorical:()=>financialHistorical(),exchangeHistorical:()=>exchangeHistorical(),ipc:()=>ipc(),arca:()=>arca(),icg:()=>icg(),bcra:()=>bcra(),rem:()=>rem(),salary:()=>salaryRipte(),icl:()=>icl(),contractIndices:()=>contractIndices(),isacHistorical:()=>isacHistorical(),creditHistorical:()=>creditHistorical(),arrearsHistorical:()=>arrearsHistorical(),activityPulse:()=>activityPulse(),ilaHistorical:()=>ilaHistorical(),igaHistorical:()=>igaHistorical(),nowcastInputs:()=>nowcastInputs(get),equilibraActivity:()=>equilibraActivity(get),bopHistorical:()=>bopHistorical(),autos:()=>autosLive(),ipcCaba:()=>ipcCabaLive(),poverty:()=>povertyLive(),cement:()=>cementLive(),came:()=>cameLive()};
+const JOBS={mortgageCredit:()=>mortgageCredit(),wages:()=>wagesIndec(),bcraPurchasesHistorical:()=>bcraPurchasesHistorical(),supermarkets:()=>supermarkets(),scentia:()=>scentiaLive(),ipcHistorical:()=>ipcHistorical(),gdpHistorical:()=>gdpHistorical(),emaeHistorical:()=>emaeHistorical(),industryHistorical:()=>industryHistorical(),unemploymentHistorical:()=>unemploymentHistorical(),tradeHistorical:()=>tradeHistorical(),financialHistorical:()=>financialHistorical(),exchangeHistorical:()=>exchangeHistorical(),ipc:()=>ipc(),arca:()=>arca(),icg:()=>icg(),bcra:()=>bcra(),rem:()=>rem(),salary:()=>salaryRipte(),icl:()=>icl(),contractIndices:()=>contractIndices(),isacHistorical:()=>isacHistorical(),creditHistorical:()=>creditHistorical(),arrearsHistorical:()=>arrearsHistorical(),activityPulse:()=>activityPulse(),ilaHistorical:()=>ilaHistorical(),igaHistorical:()=>igaHistorical(),nowcastInputs:()=>nowcastInputs(get),equilibraActivity:()=>equilibraActivity(get),bopHistorical:()=>bopHistorical(),autos:()=>autosLive(),ipcCaba:()=>ipcCabaLive(),poverty:()=>povertyLive(),cement:()=>cementLive(),came:()=>cameLive()};
 export const GROUPS={
   core:['ipc','arca','icg','bcra','rem','salary','wages','icl','contractIndices','autos','ipcCaba','came'],
   history:['ipcHistorical','gdpHistorical','industryHistorical','unemploymentHistorical','tradeHistorical'],
-  markets:['financialHistorical','exchangeHistorical'],
+  markets:['financialHistorical','exchangeHistorical','mortgageCredit'], // v230: crédito hipotecario
   activity:['emaeHistorical','isacHistorical','creditHistorical','activityPulse','cement','supermarkets','scentia'],
   banks:['arrearsHistorical','bcraPurchasesHistorical'], // v131: grupo propio (anexo xlsx del BCRA, pesado en memoria)
   leading:['ilaHistorical','igaHistorical'],
@@ -1324,7 +1363,7 @@ export const GROUPS={
 // v134 · "Último dato publicado" para la portada: se calcula con la misma función del navegador
 // (public/releases.js) sobre los snapshots guardados y se guarda chico en KV (release:latest).
 const RELEASE_KEY='release:latest:v198';
-const CARD_ORDER=[['ipi','IPI manufacturero','INDEC'],['isac','ISAC construcción','INDEC'],['cement','Despachos de cemento','AFCP'],['came','Ventas minoristas pyme','CAME'],['super','Consumo en supermercados','INDEC'],['scentia','Consumo masivo','Scentia'],['arca','Recaudación','ARCA'],['autos','Patentamientos 0 km','ACARA'],['bop','Balanza de pagos','INDEC'],['icg','Confianza gobierno','UTDT'],['ila','Índice Líder (ILA)','CICEc'],['poverty','Pobreza','INDEC'],['iga','IGA','OJF'],['emae','EMAE','INDEC'],['credit','Crédito privado','BCRA'],['arrears','Mora bancaria','BCRA'],['trade','Balanza comercial','INDEC'],['fiscal','Resultado fiscal','Economía'],['wages','Índice de salarios','INDEC'],['ipcCaba','Inflación CABA','IDECBA'],['ipc','Inflación nacional','INDEC']];
+const CARD_ORDER=[['ipi','IPI manufacturero','INDEC'],['isac','ISAC construcción','INDEC'],['cement','Despachos de cemento','AFCP'],['came','Ventas minoristas pyme','CAME'],['super','Consumo en supermercados','INDEC'],['scentia','Consumo masivo','Scentia'],['arca','Recaudación','ARCA'],['autos','Patentamientos 0 km','ACARA'],['bop','Balanza de pagos','INDEC'],['icg','Confianza gobierno','UTDT'],['ila','Índice Líder (ILA)','CICEc'],['poverty','Pobreza','INDEC'],['iga','IGA','OJF'],['emae','EMAE','INDEC'],['credit','Crédito privado','BCRA'],['mortgage','Crédito hipotecario','BCRA'],['arrears','Mora bancaria','BCRA'],['trade','Balanza comercial','INDEC'],['fiscal','Resultado fiscal','Economía'],['wages','Índice de salarios','INDEC'],['ipcCaba','Inflación CABA','IDECBA'],['ipc','Inflación nacional','INDEC']];
 const MES_CORTO=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
 export function topCardRelease(R,seen={}){
   const rows=[];

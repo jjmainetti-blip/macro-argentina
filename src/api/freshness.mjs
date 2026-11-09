@@ -12,7 +12,7 @@ const dd = (ym, day) => `${ym}-${String(Math.min(day, 28)).padStart(2, '0')}`;
 
 // group = grupo de /api/macro-data que la actualiza. lag = meses entre el período y la publicación; day = día habitual.
 // v169 · Organismo de cada tarjeta (para la agenda de próximas publicaciones).
-export const AGENCY = { ipc: 'INDEC', ipcCaba: 'IDECBA', arca: 'ARCA', icg: 'UTDT', autos: 'ACARA', came: 'CAME', super: 'INDEC', scentia: 'Scentia', emae: 'INDEC', isac: 'INDEC', fiscal: 'Ministerio de Economía', cement: 'AFCP', credit: 'BCRA', arrears: 'BCRA', ipi: 'INDEC', trade: 'INDEC', ila: 'CICEc', iga: 'OJF', bop: 'INDEC', poverty: 'INDEC', wages: 'INDEC' };
+export const AGENCY = { ipc: 'INDEC', ipcCaba: 'IDECBA', arca: 'ARCA', icg: 'UTDT', autos: 'ACARA', came: 'CAME', super: 'INDEC', scentia: 'Scentia', emae: 'INDEC', isac: 'INDEC', fiscal: 'Ministerio de Economía', cement: 'AFCP', credit: 'BCRA', mortgage: 'BCRA', arrears: 'BCRA', ipi: 'INDEC', trade: 'INDEC', ila: 'CICEc', iga: 'OJF', bop: 'INDEC', poverty: 'INDEC', wages: 'INDEC' };
 export const CARDS = [
   { key: 'ipc', title: 'Inflación nacional', group: 'core', freq: 'M', lag: 1, day: 15, cal: /precios al consumidor \(IPC\)/i, latest: S => lastKey(Object.fromEntries((S.ipc?.monthly || []).map(r => [String(r.date).slice(0, 7), r.value]))) },
   // v211 · Índice de salarios (INDEC): sale ~2 meses después del período.
@@ -30,6 +30,8 @@ export const CARDS = [
   { key: 'fiscal', title: 'Resultado fiscal', group: 'activity', freq: 'M', lag: 1, day: 18, cal: /Resultado fiscal/i, latest: S => lastKey(S.activityPulse?.fiscal?.historyPctGDP?.primary) },
   { key: 'cement', title: 'Despachos de cemento', group: 'activity', freq: 'M', lag: 1, day: 4, latest: S => lastKey(S.cement?.monthlyYoy) },
   { key: 'credit', title: 'Crédito privado', group: 'activity', freq: 'M', lag: 1, day: 8, latest: S => maxKey(lastKey(S.creditHistorical?.monthlySaRealMom), S.activityPulse?.creditLatest?.ym) },
+  // v230: stock diario del BCRA; la tarjeta muestra el último mes completo.
+  { key: 'mortgage', title: 'Crédito hipotecario', group: 'markets', freq: 'M', lag: 1, day: 3, latest: S => { const cur = new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 7); return Object.keys(S.mortgageCredit?.monthlyUsd || {}).filter(k => ymRe.test(k) && k < cur).sort().at(-1) || null; } },
   { key: 'arrears', title: 'Mora bancaria', group: 'banks', freq: 'M', lag: 2, day: 20, latest: S => lastKey(S.arrearsHistorical?.monthlyTotal) },
   { key: 'ipi', title: 'IPI manufacturero', group: 'history', freq: 'M', lag: 2, day: 10, cal: /producci[oó]n industrial manufacturero/i, latest: S => maxKey(lastKey(S.industryHistorical?.monthlySaMom), lastKey(S.industryHistorical?.monthlyYoy)) },
   { key: 'trade', title: 'Balanza comercial', group: 'history', freq: 'M', lag: 1, day: 20, cal: /Intercambio comercial argentino/i, latest: S => lastKey(S.tradeHistorical?.monthlyBalance) },
