@@ -820,3 +820,9 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 - `financialHistorical.interestRate` suma `monthly.nominal` (TNA promedio del mes), `monthly.real` (tasa real del mes anualizada: ((1+TNA×30/365)/(1+π_mes))^12 − 1) y `daily` (TNA de cada día hábil, BCRA var. 12).
 - En Series históricas, la tasa tiene selector Anual / Mensual / Diaria; la diaria es sólo nominal (el botón "Real" se desactiva).
 - Se quitó la "variación acumulada" de la tasa: ahora el resumen muestra promedio, máximo y mínimo del período elegido.
+
+## v237 — Base monetaria
+- Nuevo job `monetaryBase` (grupo `mortgage`): BCRA serie 15 (base monetaria, millones de $, diaria desde 1996) → promedio mensual y anual.
+- Pesos constantes: cadena mensual del IPC del sitio, a precios del último mes con IPC (los meses posteriores usan ese índice).
+- % del PBI: base promedio del mes sobre el PBI nominal anual llevado a precios del mes (ventana de 4 trimestres de INDEC cuadro 8 ajustada por IPC; 1996–2003, PBI anual base 1993). Después del último trimestre publicado se usa la última ventana. Anual = promedio de los meses (año en curso: lo que va).
+- Series históricas: botón "Base monetaria" con selector Pesos constantes / % del PBI y Anual / Mensual.

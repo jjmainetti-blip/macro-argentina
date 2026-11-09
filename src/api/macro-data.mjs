@@ -1125,6 +1125,39 @@ async function mortgageCredit(){
     lastDay,cpiBase:baseYm||null,monthlyTotalArs:totalArs,monthlyUsd:usdCur,monthlyUsdConst:usdConst,monthlyUsdShare:usdShare,quarterlyPctGdp:pctQ,annualPctGdp:pctA,
     ...(usd.status!=='fulfilled'?{warning:'sin préstamos en dólares'}:{}),...(fx.status!=='fulfilled'?{warningFx:'sin tipo de cambio A3500'}:{})};
 }
+// v237 · Base monetaria (BCRA, var. 15, millones de $, diaria desde 1996) → promedio de cada mes y de cada año.
+// Pesos constantes: deflactada con la cadena mensual del IPC del sitio, a precios del último mes con IPC (los meses
+// posteriores usan ese mismo índice). % del PBI: base promedio del mes sobre el PBI nominal anual "a precios del mes":
+// promedio de los últimos 4 trimestres (INDEC cuadro 8, trimestres anualizados) llevado al nivel de precios del mes con
+// el IPC; 1996–2003, el PBI anual (base 1993) llevado al mes del mismo modo. Para los meses posteriores al último
+// trimestre publicado se usa esa última ventana de 4 trimestres. Anual: promedio de los meses (año en curso: lo que va).
+async function monetaryBase(){
+  const [bm,pib]=await Promise.allSettled([bcraDaily(15,'1996-01-01'),indecPib(8)]);
+  if(bm.status!=='fulfilled')throw new Error(`base monetaria: ${String(bm.reason?.message||bm.reason).slice(0,80)}`);
+  const M=monthlyAvg(bm.value),IM=await liveIpcChain();
+  const ipcKeys=Object.keys(IM).sort(),lastIpc=ipcKeys.at(-1),baseIdx=IM[lastIpc];
+  const ipcAt=ym=>IM[ym]??(ym>lastIpc?baseIdx:null);
+  const ymOfQ=(y,q)=>[1,2,3].map(i=>`${y}-${String((q-1)*3+i).padStart(2,'0')}`);
+  const Q={};for(const [k,v] of Object.entries(FISCAL_BASE.gdpQ||{})){const [y,m]=k.split('-');Q[`${y}-Q${(Number(m)+2)/3}`]=v;}
+  if(pib.status==='fulfilled')Object.assign(Q,pib.value.quarters);
+  const qKeys=Object.keys(Q).sort();
+  // Ventanas de 4 trimestres: PBI anual (promedio de los 4 anualizados) y su IPC promedio.
+  const win={};for(let i=3;i<qKeys.length;i++){const ks=qKeys.slice(i-3,i+1),ms=ks.flatMap(k=>{const [y,q]=k.split('-Q');return ymOfQ(+y,+q);}),ix=ms.map(m=>IM[m]).filter(Number.isFinite);if(ix.length<12)continue;win[qKeys[i]]={gdp:ks.reduce((a,k)=>a+Q[k],0)/4,ipc:ix.reduce((a,b)=>a+b,0)/12};}
+  const winKeys=Object.keys(win).sort(),firstWin=winKeys[0],lastWin=winKeys.at(-1);
+  const annIpc=y=>{const a=Array.from({length:12},(_,i)=>IM[`${y}-${String(i+1).padStart(2,'0')}`]);return a.every(Number.isFinite)?a.reduce((s,v)=>s+v,0)/12:null;};
+  const gdpAt=ym=>{const y=+ym.slice(0,4),q=Math.ceil(+ym.slice(5)/3),k=`${y}-Q${q}`,p=ipcAt(ym);if(!p)return null;
+    let w=win[k];if(!w&&lastWin&&k>lastWin)w=win[lastWin];
+    if(w&&(!firstWin||k>=firstWin))return w.gdp*p/w.ipc;
+    const G=GDP_NOMINAL_1996_2003[y]??GDP_NOMINAL_2004_2025[y],ai=annIpc(y);return G&&ai?G*p/ai:null;};
+  const nominal={},real={},pct={};
+  for(const ym of Object.keys(M).sort()){const v=M[ym];if(!Number.isFinite(v))continue;nominal[ym]=Math.round(v);const p=ipcAt(ym);if(p)real[ym]=Math.round(v*baseIdx/p);const g=gdpAt(ym);if(g)pct[ym]=round(v/g*100,2);}
+  const yearly=src=>{const by={};for(const [k,v] of Object.entries(src))(by[k.slice(0,4)]??=[]).push(v);const o={};for(const [y,a] of Object.entries(by))o[y]=a.reduce((s,v)=>s+v,0)/a.length;return o;};
+  const realA=Object.fromEntries(Object.entries(yearly(real)).map(([y,v])=>[y,Math.round(v)])),pctA=Object.fromEntries(Object.entries(yearly(pct)).map(([y,v])=>[y,round(v,2)]));
+  const lastDay=Object.keys(bm.value).sort().at(-1);
+  return {status:'ok',source:'BCRA — base monetaria (API de Estadísticas, var. 15) · IPC: cadena del sitio · PBI nominal: INDEC',sourceUrl:'https://api.bcra.gob.ar/estadisticas/v4.0/monetarias/15',
+    lastDay,ipcBase:lastIpc,lastMonthPartial:lastDay&&lastDay.slice(0,7)===Object.keys(M).sort().at(-1)&&lastDay.slice(8)<'25',
+    monthlyNominal:nominal,monthlyReal:real,monthlyPctGdp:pct,annualReal:realA,annualPctGdp:pctA,lastGdpQuarter:qKeys.at(-1)||null};
+}
 // v232 · Créditos hipotecarios NUEVOS por mes (montos operados, BCRA — Tasas de interés por préstamos al sector privado):
 // UVA (preser_uva.xls, "Balance flows" del total de préstamos hipotecarios UVA, desde 2016) + hipotecarios tradicionales en
 // pesos y en dólares (preser_mon.xls, hoja de montos del sector privado, columna "Mortgage loans · Total", desde 1993).
@@ -1384,12 +1417,12 @@ async function bcraPurchasesHistorical(){
   if(Object.keys(monthly).length<200)throw new Error('compras BCRA: serie corta');
   return {status:'ok',source:'BCRA — compras netas de divisas: sector privado (var. 78, USD) y Tesoro Nacional (var. 48, $ convertidos al mayorista A3500)',sourceUrl:'https://api.bcra.gob.ar/estadisticas/v4.0/monetarias/78',lastDay:Object.keys(d).sort().at(-1),monthly,...(Object.keys(treasury).length?{treasury}:{})};
 }
-const JOBS={mortgageCredit:()=>mortgageCredit(),mortgageFlows:()=>mortgageFlows(),wages:()=>wagesIndec(),bcraPurchasesHistorical:()=>bcraPurchasesHistorical(),supermarkets:()=>supermarkets(),scentia:()=>scentiaLive(),ipcHistorical:()=>ipcHistorical(),gdpHistorical:()=>gdpHistorical(),emaeHistorical:()=>emaeHistorical(),industryHistorical:()=>industryHistorical(),unemploymentHistorical:()=>unemploymentHistorical(),tradeHistorical:()=>tradeHistorical(),financialHistorical:()=>financialHistorical(),exchangeHistorical:()=>exchangeHistorical(),ipc:()=>ipc(),arca:()=>arca(),icg:()=>icg(),bcra:()=>bcra(),rem:()=>rem(),salary:()=>salaryRipte(),icl:()=>icl(),contractIndices:()=>contractIndices(),isacHistorical:()=>isacHistorical(),creditHistorical:()=>creditHistorical(),arrearsHistorical:()=>arrearsHistorical(),activityPulse:()=>activityPulse(),ilaHistorical:()=>ilaHistorical(),igaHistorical:()=>igaHistorical(),nowcastInputs:()=>nowcastInputs(get),equilibraActivity:()=>equilibraActivity(get),bopHistorical:()=>bopHistorical(),autos:()=>autosLive(),ipcCaba:()=>ipcCabaLive(),poverty:()=>povertyLive(),cement:()=>cementLive(),came:()=>cameLive()};
+const JOBS={monetaryBase:()=>monetaryBase(),mortgageCredit:()=>mortgageCredit(),mortgageFlows:()=>mortgageFlows(),wages:()=>wagesIndec(),bcraPurchasesHistorical:()=>bcraPurchasesHistorical(),supermarkets:()=>supermarkets(),scentia:()=>scentiaLive(),ipcHistorical:()=>ipcHistorical(),gdpHistorical:()=>gdpHistorical(),emaeHistorical:()=>emaeHistorical(),industryHistorical:()=>industryHistorical(),unemploymentHistorical:()=>unemploymentHistorical(),tradeHistorical:()=>tradeHistorical(),financialHistorical:()=>financialHistorical(),exchangeHistorical:()=>exchangeHistorical(),ipc:()=>ipc(),arca:()=>arca(),icg:()=>icg(),bcra:()=>bcra(),rem:()=>rem(),salary:()=>salaryRipte(),icl:()=>icl(),contractIndices:()=>contractIndices(),isacHistorical:()=>isacHistorical(),creditHistorical:()=>creditHistorical(),arrearsHistorical:()=>arrearsHistorical(),activityPulse:()=>activityPulse(),ilaHistorical:()=>ilaHistorical(),igaHistorical:()=>igaHistorical(),nowcastInputs:()=>nowcastInputs(get),equilibraActivity:()=>equilibraActivity(get),bopHistorical:()=>bopHistorical(),autos:()=>autosLive(),ipcCaba:()=>ipcCabaLive(),poverty:()=>povertyLive(),cement:()=>cementLive(),came:()=>cameLive()};
 export const GROUPS={
   core:['ipc','arca','icg','bcra','rem','salary','wages','icl','contractIndices','autos','ipcCaba','came'],
   history:['ipcHistorical','gdpHistorical','industryHistorical','unemploymentHistorical','tradeHistorical'],
   markets:['financialHistorical','exchangeHistorical'],
-  mortgage:['mortgageCredit','mortgageFlows'], // v230–v232: crédito hipotecario (stock y créditos nuevos por mes)
+  mortgage:['mortgageCredit','mortgageFlows','monetaryBase'], // v230–v232: crédito hipotecario (stock y créditos nuevos por mes); v237: base monetaria (BCRA)
   activity:['emaeHistorical','isacHistorical','creditHistorical','activityPulse','cement','supermarkets','scentia'],
   banks:['arrearsHistorical','bcraPurchasesHistorical'], // v131: grupo propio (anexo xlsx del BCRA, pesado en memoria)
   leading:['ilaHistorical','igaHistorical'],
