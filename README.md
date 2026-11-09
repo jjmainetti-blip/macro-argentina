@@ -810,3 +810,8 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 - Nuevo bloque "Herramientas" con accesos a calculadoras, conversor de monedas (`#fxConv`, ahora abre la pestaña Dólar), series históricas, cuando naciste, alertas por mail y agenda.
 - "Pulso económico" más compacto: se ven las 8 tarjetas publicadas más recientemente (6 en celular) y el resto con "Ver los N indicadores restantes". Debajo, accesos al semáforo, las expectativas y las próximas publicaciones.
 - En celular, la franja de mercados se desliza de costado y los botones tienen al menos 44 px.
+
+## v235 — Merval: empalme S&P → MSCI
+- Desde el 19/10/2026 el Merval lo calcula MSCI y la fuente (zion.ar) lo publica en una base nueva (≈3,5% del nivel del S&P Merval), incluso para los días anteriores. Al mezclarlo con el histórico S&P (`markets-daily.json`) la serie histórica mostraba una caída de ~96% el 1/10/2025.
+- `app.js` guarda por separado el histórico S&P y el dato nuevo y los empalma (`spliceMerval`): el S&P se multiplica por el cociente MSCI/S&P del último día en común (hoy 30/09/2026: 0,03503 en puntos y 0,03486 en USD) y desde ese día se usa el MSCI Merval. Las variaciones quedan intactas y el último valor coincide con la cotización actual. Si no hubiera día en común se usa ese cociente fijo.
+- Aplica a puntos, USD y USD constantes (TCR). Subtítulos y metodología lo aclaran.
