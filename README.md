@@ -850,3 +850,7 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 
 ## v242 — Calculadoras alineadas
 - Pantallas anchas (≥1180 px): las tres calculadoras en tres columnas del mismo alto. Pantallas medianas (901–1179 px): dos arriba y "¿Cuánto vale hoy?" centrada debajo. Celular: una debajo de la otra (sin cambios). Sólo CSS.
+
+## v243 — Montos con separador de miles y "¿Cuánto vale hoy?" en dólares
+- Nuevo `public/amount-format.js`: al escribir un monto en la calculadora de actualización, el crédito UVA, "¿Cuánto vale hoy?" y el conversor de monedas se agregan los puntos de miles (coma decimal). Un punto escrito sin coma previa se toma como coma; montos pegados con punto decimal ("1500.50") también. Respeta la posición del cursor.
+- "¿Cuánto vale hoy?": se sacó el selector de moneda (se usa la que circulaba en la fecha elegida) y el resultado se muestra también en dólares al oficial BNA y al MEP de hoy (venta, `/api/fx-converter`).

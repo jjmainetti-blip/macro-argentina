@@ -385,3 +385,4 @@ body.modal-open{overflow:hidden}
 #calculadoras .calc-pair>.calc-card{height:100%}
 @media(min-width:1180px){#calculadoras .calc-pair{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(min-width:901px) and (max-width:1179px){#calculadoras .calc-pair>#currencyCalc{grid-column:1/-1;justify-self:center;width:min(100%,calc(50% - 9px));height:auto}}
+#ccResult .cc-usd{margin:10px 0 0;padding:0;list-style:none;display:grid;gap:4px;font-size:14px;color:#2b3d55}#ccResult .cc-usd b{color:var(--navy)}
