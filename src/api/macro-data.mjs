@@ -12,6 +12,7 @@ import { EVENTS } from './calendar-data.mjs';
 import { ipcMonthlyChain, ipcAnnualAvg, ipcAnnualAvgInflation } from './ipc-chain.mjs';
 import { indecXText, parseIndecIca } from './indec-x.mjs';
 import { arcaXPosts } from './arca-x.mjs';
+import { setIndecToken, indecApiEnabled, emaeApi, ipiApi, ipcApi, wagesApi, agrees } from './indec-api.mjs';
 import { nowcastInputs } from './nowcast-inputs.mjs';
 import { equilibraActivity } from './equilibra.mjs';
 /* Macrodatos (antes Macro Argentina) v8 — stable server-side data contract.
@@ -234,7 +235,13 @@ async function industryHistorical(){
   for(const [y,v] of Object.entries(INDUSTRY_BRIDGE))if(annual[y]==null)annual[y]=v;
   if(annual[2015]!=null)segments.push({range:'2015–2016: EMAE industria manufacturera (empalme)'});
   let monthlySaMom=off&&Object.keys(off.monthlySaMom).length?{...off.monthlySaMom}:undefined;try{const b=await saMomFromLevels('453.1_SERIE_DESEADA_0_0_24_58');monthlySaMom=fillMissing(monthlySaMom||{},b);}catch{}
-  return await addIndecNews({status:'ok',source:off?'INDEC — IPI manufacturero (cuadros oficiales); EMI histórico':'INDEC / Datos Argentina — EMI + IPI manufacturero (respaldo)',...(off?{sourceUrl:off.url}:{}),annual,monthlyYoy,...(monthlySaMom?{monthlySaMom}:{}),segments},'[ií]ndice de producci[oó]n industrial manufacturero(?: \\(IPI manufacturero\\))?').then(o=>withCalendarDate(o,/manufacturero \(IPI\)/i));
+  // v238: API del INDEC (IPI manufacturero, nivel general, últimos ~40 meses), si la interanual coincide con la del cuadro.
+  let indecApi=null;
+  if(indecApiEnabled())try{const a=await ipiApi();const check=agrees(monthlyYoy,a.monthlyYoy,'pct');indecApi={used:false,check,diag:a.apiDiag};
+    if(check.ok&&Object.keys(a.monthlyYoy).length){Object.assign(monthlyYoy,a.monthlyYoy);if(Object.keys(a.monthlySaMom).length)monthlySaMom={...(monthlySaMom||{}),...a.monthlySaMom};
+      if(!off){const rows=Object.entries(a.level).map(([k,v])=>({date:k,value:v}));fillMissing(annual,growthFromMonthlyYtd(rows));}indecApi.used=true;segments.push({range:'IPI últimos meses (API INDEC)',sourceUrl:a.url});}}
+  catch(e){indecApi={used:false,error:String(e?.message||e).slice(0,120)};}
+  return await addIndecNews({status:'ok',source:off?'INDEC — IPI manufacturero (cuadros oficiales); EMI histórico':'INDEC / Datos Argentina — EMI + IPI manufacturero (respaldo)',...(off?{sourceUrl:off.url}:{}),annual,monthlyYoy,...(monthlySaMom?{monthlySaMom}:{}),...(indecApi?{indecApi}:{}),segments},'[ií]ndice de producci[oó]n industrial manufacturero(?: \\(IPI manufacturero\\))?').then(o=>withCalendarDate(o,/manufacturero \(IPI\)/i));
 }
 async function unemploymentHistorical(){
   // v197: EPH (cuadros de INDEC, promedio de los 4 trimestres) es la fuente primaria desde 2017; Datos Argentina
@@ -540,6 +547,11 @@ async function ipc(){
       const lm=r.headers.get('last-modified');if(lm&&!Number.isNaN(Date.parse(lm)))publishedAt=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Argentina/Buenos_Aires'}).format(new Date(lm));
     }finally{clearTimeout(tm);}}
   catch(e){errors.push(`INDEC: ${String(e?.message||e).slice(0,80)}`);}
+  // v238: API del INDEC (nivel general nacional, índice dic-2016=100). Se usa si coincide con lo que ya hay en los meses en común.
+  let indecApi=null;
+  if(indecApiEnabled())try{const a=await ipcApi();const ours=Object.fromEntries([...byDate.values()].map(r=>[r.date,r.index]));const check=agrees(ours,a.index,'level');indecApi={used:false,check,diag:a.apiDiag};
+    if(check.ok&&Object.keys(a.index).length){for(const [d,v] of Object.entries(a.index))if(v>0)byDate.set(d,{...(byDate.get(d)||{}),date:d,index:v});indecApi.used=true;source.push('API INDEC');}}
+  catch(e){indecApi={used:false,error:String(e?.message||e).slice(0,120)};}
   const rows=[...byDate.values()].sort((a,b)=>a.date.localeCompare(b.date));
   if(rows.length<14)throw new Error('observaciones insuficientes');
   // Sólo meses consecutivos para la variación mensual.
@@ -548,7 +560,7 @@ async function ipc(){
   const year=last.date.slice(0,4),decPrev=byD[`${Number(year)-1}-12`];
   // Fecha de publicación: la del calendario oficial del período si el CSV no la informa.
   if(!publishedAt||publishedAt.slice(0,7)<=last.date){const lbl=`${['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'][Number(last.date.slice(5))-1]} ${year}`;const ev=EVENTS.find(e=>/precios al consumidor/i.test(e.title)&&String(e.period).toLowerCase()===lbl);if(ev)publishedAt=ev.date;}
-  return {status:'ok',source:`INDEC — IPC Nacional (${source.join(' + ')||'respaldo local'})`,sourceUrl:'https://www.indec.gob.ar/indec/web/Nivel4-Tema-3-5-31',updated:last.date,publishedAt,latest:{date:last.date,value:monthly.at(-1).value,yoy:prevYear?round(pct(last.index,prevYear),1):null,ytd:decPrev?round(pct(last.index,decPrev),1):null},monthly,displayMonthly:monthly.slice(-7),...(errors.length?{fetchErrors:errors}:{})};
+  return {status:'ok',source:`INDEC — IPC Nacional (${source.join(' + ')||'respaldo local'})`,sourceUrl:'https://www.indec.gob.ar/indec/web/Nivel4-Tema-3-5-31',updated:last.date,publishedAt,latest:{date:last.date,value:monthly.at(-1).value,yoy:prevYear?round(pct(last.index,prevYear),1):null,ytd:decPrev?round(pct(last.index,decPrev),1):null},monthly,displayMonthly:monthly.slice(-7),...(indecApi?{indecApi}:{}),...(errors.length?{fetchErrors:errors}:{})};
 }
 const ARCA_MONTHS={enero:1,febrero:2,marzo:3,abril:4,mayo:5,junio:6,julio:7,agosto:8,septiembre:9,setiembre:9,octubre:10,noviembre:11,diciembre:12};
 export function parseArcaRelease(text,now=new Date()){
@@ -772,6 +784,11 @@ async function wagesIndec(){
   const url='https://www.indec.gob.ar/ftp/cuadros/sociedad/indice_salarios.csv';let M=null,src=[],errors=[];
   try{M=parseWagesCsv(await get(url,'text'));src.push('INDEC (CSV oficial)');}catch(e){errors.push(`INDEC: ${String(e?.message||e).slice(0,80)}`);}
   M??=Object.fromEntries(WAGE_KEYS.map(k=>[k,{}]));
+  // v238: API del INDEC (índices base oct-2016=100); cada serie se usa si coincide con el CSV en los meses en común.
+  let indecApi=null;
+  if(indecApiEnabled())try{const a=await wagesApi();indecApi={used:false,check:{},diag:a.apiDiag};
+    for(const k of WAGE_KEYS){const o=a.monthly[k]||{};if(!Object.keys(o).length)continue;const c=agrees(M[k],o,'level');indecApi.check[k]=c;if(c.ok){Object.assign(M[k],o);indecApi.used=true;}}
+    if(indecApi.used)src.push('API INDEC');}catch(e){indecApi={used:false,error:String(e?.message||e).slice(0,120)};}
   const DA={privReg:'149.1_SOR_PRIADO_OCTU_0_25',pub:'149.1_SOR_PUBICO_OCTU_0_14',totalReg:'149.1_TL_REGIADO_OCTU_0_16',nonReg:'149.1_SOR_PRIADO_OCTU_0_28',total:'149.1_TL_INDIIOS_OCTU_0_21'};
   const lastOf=o=>Object.keys(o||{}).sort().at(-1)||'';
   // Respaldo sólo si el CSV falló o quedó atrás (un pedido con las cinco series).
@@ -782,7 +799,7 @@ async function wagesIndec(){
   let news=null;try{const n=parseWagesNews(await indecNewsText());const prev=n?ymPrev(n.ym):null;
     if(n&&n.ym>lastOf(M.total)&&M.total[prev]){for(const k of ['total','privReg','pub','nonReg'])if(Number.isFinite(n[k])&&M[k][prev])M[k][n.ym]=round(M[k][prev]*(1+n[k]/100),2);news={ym:n.ym,from:'informe INDEC'};src.push('informe de prensa INDEC');}}catch(e){}
   const last=lastOf(M.total);if(!last)throw new Error(errors.join(' · ')||'índice de salarios sin datos');
-  return {status:'ok',source:`INDEC — Índice de salarios (base oct-2016=100)${src.length?` · ${src.join(', ')}`:''}`,sourceUrl:'https://www.indec.gob.ar/indec/web/Nivel4-Tema-4-31-61',monthly:M,latest:{ym:last,period:periodEs(last),...(news?.ym===last?{fromNews:true}:{})},...(errors.length?{warnings:errors}:{})};
+  return {status:'ok',source:`INDEC — Índice de salarios (base oct-2016=100)${src.length?` · ${src.join(', ')}`:''}`,sourceUrl:'https://www.indec.gob.ar/indec/web/Nivel4-Tema-4-31-61',monthly:M,latest:{ym:last,period:periodEs(last),...(news?.ym===last?{fromNews:true}:{})},...(indecApi?{indecApi}:{}),...(errors.length?{warnings:errors}:{})};
 }
 const ymPrev=ym=>{let [y,m]=ym.split('-').map(Number);m--;if(!m){m=12;y--;}return `${y}-${String(m).padStart(2,'0')}`;};
 async function salaryRipte(){
@@ -969,6 +986,11 @@ async function emaeHistorical(){
   if(saR.status==='fulfilled')out.monthlySaMom=toPct(saR.value.rows);
   // v197: cuadro oficial de INDEC (sh_emae_mensual_base2004) primario; Datos Argentina sólo completa.
   try{const off=await indecEmae();out.monthlyYoy={...(out.monthlyYoy||{}),...Object.fromEntries(Object.entries(off.monthlyYoy).filter(([k])=>k>='2018-01'))};out.monthlySaMom={...(out.monthlySaMom||{}),...Object.fromEntries(Object.entries(off.monthlySaMom).filter(([k])=>k>='2015-01'))};out.sourceUrl=off.url;out.source='INDEC — EMAE (cuadros oficiales; Datos Argentina de respaldo)';}catch(e){console.warn('EMAE INDEC',e);}
+  // v238: API del INDEC (últimos ~40 meses). Se usa si la interanual coincide con la que ya hay; la desestacionalizada se
+  // toma entera de la API (se revisa cada mes, como en el cuadro).
+  if(indecApiEnabled())try{const a=await emaeApi();const check=agrees(out.monthlyYoy||{},a.monthlyYoy,'pct');out.indecApi={used:false,check,diag:a.apiDiag};
+    if(check.ok&&Object.keys(a.monthlyYoy).length){out.monthlyYoy={...(out.monthlyYoy||{}),...Object.fromEntries(Object.entries(a.monthlyYoy).filter(([k])=>k>='2018-01'))};out.monthlySaMom={...(out.monthlySaMom||{}),...a.monthlySaMom};out.indecApi.used=true;out.source=`${out.source} · API INDEC`;}}
+  catch(e){out.indecApi={used:false,error:String(e?.message||e).slice(0,120)};}
   // v205: el mes recién publicado (X de INDEC o portada) antes de que llegue el cuadro.
   try{const n=parseIndecNews(await indecNewsText(),'estimador mensual de actividad econ[oó]mica(?: \\(EMAE\\))?');const last=Object.keys(out.monthlyYoy||{}).sort().at(-1);
     if(n&&(!last||n.ym>last)){out.monthlyYoy={...(out.monthlyYoy||{}),[n.ym]:n.yoy};if(n.mom!==null)out.monthlySaMom={...(out.monthlySaMom||{}),[n.ym]:n.mom};out.indecNews={ym:n.ym,source:'INDEC — informe técnico (X / portada)'};}}catch{}
@@ -1517,6 +1539,7 @@ const macroData=async(env={},ctx=null,request=null,opts={})=>{
   const bundled={};for(const n of names)if(BUNDLED_SOURCES[n])bundled[n]=BUNDLED_SOURCES[n];
   const previous=mergeSnapshot({version:131,sources:bundled},stored||{});
   const out={version:131,group,generatedAt:new Date().toISOString(),snapshotMode:env?.MACRO_STORE?.get?'kv+bundled':'bundled+isolate',sources:{}};
+  setIndecToken(env?.INDEC_API_TOKEN); // v238: Catálogo API-INDEC
   try{INDEC_X_TEXT=await indecXText(env);}catch{}
   if(names.includes('arca'))try{ARCA_X_POSTS=await arcaXPosts(env,(t,d)=>parseArcaRelease(t,d));}catch{}
   const results=await Promise.allSettled(names.map(n=>Promise.resolve().then(JOBS[n])));

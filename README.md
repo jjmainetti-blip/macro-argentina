@@ -826,3 +826,10 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 - Pesos constantes: cadena mensual del IPC del sitio, a precios del último mes con IPC (los meses posteriores usan ese índice).
 - % del PBI: base promedio del mes sobre el PBI nominal anual llevado a precios del mes (ventana de 4 trimestres de INDEC cuadro 8 ajustada por IPC; 1996–2003, PBI anual base 1993). Después del último trimestre publicado se usa la última ventana. Anual = promedio de los meses (año en curso: lo que va).
 - Series históricas: botón "Base monetaria" con selector Pesos constantes / % del PBI y Anual / Mensual.
+
+## v238 — API del INDEC (primera etapa)
+- Nuevo `src/api/indec-api.mjs`: cliente del Catálogo API-INDEC (https://api.indec.gob.ar/v1, estilo PostgREST, 1000 filas por página). Usa el secreto `INDEC_API_TOKEN` de Cloudflare; sin él no hace nada.
+- Se suma como fuente en: IPC nacional (job `ipc`, nivel general, últimos 15 meses), Índice de salarios (`wages`, últimos 26 meses), EMAE (`emaeHistorical`, últimos 40 meses) e IPI manufacturero (`industryHistorical`, últimos 40 meses). Los cuadros xls/csv y Datos Argentina quedan como respaldo.
+- Seguridad: la API sólo se usa si coincide con lo que ya hay en los meses en común (niveles ±0,3%; interanuales ±0,15 p.p. en el 90% de los meses). Si el cuadro falla, la API se usa sola.
+- Diagnóstico: cada fuente guarda `indecApi` ({used, check, diag con los valores de columnas vistos, o error}) para revisar la clasificación desde /api/macro-data.
+- Pedidos chicos (filtros por período) para no sumar carga: 1–4 pedidos por serie.
