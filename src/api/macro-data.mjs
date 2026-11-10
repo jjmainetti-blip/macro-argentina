@@ -229,7 +229,7 @@ async function industryHistorical(){
   // Datos Argentina, no se descarga el cuadro xls de INDEC; si no, el cuadro sigue siendo la fuente primaria (v197).
   let monthlyYoy={},off=null,daRows=null,api=null,indecApi=null;
   try{const x=await seriesRows('453.1_SERIE_ORIGNAL_0_0_14_46',{start:'2016-01-01'});daRows=x;}catch{}
-  if(indecApiEnabled())try{const a=await ipiApi();const check=agrees(daRows?yoyFromRows(daRows.rows):{},a.monthlyYoy,'pct');indecApi={used:false,check,diag:a.apiDiag};if(check.ok&&Object.keys(a.monthlyYoy).length){api=a;indecApi.used=true;}}
+  if(indecApiEnabled())try{const a=await ipiApi();/* v240: Datos Argentina publica una versión más vieja del IPI (no trae las últimas revisiones): alcanza con que coincida en 7 de cada 10 meses */const check=agrees(daRows?yoyFromRows(daRows.rows):{},a.monthlyYoy,'pct',0.7);indecApi={used:false,check,diag:a.apiDiag};if(check.ok&&Object.keys(a.monthlyYoy).length){api=a;indecApi.used=true;}}
   catch(e){indecApi={used:false,error:String(e?.message||e).slice(0,120)};}
   if(!api)try{off=await indecIpi();const rows=Object.entries(off.level).map(([k,v])=>({date:k,value:v}));Object.assign(annual,growthFromMonthlyYtd(rows));monthlyYoy={...off.monthlyYoy};segments.push({range:'IPI desde 2016 (INDEC)',sourceUrl:off.url});}catch(e){console.warn('IPI INDEC',e);}
   if(daRows){fillMissing(annual,growthFromMonthlyYtd(daRows.rows));fillMissing(monthlyYoy,yoyFromRows(daRows.rows));if(!off)segments.push({range:'IPI desde 2016 (Datos Argentina)',sourceUrl:daRows.url});}

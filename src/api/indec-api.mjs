@@ -108,11 +108,11 @@ export async function wagesApi() {
 
 // Seguridad: la API sólo se usa si coincide con lo que ya tenemos en los meses en común.
 // Niveles: diferencia relativa ≤ 0,3%; variaciones (%): ≤ 0,15 p.p. en al menos el 90% de los meses comparados.
-export function agrees(ours, api, kind = 'level') {
+export function agrees(ours, api, kind = 'level', share = 0.9) {
   const common = Object.keys(api).filter(k => Number.isFinite(Number(ours?.[k])) && Number.isFinite(Number(api[k])));
   if (common.length < 3) return { ok: true, compared: common.length };
   const okN = common.filter(k => kind === 'level' ? Math.abs(api[k] / ours[k] - 1) <= 0.003 : Math.abs(api[k] - ours[k]) <= 0.15).length;
-  return { ok: okN / common.length >= 0.9, compared: common.length, matching: okN };
+  return { ok: okN / common.length >= share, compared: common.length, matching: okN };
 }
 
 // ---------- v239 · Segunda etapa ----------

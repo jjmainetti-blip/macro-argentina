@@ -839,3 +839,6 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 - Desocupación (`unemploymentHistorical`): API `mercado_trabajo_eph` (trimestral, total de aglomerados). Si coincide con Datos Argentina, ya no se descarga el cuadro xls de la EPH.
 - EMAE e IPI manufacturero: la API se compara con Datos Argentina y, si coincide, no se descargan los cuadros xls del INDEC (quedan como respaldo si la API falla o no coincide).
 - Comercio exterior no se pasó a la API: viene por país y producto (miles de filas por mes, con celdas confidenciales "s"), y sumarlo no reproduce los totales del ICA. Sigue con el ICA. Las canastas (CBA/CBT) quedan para una tarjeta nueva.
+
+## v240 — IPI: control de la API más flexible
+- Datos Argentina publica una versión más vieja del IPI manufacturero (sin las últimas revisiones): la API del INDEC coincidía en 30 de 38 meses y el control (90%) la descartaba, así que se volvía a bajar el cuadro xls. Ahora alcanza con 7 de cada 10 meses (`agrees(..., share)`), suficiente para detectar un error de lectura.
