@@ -14,7 +14,7 @@
   <meta name="theme-color" content="#071b35">
   <title>Macrodatos | Indicadores económicos de Argentina</title>
   <link rel="icon" type="image/svg+xml" href="favicon.svg?v=174">
-  <link rel="stylesheet" href="styles.css?v=234">
+  <link rel="stylesheet" href="styles.css?v=241">
   <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
   <script type="module" src="releases.js?v=232"></script>
   <script type="module" src="emae-signal.js?v=222"></script>
@@ -26,6 +26,7 @@
   <script defer src="birth.js?v=212"></script>
   <script defer src="efemerides.js?v=135"></script>
   <script defer src="home-ui.js?v=234"></script>
+  <script defer src="currency-calc.js?v=241"></script>
 <script>(function(){var h=(location.hash||'').slice(1),m={'tipo-cambio':'dolar',dolar:'dolar',fxConv:'dolar',historicos:'historicos',reservas:'historicos',nacimiento:'naciste',calculadoras:'calculadoras',updateCalc:'calculadoras',uvaCalc:'calculadoras'};var t=m[h]||(/^nacimiento-/.test(h)?'naciste':/^(cuenta|acceso=|confirmar=|baja=)/.test(h)?'cuenta':'inicio');document.documentElement.setAttribute('data-tab',t);})();</script>
 </head>
 <body>
@@ -226,6 +227,15 @@
       <button class="btn primary" type="submit">Calcular cuota</button>
       <div class="result" id="uvaResult" aria-live="polite">Elegí un banco (o ingresá una tasa), el monto y el plazo.</div>
       <small>Sistema francés: la cuota en UVAs es fija; en pesos se ajusta cada mes por la UVA (inflación). No incluye seguros, gastos ni impuestos. Tasa por banco: menor tasa informada para clientes en la línea UVA de vivienda única y permanente.</small></form>
+    <form class="calc-card calc-card-wide" id="currencyCalc" novalidate><div class="calc-icon">$</div><h3>¿Cuánto vale hoy?</h3><p>Ingresá un monto de cualquier época —en pesos moneda nacional, pesos ley, pesos argentinos, australes o pesos— y mirá cuánto sería en pesos de hoy.</p>
+      <label>Monto<input id="ccAmount" type="text" inputmode="decimal" autocomplete="off" placeholder="1.000"></label>
+      <label>Fecha<div class="date-pair"><select id="ccMonth" aria-label="Mes"></select><select id="ccYear" aria-label="Año"></select></div></label>
+      <div class="calc-latest" id="ccHint"></div>
+      <label>Moneda<select id="ccCurrency"></select></label>
+      <button class="btn primary" type="submit">Calcular</button>
+      <div class="result" id="ccResult" aria-live="polite">Elegí el monto, la fecha y la moneda.</div>
+      <small>Se convierte el monto a pesos actuales con las equivalencias oficiales (1 peso ley = 100 m$n; 1 peso argentino = 10.000 pesos ley; 1 austral = 1.000 pesos argentinos; 1 peso = 10.000 australes) y se ajusta por la inflación (IPC de INDEC: GBA hasta 2006, San Luis 2007–2016 y nacional desde 2017), hasta el último mes publicado.</small>
+    </form>
   </div>
 </section>
 
@@ -256,7 +266,7 @@
 </section>
 
 </main>
-<footer><div class="brand"><span class="brand-mark" aria-hidden="true"><img src="logo.svg?v=174" alt="" width="34" height="34"></span><span><strong>MACRODATOS</strong><small>ECONOMÍA ARGENTINA</small></span></div><p>Información económica para análisis. No constituye asesoramiento financiero.</p><a href="#inicio">Volver arriba ↑</a><span class="build-version">macrodatos.ar · v240</span></footer>
+<footer><div class="brand"><span class="brand-mark" aria-hidden="true"><img src="logo.svg?v=174" alt="" width="34" height="34"></span><span><strong>MACRODATOS</strong><small>ECONOMÍA ARGENTINA</small></span></div><p>Información económica para análisis. No constituye asesoramiento financiero.</p><a href="#inicio">Volver arriba ↑</a><span class="build-version">macrodatos.ar · v241</span></footer>
 
 <div id="kpiModal" class="kpi-modal" hidden aria-hidden="true">
   <div class="kpi-modal-backdrop" data-kpi-close></div>

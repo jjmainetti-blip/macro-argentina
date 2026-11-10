@@ -374,3 +374,8 @@ body.modal-open{overflow:hidden}
 .home-head h2{white-space:nowrap}.home-head a{white-space:nowrap}
 @media(max-width:620px){.home-head a{font-size:13px}}
 @media(max-width:620px){#tablero .section-title{margin-bottom:18px}#tablero .section-title h2{font-size:24px}#tablero .kpi{padding:12px 14px 13px}#tablero .kpi>strong{font-size:22px;margin:6px 0 0}#tablero .kpi em{margin-top:4px}#tablero .kpi .data-health,#tablero .kpi::after{display:none}#tablero .kpi-signal{margin-top:6px}}
+/* v241 · Calculadora "¿Cuánto vale hoy?" */
+#ccResult .cc-big{display:block;font-size:28px;letter-spacing:-.03em;color:var(--navy);margin:6px 0 2px}
+#ccResult small{display:block;color:var(--muted)}
+#ccResult .cc-warn{margin:10px 0 0;padding:8px 10px;border-radius:10px;background:#fff6e5;color:#8a5a00;font-size:13px}
+#ccResult .cc-detail{margin:10px 0 0;padding-left:18px;font-size:13px;color:#4b5e74}

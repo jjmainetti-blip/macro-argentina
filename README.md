@@ -842,3 +842,8 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 
 ## v240 — IPI: control de la API más flexible
 - Datos Argentina publica una versión más vieja del IPI manufacturero (sin las últimas revisiones): la API del INDEC coincidía en 30 de 38 meses y el control (90%) la descartaba, así que se volvía a bajar el cuadro xls. Ahora alcanza con 7 de cada 10 meses (`agrees(..., share)`), suficiente para detectar un error de lectura.
+
+## v241 — Calculadora "¿Cuánto vale hoy?"
+- Nueva tarjeta en Calculadoras (`public/currency-calc.js`): un monto en pesos moneda nacional, pesos ley 18.188, pesos argentinos, australes o pesos, de cualquier mes desde 1943, llevado a pesos de hoy.
+- Conversión de signo monetario (1 $L = 100 m$n; 1 $a = 10.000 $L; 1 A = 1.000 $a; 1 $ = 10.000 A) y ajuste por la misma cadena mensual del IPC del sitio (`inflationIndex`), hasta el último mes publicado. La moneda se elige sola según la fecha (o a mano, con aviso si no circulaba).
+- Índice de salarios y RIPTE: se revisó que agosto 2026 es el último dato publicado (INDEC publica septiembre el 13/11; RIPTE de septiembre todavía no salió).
