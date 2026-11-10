@@ -114,3 +114,41 @@ export function agrees(ours, api, kind = 'level') {
   const okN = common.filter(k => kind === 'level' ? Math.abs(api[k] / ours[k] - 1) <= 0.003 : Math.abs(api[k] - ours[k]) <= 0.15).length;
   return { ok: okN / common.length >= 0.9, compared: common.length, matching: okN };
 }
+
+// ---------- v239 · Segunda etapa ----------
+// Área "total de aglomerados": se elige por nombre (total / 31 aglomerados); si no aparece, el área con más períodos.
+function totalArea(rows) {
+  const by = new Map(); for (const r of rows) { const k = r.area_geografica_nom ?? ''; by.set(k, (by.get(k) || 0) + 1); }
+  const names = [...by.keys()];
+  return names.find(n => /total|31 aglomerados|aglomerados urbanos/.test(norm(n))) ?? names.sort((a, b) => by.get(b) - by.get(a))[0];
+}
+const pctN = v => { const x = num(v); return x == null ? null : Math.round((Math.abs(x) <= 1 ? x * 100 : x) * 10) / 10; };
+
+// Pobreza e indigencia (EPH, semestral desde 2S-2016): personas y hogares.
+export async function povertyApi() {
+  const rows = await indecApiRows('pobreza_eph', { order: 'area_geografica_nom,periodo' }, 3);
+  const area = totalArea(rows), out = { persons: {}, households: {}, indigencePersons: {}, indigenceHouseholds: {} };
+  for (const r of rows) {
+    if ((r.area_geografica_nom ?? '') !== area) continue;
+    const y = Number(r.anio) || Number(String(r.periodo).slice(0, 4)), s = Number(r.semestre) || Number(String(r.periodo).slice(-1));
+    if (!(y > 2000 && (s === 1 || s === 2))) continue; const k = `${y}-S${s}`;
+    put(out.persons, k, pctN(r.tasa_pobreza_personas)); put(out.households, k, pctN(r.tasa_pobreza_hogares));
+    put(out.indigencePersons, k, pctN(r.tasa_indigencia_personas)); put(out.indigenceHouseholds, k, pctN(r.tasa_indigencia_hogares));
+  }
+  return { ...out, area, url: `${BASE}/pobreza_eph`, apiDiag: diag(rows, ['area_geografica_nom', 'area_geografica_cod', 'periodo', 'observaciones'], { area, semesters: Object.keys(out.persons).length }) };
+}
+
+// Mercado de trabajo (EPH, trimestral): desocupación, actividad y empleo del total de aglomerados.
+export async function laborApi() {
+  const rows = await indecApiRows('mercado_trabajo_eph', { order: 'area_geografica_nom,periodo' }, 4);
+  const area = totalArea(rows), unemployment = {}, activity = {}, employment = {};
+  for (const r of rows) {
+    if ((r.area_geografica_nom ?? '') !== area) continue;
+    const y = Number(r.anio) || Number(String(r.periodo).slice(0, 4)), q = Number(r.trimestre) || Number(String(r.periodo).slice(-1));
+    if (!(y > 2000 && q >= 1 && q <= 4)) continue; const k = `${y}-Q${q}`;
+    put(unemployment, k, pctN(r.tasa_de_desocupacion)); put(activity, k, pctN(r.tasa_de_actividad)); put(employment, k, pctN(r.tasa_de_empleo));
+  }
+  const by = {}; for (const [k, v] of Object.entries(unemployment)) (by[k.slice(0, 4)] ??= []).push(v);
+  const annual = {}; for (const [y, a] of Object.entries(by)) if (a.length === 4) annual[y] = Math.round(a.reduce((s, v) => s + v, 0) / 4 * 10) / 10;
+  return { quarterly: unemployment, annual, activity, employment, area, url: `${BASE}/mercado_trabajo_eph`, apiDiag: diag(rows, ['area_geografica_nom', 'area_geografica_cod', 'periodo', 'observaciones'], { area, quarters: Object.keys(unemployment).length }) };
+}

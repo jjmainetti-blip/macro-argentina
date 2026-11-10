@@ -2,6 +2,7 @@
 // Cada función devuelve el mismo formato que usa el frontend y nunca inventa meses: si la fuente no
 // responde, el handler conserva el último snapshot guardado (KV) o la línea de base.
 import { one as cementMonth } from './cement-monthly.mjs';
+import { indecApiEnabled, povertyApi, agrees } from './indec-api.mjs';
 
 const UA_BROWSER = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36';
 const SERIES = 'https://apis.datos.gob.ar/series/api/series/';
@@ -145,15 +146,24 @@ async function ipcbaReportFetch(period) {
 // ---------- Pobreza (INDEC EPH, personas, total aglomerados) vía Datos Argentina ----------
 // La serie fecha los semestres así: AAAA-07 = 1.er semestre de AAAA; AAAA-01 = 2.º semestre de AAAA-1.
 export async function povertyLive() {
-  const raw = await seriesMap('64.2_POBLACION_NUA_0_0_34_74', '2016-01-01');
-  const semesters = {};
-  for (const [k, v] of Object.entries(raw)) {
-    const y = +k.slice(0, 4), m = +k.slice(5, 7);
-    const key = m >= 7 ? `${y}-S1` : `${y - 1}-S2`;
-    semesters[key] = Math.round((v <= 1 ? v * 100 : v) * 10) / 10;
-  }
-  if (Object.keys(semesters).length < 8) throw new Error('Pobreza: serie incompleta');
-  return { status: 'ok', source: 'INDEC — EPH, incidencia de la pobreza en personas (vía Datos Argentina)', sourceUrl: 'https://www.indec.gob.ar/', semesters };
+  const semesters = {}; let daErr = null;
+  try {
+    const raw = await seriesMap('64.2_POBLACION_NUA_0_0_34_74', '2016-01-01');
+    for (const [k, v] of Object.entries(raw)) {
+      const y = +k.slice(0, 4), m = +k.slice(5, 7);
+      const key = m >= 7 ? `${y}-S1` : `${y - 1}-S2`;
+      semesters[key] = Math.round((v <= 1 ? v * 100 : v) * 10) / 10;
+    }
+  } catch (e) { daErr = e; }
+  // v239: API del INDEC (pobreza_eph, total de aglomerados): llega el mismo día del informe; Datos Argentina queda de control y respaldo.
+  let indecApi = null, extra = {};
+  if (indecApiEnabled()) try {
+    const a = await povertyApi(), check = agrees(semesters, a.persons, 'pct'); indecApi = { used: false, check, diag: a.apiDiag };
+    if (check.ok && Object.keys(a.persons).length) { Object.assign(semesters, a.persons); indecApi.used = true; extra = { households: a.households, indigencePersons: a.indigencePersons, indigenceHouseholds: a.indigenceHouseholds }; }
+  } catch (e) { indecApi = { used: false, error: String(e?.message || e).slice(0, 120) }; }
+  if (Object.keys(semesters).length < 8) throw daErr || new Error('Pobreza: serie incompleta');
+  const via = indecApi?.used ? 'API INDEC' : 'Datos Argentina';
+  return { status: 'ok', source: `INDEC — EPH, incidencia de la pobreza en personas (vía ${via})`, sourceUrl: indecApi?.used ? 'https://api.indec.gob.ar/' : 'https://www.indec.gob.ar/', semesters, ...extra, ...(indecApi ? { indecApi } : {}) };
 }
 
 // ---------- Despachos de cemento (AFCP) ----------

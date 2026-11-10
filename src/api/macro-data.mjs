@@ -12,7 +12,7 @@ import { EVENTS } from './calendar-data.mjs';
 import { ipcMonthlyChain, ipcAnnualAvg, ipcAnnualAvgInflation } from './ipc-chain.mjs';
 import { indecXText, parseIndecIca } from './indec-x.mjs';
 import { arcaXPosts } from './arca-x.mjs';
-import { setIndecToken, indecApiEnabled, emaeApi, ipiApi, ipcApi, wagesApi, agrees } from './indec-api.mjs';
+import { setIndecToken, indecApiEnabled, emaeApi, ipiApi, ipcApi, wagesApi, laborApi, agrees } from './indec-api.mjs';
 import { nowcastInputs } from './nowcast-inputs.mjs';
 import { equilibraActivity } from './equilibra.mjs';
 /* Macrodatos (antes Macro Argentina) v8 — stable server-side data contract.
@@ -225,9 +225,15 @@ async function addIndecNews(out,subject){
 async function industryHistorical(){
   const annual={}; const segments=[];
   try{const x=await seriesRows('12.1_E_2004_A_3',{start:'1994-01-01',end:'2015-12-31'});Object.assign(annual,growthFromAnnualLevels(annualFromRows(x.rows,'avg')));segments.push({range:'EMI hasta 2015',sourceUrl:x.url});}catch{}
-  // v197: IPI manufacturero desde el cuadro de INDEC (primario); Datos Argentina sólo completa meses faltantes.
-  let monthlyYoy={},off=null;try{off=await indecIpi();const rows=Object.entries(off.level).map(([k,v])=>({date:k,value:v}));Object.assign(annual,growthFromMonthlyYtd(rows));monthlyYoy={...off.monthlyYoy};segments.push({range:'IPI desde 2016 (INDEC)',sourceUrl:off.url});}catch(e){console.warn('IPI INDEC',e);}
-  try{const x=await seriesRows('453.1_SERIE_ORIGNAL_0_0_14_46',{start:'2016-01-01'});fillMissing(annual,growthFromMonthlyYtd(x.rows));fillMissing(monthlyYoy,yoyFromRows(x.rows));if(!off)segments.push({range:'IPI desde 2016 (Datos Argentina, respaldo)',sourceUrl:x.url});}catch{}
+  // v239: primero Datos Argentina (liviano) y la API del INDEC (últimos ~40 meses, nivel general). Si la API coincide con
+  // Datos Argentina, no se descarga el cuadro xls de INDEC; si no, el cuadro sigue siendo la fuente primaria (v197).
+  let monthlyYoy={},off=null,daRows=null,api=null,indecApi=null;
+  try{const x=await seriesRows('453.1_SERIE_ORIGNAL_0_0_14_46',{start:'2016-01-01'});daRows=x;}catch{}
+  if(indecApiEnabled())try{const a=await ipiApi();const check=agrees(daRows?yoyFromRows(daRows.rows):{},a.monthlyYoy,'pct');indecApi={used:false,check,diag:a.apiDiag};if(check.ok&&Object.keys(a.monthlyYoy).length){api=a;indecApi.used=true;}}
+  catch(e){indecApi={used:false,error:String(e?.message||e).slice(0,120)};}
+  if(!api)try{off=await indecIpi();const rows=Object.entries(off.level).map(([k,v])=>({date:k,value:v}));Object.assign(annual,growthFromMonthlyYtd(rows));monthlyYoy={...off.monthlyYoy};segments.push({range:'IPI desde 2016 (INDEC)',sourceUrl:off.url});}catch(e){console.warn('IPI INDEC',e);}
+  if(daRows){fillMissing(annual,growthFromMonthlyYtd(daRows.rows));fillMissing(monthlyYoy,yoyFromRows(daRows.rows));if(!off)segments.push({range:'IPI desde 2016 (Datos Argentina)',sourceUrl:daRows.url});}
+  if(api){Object.assign(monthlyYoy,api.monthlyYoy);const g=growthFromMonthlyYtd(Object.entries(api.level).map(([k,v])=>({date:k,value:v})));for(const [y,v] of Object.entries(g))if(Number.isFinite(v)&&Object.keys(api.level).some(k=>k.startsWith(`${+y-1}-01`)))annual[y]=v;segments.push({range:'IPI últimos meses (API INDEC)',sourceUrl:api.url});}
   if(!Object.keys(annual).length&&!Object.keys(monthlyYoy).length)throw new Error('series industriales no disponibles');
   for(const [y,v] of Object.entries(INDUSTRY_ANNUAL))if(annual[y]==null)annual[y]=v;
   // v179: puente 2015–2016 (EMI termina en 2014; la primera variación del IPI es 2017) con el EMAE industria.
@@ -235,25 +241,28 @@ async function industryHistorical(){
   for(const [y,v] of Object.entries(INDUSTRY_BRIDGE))if(annual[y]==null)annual[y]=v;
   if(annual[2015]!=null)segments.push({range:'2015–2016: EMAE industria manufacturera (empalme)'});
   let monthlySaMom=off&&Object.keys(off.monthlySaMom).length?{...off.monthlySaMom}:undefined;try{const b=await saMomFromLevels('453.1_SERIE_DESEADA_0_0_24_58');monthlySaMom=fillMissing(monthlySaMom||{},b);}catch{}
-  // v238: API del INDEC (IPI manufacturero, nivel general, últimos ~40 meses), si la interanual coincide con la del cuadro.
-  let indecApi=null;
-  if(indecApiEnabled())try{const a=await ipiApi();const check=agrees(monthlyYoy,a.monthlyYoy,'pct');indecApi={used:false,check,diag:a.apiDiag};
-    if(check.ok&&Object.keys(a.monthlyYoy).length){Object.assign(monthlyYoy,a.monthlyYoy);if(Object.keys(a.monthlySaMom).length)monthlySaMom={...(monthlySaMom||{}),...a.monthlySaMom};
-      if(!off){const rows=Object.entries(a.level).map(([k,v])=>({date:k,value:v}));fillMissing(annual,growthFromMonthlyYtd(rows));}indecApi.used=true;segments.push({range:'IPI últimos meses (API INDEC)',sourceUrl:a.url});}}
-  catch(e){indecApi={used:false,error:String(e?.message||e).slice(0,120)};}
-  return await addIndecNews({status:'ok',source:off?'INDEC — IPI manufacturero (cuadros oficiales); EMI histórico':'INDEC / Datos Argentina — EMI + IPI manufacturero (respaldo)',...(off?{sourceUrl:off.url}:{}),annual,monthlyYoy,...(monthlySaMom?{monthlySaMom}:{}),...(indecApi?{indecApi}:{}),segments},'[ií]ndice de producci[oó]n industrial manufacturero(?: \\(IPI manufacturero\\))?').then(o=>withCalendarDate(o,/manufacturero \(IPI\)/i));
+  if(api&&Object.keys(api.monthlySaMom).length)monthlySaMom={...(monthlySaMom||{}),...api.monthlySaMom};
+  return await addIndecNews({status:'ok',source:api?'INDEC — IPI manufacturero (API INDEC + Datos Argentina); EMI histórico':off?'INDEC — IPI manufacturero (cuadros oficiales); EMI histórico':'INDEC / Datos Argentina — EMI + IPI manufacturero (respaldo)',...(api?{sourceUrl:api.url}:off?{sourceUrl:off.url}:{}),annual,monthlyYoy,...(monthlySaMom?{monthlySaMom}:{}),...(indecApi?{indecApi}:{}),segments},'[ií]ndice de producci[oó]n industrial manufacturero(?: \\(IPI manufacturero\\))?').then(o=>withCalendarDate(o,/manufacturero \(IPI\)/i));
 }
 async function unemploymentHistorical(){
   // v197: EPH (cuadros de INDEC, promedio de los 4 trimestres) es la fuente primaria desde 2017; Datos Argentina
   // completa los años anteriores (desde 2003) y hace de respaldo.
-  const annual={};let off=null,url=null;
-  try{off=await indecEph();Object.assign(annual,off.annual);url=off.url;}catch(e){console.warn('EPH INDEC',e);}
+  // v239: primero la API del INDEC (mercado_trabajo_eph, total de aglomerados). Si coincide con Datos Argentina en los
+  // años en común, no se descarga el cuadro xls (más liviano para el servidor); si no, se usa el cuadro como antes.
+  const annual={};let off=null,url=null,da={},daErr=null,indecApi=null;
   try{const x=await seriesRows('45.1_ECTDT_0_A_33',{start:'2003-01-01'});
     // Normalizar ANTES de redondear: 0.074 -> 7.4, no 0.1 -> 10.0.
     const normalized=x.rows.map(r=>({...r,value:Math.abs(r.value)<=1?r.value*100:r.value}));
-    fillMissing(annual,annualFromRows(normalized));url??=x.url;}catch(e){if(!off)throw e;}
+    da=annualFromRows(normalized);url=x.url;}catch(e){daErr=e;}
+  if(indecApiEnabled())try{const a=await laborApi();const check=agrees(da,a.annual,'pct');indecApi={used:false,check,diag:a.apiDiag};
+    if(check.ok&&Object.keys(a.quarterly).length>=12){off={quarterly:a.quarterly,annual:a.annual,url:a.url};indecApi.used=true;}}
+  catch(e){indecApi={used:false,error:String(e?.message||e).slice(0,120)};}
+  if(!off)try{off=await indecEph();}catch(e){console.warn('EPH INDEC',e);}
+  if(off){Object.assign(annual,off.annual);url=off.url;}
+  fillMissing(annual,da);
+  if(!off&&daErr)throw daErr;
   if(Object.keys(annual).length<(off?5:15))throw new Error('serie anual EPH incompleta');
-  return {status:'ok',source:off?'INDEC — EPH continua (cuadros oficiales), promedio anual de las tasas trimestrales':'INDEC / Datos Argentina — EPH continua (respaldo)',sourceUrl:url,annual,...(off?{quarterly:off.quarterly}:{})};
+  return {status:'ok',source:indecApi?.used?'INDEC — EPH continua (API INDEC), promedio anual de las tasas trimestrales':off?'INDEC — EPH continua (cuadros oficiales), promedio anual de las tasas trimestrales':'INDEC / Datos Argentina — EPH continua (respaldo)',sourceUrl:url,annual,...(off?{quarterly:off.quarterly}:{}),...(indecApi?{indecApi}:{})};
 }
 function usCpiAnnual(){
   // BLS CPI-U, U.S. city average, all items, annual averages (1982-84=100).
@@ -984,13 +993,13 @@ async function emaeHistorical(){
   const out={status:'ok',source:'INDEC / Datos Argentina — EMAE (respaldo)'};
   if(yoyR.status==='fulfilled'){out.monthlyYoy=toPct(yoyR.value.rows);out.sourceUrl=yoyR.value.url;}
   if(saR.status==='fulfilled')out.monthlySaMom=toPct(saR.value.rows);
-  // v197: cuadro oficial de INDEC (sh_emae_mensual_base2004) primario; Datos Argentina sólo completa.
-  try{const off=await indecEmae();out.monthlyYoy={...(out.monthlyYoy||{}),...Object.fromEntries(Object.entries(off.monthlyYoy).filter(([k])=>k>='2018-01'))};out.monthlySaMom={...(out.monthlySaMom||{}),...Object.fromEntries(Object.entries(off.monthlySaMom).filter(([k])=>k>='2015-01'))};out.sourceUrl=off.url;out.source='INDEC — EMAE (cuadros oficiales; Datos Argentina de respaldo)';}catch(e){console.warn('EMAE INDEC',e);}
-  // v238: API del INDEC (últimos ~40 meses). Se usa si la interanual coincide con la que ya hay; la desestacionalizada se
+  // v238: API del INDEC (últimos ~40 meses). Se usa si la interanual coincide con Datos Argentina; la desestacionalizada se
   // toma entera de la API (se revisa cada mes, como en el cuadro).
   if(indecApiEnabled())try{const a=await emaeApi();const check=agrees(out.monthlyYoy||{},a.monthlyYoy,'pct');out.indecApi={used:false,check,diag:a.apiDiag};
-    if(check.ok&&Object.keys(a.monthlyYoy).length){out.monthlyYoy={...(out.monthlyYoy||{}),...Object.fromEntries(Object.entries(a.monthlyYoy).filter(([k])=>k>='2018-01'))};out.monthlySaMom={...(out.monthlySaMom||{}),...a.monthlySaMom};out.indecApi.used=true;out.source=`${out.source} · API INDEC`;}}
+    if(check.ok&&Object.keys(a.monthlyYoy).length){out.monthlyYoy={...(out.monthlyYoy||{}),...Object.fromEntries(Object.entries(a.monthlyYoy).filter(([k])=>k>='2018-01'))};out.monthlySaMom={...(out.monthlySaMom||{}),...a.monthlySaMom};out.indecApi.used=true;out.source='INDEC — EMAE (API INDEC; Datos Argentina de respaldo)';out.sourceUrl=a.url;}}
   catch(e){out.indecApi={used:false,error:String(e?.message||e).slice(0,120)};}
+  // v197: cuadro oficial de INDEC (sh_emae_mensual_base2004); v239: sólo si la API del INDEC no se pudo usar.
+  if(!out.indecApi?.used)try{const off=await indecEmae();out.monthlyYoy={...(out.monthlyYoy||{}),...Object.fromEntries(Object.entries(off.monthlyYoy).filter(([k])=>k>='2018-01'))};out.monthlySaMom={...(out.monthlySaMom||{}),...Object.fromEntries(Object.entries(off.monthlySaMom).filter(([k])=>k>='2015-01'))};out.sourceUrl=off.url;out.source='INDEC — EMAE (cuadros oficiales; Datos Argentina de respaldo)';}catch(e){console.warn('EMAE INDEC',e);}
   // v205: el mes recién publicado (X de INDEC o portada) antes de que llegue el cuadro.
   try{const n=parseIndecNews(await indecNewsText(),'estimador mensual de actividad econ[oó]mica(?: \\(EMAE\\))?');const last=Object.keys(out.monthlyYoy||{}).sort().at(-1);
     if(n&&(!last||n.ym>last)){out.monthlyYoy={...(out.monthlyYoy||{}),[n.ym]:n.yoy};if(n.mom!==null)out.monthlySaMom={...(out.monthlySaMom||{}),[n.ym]:n.mom};out.indecNews={ym:n.ym,source:'INDEC — informe técnico (X / portada)'};}}catch{}

@@ -833,3 +833,9 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 - Seguridad: la API sólo se usa si coincide con lo que ya hay en los meses en común (niveles ±0,3%; interanuales ±0,15 p.p. en el 90% de los meses). Si el cuadro falla, la API se usa sola.
 - Diagnóstico: cada fuente guarda `indecApi` ({used, check, diag con los valores de columnas vistos, o error}) para revisar la clasificación desde /api/macro-data.
 - Pedidos chicos (filtros por período) para no sumar carga: 1–4 pedidos por serie.
+
+## v239 — API del INDEC (segunda etapa)
+- Pobreza (`poverty`, live-sources): API `pobreza_eph` (total de aglomerados) como fuente principal si coincide con Datos Argentina; guarda también hogares e indigencia.
+- Desocupación (`unemploymentHistorical`): API `mercado_trabajo_eph` (trimestral, total de aglomerados). Si coincide con Datos Argentina, ya no se descarga el cuadro xls de la EPH.
+- EMAE e IPI manufacturero: la API se compara con Datos Argentina y, si coincide, no se descargan los cuadros xls del INDEC (quedan como respaldo si la API falla o no coincide).
+- Comercio exterior no se pasó a la API: viene por país y producto (miles de filas por mes, con celdas confidenciales "s"), y sumarlo no reproduce los totales del ICA. Sigue con el ICA. Las canastas (CBA/CBT) quedan para una tarjeta nueva.
