@@ -847,3 +847,6 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 - Nueva tarjeta en Calculadoras (`public/currency-calc.js`): un monto en pesos moneda nacional, pesos ley 18.188, pesos argentinos, australes o pesos, de cualquier mes desde 1943, llevado a pesos de hoy.
 - Conversión de signo monetario (1 $L = 100 m$n; 1 $a = 10.000 $L; 1 A = 1.000 $a; 1 $ = 10.000 A) y ajuste por la misma cadena mensual del IPC del sitio (`inflationIndex`), hasta el último mes publicado. La moneda se elige sola según la fecha (o a mano, con aviso si no circulaba).
 - Índice de salarios y RIPTE: se revisó que agosto 2026 es el último dato publicado (INDEC publica septiembre el 13/11; RIPTE de septiembre todavía no salió).
+
+## v242 — Calculadoras alineadas
+- Pantallas anchas (≥1180 px): las tres calculadoras en tres columnas del mismo alto. Pantallas medianas (901–1179 px): dos arriba y "¿Cuánto vale hoy?" centrada debajo. Celular: una debajo de la otra (sin cambios). Sólo CSS.

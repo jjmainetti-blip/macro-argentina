@@ -379,3 +379,9 @@ body.modal-open{overflow:hidden}
 #ccResult small{display:block;color:var(--muted)}
 #ccResult .cc-warn{margin:10px 0 0;padding:8px 10px;border-radius:10px;background:#fff6e5;color:#8a5a00;font-size:13px}
 #ccResult .cc-detail{margin:10px 0 0;padding-left:18px;font-size:13px;color:#4b5e74}
+/* v242 · Calculadoras alineadas: tres columnas de igual alto en pantallas anchas; en pantallas medianas (901–1179 px), dos columnas
+   y la tercera centrada debajo; en celular, una debajo de la otra. */
+#calculadoras .calc-pair{align-items:stretch}
+#calculadoras .calc-pair>.calc-card{height:100%}
+@media(min-width:1180px){#calculadoras .calc-pair{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(min-width:901px) and (max-width:1179px){#calculadoras .calc-pair>#currencyCalc{grid-column:1/-1;justify-self:center;width:min(100%,calc(50% - 9px));height:auto}}
