@@ -25,6 +25,7 @@ const events=[
 ['2026-12-09','INDEC','Índice de producción industrial manufacturero (IPI)','octubre 2026'],
 ['2026-12-09','INDEC','Indicador sintético de la actividad de la construcción (ISAC)','octubre 2026'],
 ['2026-12-15','INDEC','Índice de precios al consumidor (IPC)','noviembre 2026'],
+['2026-12-16','INDEC','Índice de salarios','octubre 2026'],
 ['2026-12-17','Ministerio de Economía','Resultado fiscal','noviembre 2026'],
 ['2026-12-18','INDEC','Intercambio comercial argentino (ICA)','noviembre 2026'],
 ['2026-12-18','INDEC','Mercado de trabajo','tercer trimestre 2026'],
