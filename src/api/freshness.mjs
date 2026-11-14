@@ -12,7 +12,7 @@ const dd = (ym, day) => `${ym}-${String(Math.min(day, 28)).padStart(2, '0')}`;
 
 // group = grupo de /api/macro-data que la actualiza. lag = meses entre el período y la publicación; day = día habitual.
 // v169 · Organismo de cada tarjeta (para la agenda de próximas publicaciones).
-export const AGENCY = { ipc: 'INDEC', ipcCaba: 'IDECBA', arca: 'ARCA', icg: 'UTDT', autos: 'ACARA', came: 'CAME', super: 'INDEC', scentia: 'Scentia', emae: 'INDEC', isac: 'INDEC', fiscal: 'Ministerio de Economía', cement: 'AFCP', credit: 'BCRA', mortgage: 'BCRA', arrears: 'BCRA', ipi: 'INDEC', trade: 'INDEC', ila: 'CICEc', iga: 'OJF', bop: 'INDEC', poverty: 'INDEC', wages: 'INDEC' };
+export const AGENCY = { capacity: 'INDEC', ipc: 'INDEC', ipcCaba: 'IDECBA', arca: 'ARCA', icg: 'UTDT', autos: 'ACARA', came: 'CAME', super: 'INDEC', scentia: 'Scentia', emae: 'INDEC', isac: 'INDEC', fiscal: 'Ministerio de Economía', cement: 'AFCP', credit: 'BCRA', mortgage: 'BCRA', arrears: 'BCRA', ipi: 'INDEC', trade: 'INDEC', ila: 'CICEc', iga: 'OJF', bop: 'INDEC', poverty: 'INDEC', wages: 'INDEC' };
 export const CARDS = [
   { key: 'ipc', title: 'Inflación nacional', group: 'core', freq: 'M', lag: 1, day: 15, cal: /precios al consumidor \(IPC\)/i, latest: S => lastKey(Object.fromEntries((S.ipc?.monthly || []).map(r => [String(r.date).slice(0, 7), r.value]))) },
   // v211 · Índice de salarios (INDEC): sale ~2 meses después del período.
@@ -28,6 +28,7 @@ export const CARDS = [
   { key: 'emae', title: 'EMAE', group: 'activity', freq: 'M', lag: 2, day: 25, cal: /actividad econ[oó]mica \(EMAE\)/i, latest: S => maxKey(lastKey(S.emaeHistorical?.monthlySaMom), lastKey(S.emaeHistorical?.monthlyYoy)) },
   { key: 'isac', title: 'ISAC construcción', group: 'activity', freq: 'M', lag: 2, day: 7, cal: /actividad de la construcci[oó]n \(ISAC\)/i, latest: S => lastKey(S.isacHistorical?.monthlyYoy) },
   { key: 'fiscal', title: 'Resultado fiscal', group: 'activity', freq: 'M', lag: 1, day: 18, cal: /Resultado fiscal/i, latest: S => lastKey(S.activityPulse?.fiscal?.historyPctGDP?.primary) },
+  { key: 'capacity', title: 'Capacidad instalada', group: 'activity', freq: 'M', lag: 2, day: 14, cal: /capacidad instalada/i, latest: S => lastKey(S.capacity?.monthly) }, // v245: UCII (INDEC)
   { key: 'cement', title: 'Despachos de cemento', group: 'activity', freq: 'M', lag: 1, day: 4, latest: S => lastKey(S.cement?.monthlyYoy) },
   { key: 'credit', title: 'Crédito privado', group: 'activity', freq: 'M', lag: 1, day: 8, latest: S => maxKey(lastKey(S.creditHistorical?.monthlySaRealMom), S.activityPulse?.creditLatest?.ym) },
   { key: 'mortgage', title: 'Crédito hipotecario', group: 'mortgage', freq: 'M', lag: 1, day: 5, latest: S => lastKey(S.mortgageFlows?.monthlyTotalUsd) }, // v232: créditos nuevos por mes (BCRA, montos operados)

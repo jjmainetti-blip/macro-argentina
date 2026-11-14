@@ -1189,6 +1189,33 @@ async function monetaryBase(){
     lastDay,ipcBase:lastIpc,lastMonthPartial:lastDay&&lastDay.slice(0,7)===Object.keys(M).sort().at(-1)&&lastDay.slice(8)<'25',
     monthlyNominal:nominal,monthlyReal:real,monthlyPctGdp:pct,annualReal:realA,annualPctGdp:pctA,lastGdpQuarter:qKeys.at(-1)||null};
 }
+// v245 · Utilización de la capacidad instalada en la industria (UCII, INDEC, % mensual).
+// Historia: Datos Argentina (31.3_UNG_2004_M_18 desde 2016) — suele ir 1 o 2 meses atrasada. Último dato: el informe
+// técnico en PDF, que trae el cuadro 1 con los últimos ~21 meses; el enlace se toma de la página de Industria manufacturera.
+const UCII_PAGE='https://www.indec.gob.ar/Nivel3/Tema/3/6';
+const MES_UCII={enero:1,febrero:2,marzo:3,abril:4,mayo:5,junio:6,julio:7,agosto:8,septiembre:9,setiembre:9,octubre:10,noviembre:11,diciembre:12};
+export function parseUciiReport(t){
+  const out={};const i=t.search(/Per[ií]odo\s+Porcentaje/);if(i<0)return {monthly:out};
+  const seg=t.slice(i,i+1200).split(/Fuente:/)[0];let y=null;
+  for(const m of seg.matchAll(/(\d{4})\*?|([A-Za-zé]+)\s+(\d{1,3},\d)/g)){
+    if(m[1]){y=Number(m[1]);continue;}const mo=MES_UCII[m[2].toLowerCase()];if(y&&mo)out[`${y}-${String(mo).padStart(2,'0')}`]=Number(m[3].replace(',','.'));}
+  const d=t.match(/Buenos Aires,\s*(\d{1,2})\s+de\s+([a-zé]+)\s+de\s+(\d{4})/i);const published=d&&MES_UCII[d[2].toLowerCase()]?`${d[3]}-${String(MES_UCII[d[2].toLowerCase()]).padStart(2,'0')}-${String(d[1]).padStart(2,'0')}`:null;
+  return {monthly:out,published};
+}
+async function capacityUtilization(){
+  const monthly={},errors=[];let url='https://www.indec.gob.ar/',published=null,pdfUrl=null;
+  for(const [id,start] of [['29.3_UNG_2006_M_18','2002-01-01'],['31.3_UNG_2004_M_18','2016-01-01']]){
+    try{const x=await seriesRows(id,{start});for(const r of x.rows){const v=Number(r.value);if(Number.isFinite(v))monthly[String(r.date).slice(0,7)]=Math.round((v<=1?v*100:v)*10)/10;}}catch(e){errors.push(`${id}: ${String(e?.message||e).slice(0,60)}`);}}
+  try{
+    const pr=await fetch(UCII_PAGE,{headers:{accept:'text/html','user-agent':'Mozilla/5.0 macrodatos.ar'},signal:AbortSignal.timeout(15000)});if(!pr.ok)throw new Error(`página ${pr.status}`);const h=await pr.text();const m=h.match(/uploads\/informesdeprensa\/capacidad_[\w-]+\.pdf/);if(!m)throw new Error('sin enlace al informe');
+    pdfUrl=`https://www.indec.gob.ar/${m[0]}`;const r=await fetch(pdfUrl,{headers:{'user-agent':'Mozilla/5.0 macrodatos.ar'},signal:AbortSignal.timeout(20000)});if(!r.ok)throw new Error(`PDF ${r.status}`);
+    const {pdfText}=await import('./pdf-text.mjs');const x=parseUciiReport(await pdfText(await r.arrayBuffer(),200));
+    if(Object.keys(x.monthly).length<6)throw new Error('cuadro 1 no encontrado');Object.assign(monthly,x.monthly);published=x.published;url=pdfUrl;
+  }catch(e){errors.push(`INDEC: ${String(e?.message||e).slice(0,80)}`);}
+  const keys=Object.keys(monthly).sort();if(keys.length<12)throw new Error(`UCII: ${errors.join(' · ')||'serie incompleta'}`);
+  const last=keys.at(-1);
+  return {status:'ok',source:pdfUrl?'INDEC — Utilización de la capacidad instalada en la industria (informe técnico; historia: Datos Argentina)':'INDEC / Datos Argentina — Utilización de la capacidad instalada (respaldo)',sourceUrl:url,monthly,latest:{ym:last,...(published&&pdfUrl&&monthly[last]!=null?{published}:{})},...(errors.length?{warnings:errors}:{})};
+}
 // v232 · Créditos hipotecarios NUEVOS por mes (montos operados, BCRA — Tasas de interés por préstamos al sector privado):
 // UVA (preser_uva.xls, "Balance flows" del total de préstamos hipotecarios UVA, desde 2016) + hipotecarios tradicionales en
 // pesos y en dólares (preser_mon.xls, hoja de montos del sector privado, columna "Mortgage loans · Total", desde 1993).
@@ -1448,13 +1475,13 @@ async function bcraPurchasesHistorical(){
   if(Object.keys(monthly).length<200)throw new Error('compras BCRA: serie corta');
   return {status:'ok',source:'BCRA — compras netas de divisas: sector privado (var. 78, USD) y Tesoro Nacional (var. 48, $ convertidos al mayorista A3500)',sourceUrl:'https://api.bcra.gob.ar/estadisticas/v4.0/monetarias/78',lastDay:Object.keys(d).sort().at(-1),monthly,...(Object.keys(treasury).length?{treasury}:{})};
 }
-const JOBS={monetaryBase:()=>monetaryBase(),mortgageCredit:()=>mortgageCredit(),mortgageFlows:()=>mortgageFlows(),wages:()=>wagesIndec(),bcraPurchasesHistorical:()=>bcraPurchasesHistorical(),supermarkets:()=>supermarkets(),scentia:()=>scentiaLive(),ipcHistorical:()=>ipcHistorical(),gdpHistorical:()=>gdpHistorical(),emaeHistorical:()=>emaeHistorical(),industryHistorical:()=>industryHistorical(),unemploymentHistorical:()=>unemploymentHistorical(),tradeHistorical:()=>tradeHistorical(),financialHistorical:()=>financialHistorical(),exchangeHistorical:()=>exchangeHistorical(),ipc:()=>ipc(),arca:()=>arca(),icg:()=>icg(),bcra:()=>bcra(),rem:()=>rem(),salary:()=>salaryRipte(),icl:()=>icl(),contractIndices:()=>contractIndices(),isacHistorical:()=>isacHistorical(),creditHistorical:()=>creditHistorical(),arrearsHistorical:()=>arrearsHistorical(),activityPulse:()=>activityPulse(),ilaHistorical:()=>ilaHistorical(),igaHistorical:()=>igaHistorical(),nowcastInputs:()=>nowcastInputs(get),equilibraActivity:()=>equilibraActivity(get),bopHistorical:()=>bopHistorical(),autos:()=>autosLive(),ipcCaba:()=>ipcCabaLive(),poverty:()=>povertyLive(),cement:()=>cementLive(),came:()=>cameLive()};
+const JOBS={capacity:()=>capacityUtilization(),monetaryBase:()=>monetaryBase(),mortgageCredit:()=>mortgageCredit(),mortgageFlows:()=>mortgageFlows(),wages:()=>wagesIndec(),bcraPurchasesHistorical:()=>bcraPurchasesHistorical(),supermarkets:()=>supermarkets(),scentia:()=>scentiaLive(),ipcHistorical:()=>ipcHistorical(),gdpHistorical:()=>gdpHistorical(),emaeHistorical:()=>emaeHistorical(),industryHistorical:()=>industryHistorical(),unemploymentHistorical:()=>unemploymentHistorical(),tradeHistorical:()=>tradeHistorical(),financialHistorical:()=>financialHistorical(),exchangeHistorical:()=>exchangeHistorical(),ipc:()=>ipc(),arca:()=>arca(),icg:()=>icg(),bcra:()=>bcra(),rem:()=>rem(),salary:()=>salaryRipte(),icl:()=>icl(),contractIndices:()=>contractIndices(),isacHistorical:()=>isacHistorical(),creditHistorical:()=>creditHistorical(),arrearsHistorical:()=>arrearsHistorical(),activityPulse:()=>activityPulse(),ilaHistorical:()=>ilaHistorical(),igaHistorical:()=>igaHistorical(),nowcastInputs:()=>nowcastInputs(get),equilibraActivity:()=>equilibraActivity(get),bopHistorical:()=>bopHistorical(),autos:()=>autosLive(),ipcCaba:()=>ipcCabaLive(),poverty:()=>povertyLive(),cement:()=>cementLive(),came:()=>cameLive()};
 export const GROUPS={
   core:['ipc','arca','icg','bcra','rem','salary','wages','icl','contractIndices','autos','ipcCaba','came'],
   history:['ipcHistorical','gdpHistorical','industryHistorical','unemploymentHistorical','tradeHistorical'],
   markets:['financialHistorical','exchangeHistorical'],
   mortgage:['mortgageCredit','mortgageFlows','monetaryBase'], // v230–v232: crédito hipotecario (stock y créditos nuevos por mes); v237: base monetaria (BCRA)
-  activity:['emaeHistorical','isacHistorical','creditHistorical','activityPulse','cement','supermarkets','scentia'],
+  activity:['emaeHistorical','isacHistorical','creditHistorical','activityPulse','cement','supermarkets','scentia','capacity'],
   banks:['arrearsHistorical','bcraPurchasesHistorical'], // v131: grupo propio (anexo xlsx del BCRA, pesado en memoria)
   leading:['ilaHistorical','igaHistorical'],
   nowcast:['nowcastInputs','equilibraActivity'], // v220–v222: insumos del anticipo del EMAE (Datos Argentina) y anticipo de Equilibra
@@ -1466,7 +1493,7 @@ export const GROUPS={
 // v134 · "Último dato publicado" para la portada: se calcula con la misma función del navegador
 // (public/releases.js) sobre los snapshots guardados y se guarda chico en KV (release:latest).
 const RELEASE_KEY='release:latest:v198';
-const CARD_ORDER=[['ipi','IPI manufacturero','INDEC'],['isac','ISAC construcción','INDEC'],['cement','Despachos de cemento','AFCP'],['came','Ventas minoristas pyme','CAME'],['super','Consumo en supermercados','INDEC'],['scentia','Consumo masivo','Scentia'],['arca','Recaudación','ARCA'],['autos','Patentamientos 0 km','ACARA'],['bop','Balanza de pagos','INDEC'],['icg','Confianza gobierno','UTDT'],['ila','Índice Líder (ILA)','CICEc'],['poverty','Pobreza','INDEC'],['iga','IGA','OJF'],['emae','EMAE','INDEC'],['credit','Crédito privado','BCRA'],['mortgage','Crédito hipotecario','BCRA'],['arrears','Mora bancaria','BCRA'],['trade','Balanza comercial','INDEC'],['fiscal','Resultado fiscal','Economía'],['wages','Índice de salarios','INDEC'],['ipcCaba','Inflación CABA','IDECBA'],['ipc','Inflación nacional','INDEC']];
+const CARD_ORDER=[['ipi','IPI manufacturero','INDEC'],['capacity','Capacidad instalada','INDEC'],['isac','ISAC construcción','INDEC'],['cement','Despachos de cemento','AFCP'],['came','Ventas minoristas pyme','CAME'],['super','Consumo en supermercados','INDEC'],['scentia','Consumo masivo','Scentia'],['arca','Recaudación','ARCA'],['autos','Patentamientos 0 km','ACARA'],['bop','Balanza de pagos','INDEC'],['icg','Confianza gobierno','UTDT'],['ila','Índice Líder (ILA)','CICEc'],['poverty','Pobreza','INDEC'],['iga','IGA','OJF'],['emae','EMAE','INDEC'],['credit','Crédito privado','BCRA'],['mortgage','Crédito hipotecario','BCRA'],['arrears','Mora bancaria','BCRA'],['trade','Balanza comercial','INDEC'],['fiscal','Resultado fiscal','Economía'],['wages','Índice de salarios','INDEC'],['ipcCaba','Inflación CABA','IDECBA'],['ipc','Inflación nacional','INDEC']];
 const MES_CORTO=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
 export function topCardRelease(R,seen={}){
   const rows=[];

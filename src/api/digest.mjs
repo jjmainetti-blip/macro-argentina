@@ -7,6 +7,7 @@
 //   acct:dig:<fecha>:<am|pm>   marca de corrida de los resúmenes de ese horario
 //   mkt:closes         { 'YYYY-MM-DD': { dollar, bna, risk, merval } } — cierres propios para las variaciones semanales
 import { cardSummaries } from './card-summary.mjs';
+import { CARDS } from './freshness.mjs';
 import { latestMarketsBody } from './markets.mjs';
 import { agendaEvents } from './calendar-data.mjs';
 import { BUNDLED_SOURCES } from './bundled-history.mjs';
@@ -49,8 +50,11 @@ export function defaultPrefs() {
   return {
     digest: { daily: { on: false, slot: 'pm' }, weekly: { on: false, day: 5, slot: 'pm' }, items: ['dollar', 'bna', 'risk', 'merval', 'watch', 'bcra', 'published', 'rem', 'agenda'], last: {}, watch: [] },
     alerts: Object.keys(ASSETS).map(asset => ({ asset, on: false, pct: DEFAULT_ALERT_PCT[asset], dir: 'both' })),
+    releases: { on: false, keys: [] }, // v245: aviso por mail ni bien se publica un dato nuevo (keys vacío = todos)
   };
 }
+// v245: indicadores del tablero que pueden avisarse (los mismos de "Pulso económico").
+export const RELEASE_CARDS = Object.fromEntries(CARDS.map(c => [c.key, c.title]));
 function normalizePrefs(x, prev) {
   const d = defaultPrefs(), D = x?.digest || {};
   const slot = s => SLOTS[s] ? s : 'pm';
@@ -68,10 +72,12 @@ function normalizePrefs(x, prev) {
       const pct = Math.round(Number(String(a.pct ?? DEFAULT_ALERT_PCT[asset]).replace(',', '.')) * 100) / 100;
       return { asset, on: !!a.on, pct: pct >= 0.1 && pct <= 50 ? pct : DEFAULT_ALERT_PCT[asset], dir: ['both', 'up', 'down'].includes(a.dir) ? a.dir : 'both' };
     }),
+    // v245: si el pedido no trae "releases" (p. ej. al guardar sólo la lista de seguimiento) se conserva lo anterior.
+    releases: x?.releases ? { on: !!x.releases.on, keys: [...new Set((Array.isArray(x.releases.keys) ? x.releases.keys : []).filter(k => RELEASE_CARDS[k]))] } : (prev?.releases || { on: false, keys: [] }),
   };
 }
 const readSubs = async env => (await kvGet(env, SUBS)) || {};
-const active = p => !!(p?.digest?.daily?.on || p?.digest?.weekly?.on || p?.alerts?.some(a => a.on));
+const active = p => !!(p?.digest?.daily?.on || p?.digest?.weekly?.on || p?.alerts?.some(a => a.on) || p?.releases?.on);
 
 // ── Datos para los resúmenes ─────────────────────────────────────────────────────────────────────────────────
 export async function digestData(env) {
@@ -295,12 +301,53 @@ export function alertMail(env, a, x, chg, level, token) {
   };
 }
 
+// ── v245 · Avisos de datos nuevos ──────────────────────────────────────────────────────────────────────────
+// Cada revisión (cada 5 minutos) mira cards:seen, donde el sitio anota el día en que cada tarjeta pasó a un período nuevo.
+// Lo que todavía no se avisó (acct:rel:sent = { tarjeta: período avisado }) sale en un solo mail por suscriptor, con los
+// indicadores que eligió. Sólo de 7 a 23 h; lo detectado hace más de 2 días no se avisa (se marca como visto).
+const REL_SENT = 'acct:rel:sent';
+export async function checkReleases(env, now = new Date()) {
+  const hm = localHM(now); if (hm < 7 * 60 || hm > 23 * 60) return { skipped: 'horario' };
+  const seen = (await kvGet(env, 'cards:seen')) || {}, sent = await kvGet(env, REL_SENT);
+  if (!sent) { await kvPut(env, REL_SENT, Object.fromEntries(Object.entries(seen).map(([k, v]) => [k, v?.ym || null]))); return { init: true }; }
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(now), cutoff = addDays(today, -2);
+  const pending = Object.entries(seen).filter(([k, v]) => v?.ym && sent[k] !== v.ym);
+  if (!pending.length) return { none: true };
+  const fresh = pending.filter(([, v]) => String(v.date || '') >= cutoff).map(([k]) => k);
+  const next = { ...sent }; for (const [k, v] of pending) next[k] = v.ym;
+  const subs = await readSubs(env), want = Object.entries(subs).filter(([, p]) => p.releases?.on);
+  const log = { fresh, sent: 0, errors: [] };
+  if (fresh.length && want.length) {
+    const data = await digestData(env), byKey = new Map(data.releases.map(r => [r.key, r]));
+    for (const [email, p] of want) {
+      const keys = p.releases.keys?.length ? p.releases.keys : null;
+      const items = fresh.filter(k => !keys || keys.includes(k)).map(k => byKey.get(k)).filter(Boolean);
+      if (!items.length) continue;
+      try { const m = releaseMail(env, items, p.token); await sendMail(env, { to: email, subject: m.subject, kind: 'aviso de dato', html: m.html, text: m.text, unsubscribe: unsubHeaders(env, p.token) }); log.sent++; }
+      catch (e) { log.errors.push(String(e?.message || e).slice(0, 140)); }
+    }
+  }
+  await kvPut(env, REL_SENT, next);
+  return log;
+}
+export function releaseMail(env, items, token) {
+  const one = items.length === 1, first = items[0];
+  const subject = one ? `Nuevo dato: ${first.title.split(' · ')[0]} — ${first.value}` : `Nuevos datos: ${items.map(r => r.title.split(' · ')[0]).join(', ')}`;
+  const rows = items.map(r => row(r.title, `<b>${esc(r.value)}</b>`));
+  const footer = `Aviso configurado en tu cuenta. <a href="${site(env)}/#cuenta" style="color:#0b5bd3">Elegir indicadores</a> · <a href="${site(env)}/#baja=${token}" style="color:#0b5bd3">Dejar de recibir</a>`;
+  return {
+    subject,
+    html: layout(env, { title: one ? 'Se publicó un dato nuevo' : 'Se publicaron datos nuevos', intro: 'Ya está en Macrodatos:', body: table(rows), button: { href: `${site(env)}/#tablero`, label: 'Ver en Macrodatos' }, footer }),
+    text: `${items.map(r => `${r.title}: ${r.value}`).join('\n')}\n\nVer: ${site(env)}/#tablero\nElegir indicadores: ${site(env)}/#cuenta\nDejar de recibir: ${site(env)}/#baja=${token}`,
+  };
+}
+
 // ── API (requiere sesión; la llama accountApi) ───────────────────────────────────────────────────────────────
 export async function prefsApi(request, env, url, user) {
   const p = url.pathname, method = request.method, email = user.email;
   if (p === '/api/account/prefs' && method === 'GET') {
     const subs = await readSubs(env), cur = subs[email] || defaultPrefs();
-    return json({ prefs: { digest: cur.digest, alerts: cur.alerts }, items: ITEMS, assets: ASSETS, slots: Object.fromEntries(Object.entries(SLOTS).map(([k, v]) => [k, v.label])) });
+    return json({ prefs: { digest: cur.digest, alerts: cur.alerts, releases: cur.releases || { on: false, keys: [] } }, cards: RELEASE_CARDS, items: ITEMS, assets: ASSETS, slots: Object.fromEntries(Object.entries(SLOTS).map(([k, v]) => [k, v.label])) });
   }
   if (p === '/api/account/prefs' && method === 'POST') {
     const subs = await readSubs(env), prev = subs[email];
@@ -312,7 +359,7 @@ export async function prefsApi(request, env, url, user) {
     } else if (prev || next.digest.watch.length) { subs[email] = { ...next, alertState: null, token: prev?.token || null }; } // v209: la lista de seguimiento se guarda aunque no haya resúmenes activos
     else return json({ ok: true, prefs: next });
     await kvPut(env, SUBS, subs);
-    return json({ ok: true, prefs: { digest: subs[email].digest, alerts: subs[email].alerts } });
+    return json({ ok: true, prefs: { digest: subs[email].digest, alerts: subs[email].alerts, releases: subs[email].releases || { on: false, keys: [] } } });
   }
   if (p === '/api/account/prefs/instruments' && method === 'GET') {
     try { return json(await catalog()); } catch (e) { return json({ error: `No se pudieron obtener las cotizaciones (${String(e?.message || e).slice(0, 100)}).` }, 502); }
@@ -340,7 +387,7 @@ export async function prefsApi(request, env, url, user) {
 // Baja de un clic (desde el mail): apaga resúmenes y alertas.
 export async function unsubscribeDigest(env, email) {
   const subs = await readSubs(env), p = subs[email]; if (!p) return;
-  p.digest.daily.on = false; p.digest.weekly.on = false; for (const a of p.alerts || []) a.on = false;
+  p.digest.daily.on = false; p.digest.weekly.on = false; for (const a of p.alerts || []) a.on = false; if (p.releases) p.releases.on = false;
   await kvPut(env, SUBS, subs);
 }
 export async function removeSubscriber(env, email) {
@@ -351,5 +398,5 @@ export async function removeSubscriber(env, email) {
 export async function digestStatus(env) {
   const t = todayAR(); const subs = await readSubs(env), v = Object.values(subs);
   const g = k => env.MACRO_STORE.get(k).catch(() => null), [am, pm] = await Promise.all([g(`acct:dig:${t}:am`), g(`acct:dig:${t}:pm`)]);
-  return { subscribers: v.length, daily: v.filter(p => p.digest?.daily?.on).length, weekly: v.filter(p => p.digest?.weekly?.on).length, alerts: v.filter(p => p.alerts?.some(a => a.on)).length, ranToday: { am: !!am, pm: !!pm } };
+  return { subscribers: v.length, daily: v.filter(p => p.digest?.daily?.on).length, weekly: v.filter(p => p.digest?.weekly?.on).length, alerts: v.filter(p => p.alerts?.some(a => a.on)).length, releases: v.filter(p => p.releases?.on).length, ranToday: { am: !!am, pm: !!pm } };
 }

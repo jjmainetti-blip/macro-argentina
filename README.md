@@ -857,3 +857,7 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 
 ## v244 — Fecha del Índice de salarios de octubre
 - Calendario: se agregó la publicación oficial del Índice de salarios de octubre 2026 (INDEC, 16/12/2026). La tarjeta mostraba una fecha estimada (~14 dic).
+
+## v245 — Capacidad instalada (UCII) y avisos de datos nuevos
+- Nueva tarjeta "Capacidad instalada" (INDEC, UCII): job `capacity` (grupo `activity`). Historia de Datos Argentina (29.3/31.3_UNG, desde 2002) y último dato del informe técnico en PDF (cuadro 1, ~21 meses; el enlace se toma de https://www.indec.gob.ar/Nivel3/Tema/3/6; `parseUciiReport`). Fecha exacta de publicación desde el PDF. Tarjeta con nivel y diferencia interanual en p.p., gráfico de 60 meses, fila en el semáforo, resumen para los mails y regla de publicación (2 meses, día ~14).
+- "Mi cuenta → Resúmenes y alertas": nueva opción "Avisos de datos nuevos": un mail ni bien el sitio carga un dato nuevo de los indicadores elegidos (todos por defecto). `checkReleases` corre en cada revisión (cada 5 min, de 7 a 23 h) sobre `cards:seen`; lo ya avisado queda en KV `acct:rel:sent`; varios datos juntos van en un solo mail; lo detectado hace más de 2 días no se avisa. La baja de un clic también apaga estos avisos.

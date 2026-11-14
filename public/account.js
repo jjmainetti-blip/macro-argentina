@@ -515,6 +515,7 @@
     if (D.daily.on) bits.push(`resumen diario (${D.daily.slot === 'am' ? '8:30' : '18:30'})`);
     if (D.weekly.on) bits.push(`resumen semanal (${DIAS[D.weekly.day].toLowerCase()})`);
     const al = P.alerts.filter(a => a.on).length; if (al) bits.push(`${al} ${al === 1 ? 'alerta' : 'alertas'} de mercado`);
+    if (P.releases?.on) bits.push(P.releases.keys?.length ? `aviso de datos nuevos (${P.releases.keys.length} ${P.releases.keys.length === 1 ? 'indicador' : 'indicadores'})` : 'aviso de datos nuevos');
     const w = (D.watch || []).length; if (w) bits.push(`${w} ${w === 1 ? 'instrumento' : 'instrumentos'} en seguimiento`);
     return bits.length ? `Activo: ${bits.join(' · ')}.` : 'No tenés resúmenes ni alertas activos.';
   }
@@ -530,7 +531,7 @@
     renderPrefs(box, prefsData);
   }
   function renderPrefs(box, j) {
-    const P = j.prefs, D = P.digest, slotOpts = v => Object.entries(j.slots).map(([k, l]) => `<option value="${k}"${v === k ? ' selected' : ''}>${esc(l)}</option>`).join('');
+    const P = j.prefs, D = P.digest, R = P.releases || { on: false, keys: [] }, slotOpts = v => Object.entries(j.slots).map(([k, l]) => `<option value="${k}"${v === k ? ' selected' : ''}>${esc(l)}</option>`).join('');
     box.innerHTML = `<form class="acct-card acct-prefs" id="acctPrefsForm" novalidate>
       <h3>Resúmenes por mail</h3><p>Llegan a ${esc(state.user.email)}. El diario sale sólo en días hábiles.</p>
       <div class="acct-prefs-grid">
@@ -542,6 +543,9 @@
       </div>
       <fieldset class="acct-fs"><legend>Qué incluir</legend><div class="acct-items">${Object.entries(j.items).map(([k, l]) => `<label class="acct-check"><input type="checkbox" name="item" value="${k}"${D.items.includes(k) ? ' checked' : ''}> ${esc(l)}</label>`).join('')}</div></fieldset>
       <p class="acct-note">Los instrumentos que seguís (acciones, bonos, ADRs) se eligen en la pestaña <b>Seguimiento</b>; marcá «Tus acciones, bonos…» en «Qué incluir» para recibirlos en los resúmenes.</p>
+      <h3 class="acct-h3b">Avisos de datos nuevos</h3><p>Te llega un mail ni bien el sitio carga un dato nuevo de los indicadores que elijas (se revisa cada 5 minutos, de 7 a 23 h; si salen varios juntos, van en un solo mail).</p>
+      <div class="acct-pref"><label class="acct-check"><input type="checkbox" name="relOn"${R.on ? ' checked' : ''}> <b>Avisarme cuando se publique un dato nuevo</b></label></div>
+      <fieldset class="acct-fs" id="acctRelFs"${R.on ? '' : ' disabled'}><legend>Indicadores <button class="btn small" type="button" data-rel-all>Todos</button> <button class="btn small" type="button" data-rel-none>Ninguno</button></legend><div class="acct-items">${Object.entries(j.cards || {}).map(([k, l]) => `<label class="acct-check"><input type="checkbox" name="relKey" value="${k}"${!R.keys?.length || R.keys.includes(k) ? ' checked' : ''}> ${esc(l)}</label>`).join('')}</div></fieldset>
       <h3 class="acct-h3b">Alertas de mercado</h3><p>Te avisamos cuando la variación del día supera tu umbral. Se revisa cada 5 minutos en días hábiles (10:30 a 18 h); llega un mail por activo y dirección, y otro si el movimiento llega al doble, al triple…</p>
       <div class="acct-alerts">${P.alerts.map(a => `<div class="acct-alert" data-asset="${a.asset}"><label class="acct-check"><input type="checkbox" name="on"${a.on ? ' checked' : ''}> <b>${esc(j.assets[a.asset])}</b></label>
         <label>Umbral (%)<input name="pct" inputmode="decimal" value="${String(a.pct).replace('.', ',')}"></label>
@@ -552,7 +556,12 @@
     const read = () => ({
       digest: { daily: { on: f.dailyOn.checked, slot: f.dailySlot.value }, weekly: { on: f.weeklyOn.checked, day: Number(f.weeklyDay.value), slot: f.weeklySlot.value }, items: [...f.querySelectorAll('[name=item]:checked')].map(x => x.value), watch: [...(prefsData?.prefs?.digest?.watch || D.watch || [])] },
       alerts: [...f.querySelectorAll('.acct-alert')].map(el => ({ asset: el.dataset.asset, on: el.querySelector('[name=on]').checked, pct: el.querySelector('[name=pct]').value, dir: el.querySelector('[name=dir]').value })),
+      // v245: todos marcados = lista vacía (incluye los indicadores que se agreguen después).
+      releases: (() => { const all = [...f.querySelectorAll('[name=relKey]')], on = all.filter(x => x.checked).map(x => x.value); return { on: f.relOn.checked && on.length > 0, keys: on.length === all.length ? [] : on }; })(),
     });
+    f.relOn.addEventListener('change', () => { document.getElementById('acctRelFs').disabled = !f.relOn.checked; });
+    f.querySelector('[data-rel-all]').addEventListener('click', () => f.querySelectorAll('[name=relKey]').forEach(x => { x.checked = true; }));
+    f.querySelector('[data-rel-none]').addEventListener('click', () => f.querySelectorAll('[name=relKey]').forEach(x => { x.checked = false; }));
     f.addEventListener('submit', async e => {
       e.preventDefault(); const b = f.querySelector('[type=submit]'); b.disabled = true; msg.textContent = 'Guardando…';
       try { const r = await api('/prefs', { method: 'POST', body: read() }); prefsData = { ...j, prefs: r.prefs }; const sm = document.getElementById('acctPrefsSummary'); if (sm) sm.textContent = prefsSummary(r.prefs); renderPrefs(box, prefsData); document.getElementById('acctPrefsMsg').textContent = 'Guardado.'; }

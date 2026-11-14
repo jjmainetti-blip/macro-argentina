@@ -9,7 +9,7 @@ import cementMonthly from './api/cement-monthly.mjs';
 import uvaLoans from './api/uva-loans.mjs';
 import fxConverter from './api/fx-converter.mjs';
 import { accountApi, runReminders, remindersStatus } from './api/account.mjs';
-import { digestTick, checkAlerts, digestStatus } from './api/digest.mjs';
+import { digestTick, checkAlerts, digestStatus, checkReleases } from './api/digest.mjs';
 import { indecXStatus } from './api/indec-x.mjs';
 import { arcaXStatus } from './api/arca-x.mjs';
 import { countHit, flushStats } from './api/stats.mjs';
@@ -144,6 +144,7 @@ export default {
     ctx.waitUntil(marketsData(null, ctx, env, { force: true }).catch(e => console.log(`cron markets: error ${e?.message || e}`))
       .then(() => checkAlerts(env)).then(r => { if (r?.sent || r?.errors?.length) console.log(`alertas: ${JSON.stringify(r)}`); })
       .then(() => digestTick(env)).then(r => { if (r?.length) console.log(`resúmenes: ${JSON.stringify(r)}`); })
+      .then(() => checkReleases(env)).then(r => { if (r?.sent || r?.errors?.length || r?.init) console.log(`avisos de datos: ${JSON.stringify(r)}`); }) // v245
       .then(() => flushStats(env, true))
       .catch(e => console.log(`cron alertas/resúmenes: error ${e?.message || e}`)));
     ctx.waitUntil(macroData(env, ctx, new Request(`https://cron.invalid/api/macro-data?group=${group}`), { force: true })
