@@ -30,6 +30,7 @@ const VALUE = {
   ipi: (S, p) => act(S.industryHistorical)(p),
   isac: (S, p) => act(S.isacHistorical)(p),
   arca: (S, p) => { const y = num(S.arca?.history?.[p]) ?? (S.arca?.latest?.ym === p ? num(S.arca.latest.yoy) : null); return y !== null ? `${pct(y)} interanual nominal` : ''; },
+  icc: (S, p) => { const v = num(S.icc?.history?.[p]), b = num(S.icc?.history?.[shift(p, -1)]), a = num(S.icc?.history?.[shift(p, -12)]); return v !== null ? join(`${f1.format(v)} puntos`, b ? `${pct((v / b - 1) * 100)} mensual` : null, a ? `${pct((v / a - 1) * 100)} interanual` : null) : ''; },
   icg: (S, p) => { const v = num(S.icg?.history?.[p]), b = num(S.icg?.history?.[shift(p, -1)]); return v !== null ? join(`${f1.format(v)} puntos`, b ? `${pct((v / b - 1) * 100)} mensual` : null) : ''; },
   autos: (S, p) => { const h = { ...(S.activityPulse?.autos?.history?.['Patentamientos (unidades)'] || {}), ...(S.autos?.history?.['Patentamientos (unidades)'] || {}) }, v = num(h[p]), b = num(h[shift(p, -12)]); return v !== null ? join(`${f0.format(v)} unidades`, b ? `${pct((v / b - 1) * 100)} interanual` : null) : ''; },
   came: (S, p) => { const y = num(S.came?.monthlyYoy?.[p]), m = num(S.came?.monthlySaMom?.[p]); return join(y !== null ? `${pct(y)} interanual real` : null, m !== null ? `${pct(m)} mensual s.e.` : null); },

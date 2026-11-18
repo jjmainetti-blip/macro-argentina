@@ -1216,6 +1216,52 @@ async function capacityUtilization(){
   const last=keys.at(-1);
   return {status:'ok',source:pdfUrl?'INDEC — Utilización de la capacidad instalada en la industria (informe técnico; historia: Datos Argentina)':'INDEC / Datos Argentina — Utilización de la capacidad instalada (respaldo)',sourceUrl:url,monthly,latest:{ym:last,...(published&&pdfUrl&&monthly[last]!=null?{published}:{})},...(errors.length?{warnings:errors}:{})};
 }
+// v246 · Índice de Confianza del Consumidor (ICC, UTDT – Centro de Investigación en Finanzas), nivel nacional, puntos.
+// Historia: Datos Argentina (380.3_ICC_NACIONNAL_0_T_12, desde mar-2001; suele ir un mes atrasada). Último dato: el informe
+// en PDF de la página del CIF ("El ICC se ubicó en 41,52 puntos en octubre…"); si el PDF no se puede leer, la variación
+// mensual del titular de la página encadenada al último nivel conocido (marcado como estimado).
+const ICC_PAGE='https://www.utdt.edu/ver_contenido.php?id_contenido=2575&id_item_menu=4982';
+const MES_ICC={enero:1,febrero:2,marzo:3,abril:4,mayo:5,junio:6,julio:7,agosto:8,septiembre:9,setiembre:9,octubre:10,noviembre:11,diciembre:12};
+const iccYm=(mes,y)=>{const m=MES_ICC[String(mes).toLowerCase()];return m?`${y}-${String(m).padStart(2,'0')}`:null;};
+export function parseIccPage(html){
+  const txt=html.replace(/<script[\s\S]*?<\/script>/gi,' ').replace(/<[^>]+>/g,' ').replace(/&nbsp;/g,' ').replace(/\s+/g,' ');
+  const heads=[];for(const m of txt.matchAll(/(Enero|Febrero|Marzo|Abril|Mayo|Junio|Julio|Agosto|Septiembre|Octubre|Noviembre|Diciembre)\s+(20\d\d)\s+LA CONFIANZA DE LOS CONSUMIDORES\s+(SUBE|CAE|NO CAMBIA|SE MANTIENE)(?:\s+(?:UN\s+)?([\d,]+)\s*%)?/gi)){
+    const ym=iccYm(m[1],m[2]),v=m[4]?Number(m[4].replace(',','.')):0;if(ym)heads.push({ym,mom:/CAE/i.test(m[3])?-v:v});}
+  const pdfs=[...html.matchAll(/href="([^"]*download\.php\?fname=[^"]+\.pdf)"/gi)].map(m=>new URL(m[1].replace(/&amp;/g,'&'),'https://www.utdt.edu/').href);
+  return {heads,pdfs};
+}
+export function parseIccReport(t){
+  const x=t.replace(/(\d)\s+(?=\d)/g,'$1').replace(/(\d)\s+,\s*(?=\d)/g,'$1,').replace(/\s+/g,' ');
+  const h=x.match(/(Enero|Febrero|Marzo|Abril|Mayo|Junio|Julio|Agosto|Septiembre|Octubre|Noviembre|Diciembre)\s+(20\d\d)/i);
+  const v=x.match(/ICC\)?\s*(?:[^.]{0,60}?)(?:se ubic[óo] en|dio|fue de|alcanz[óo](?: los)?)\s*(\d{2},\d{1,2})/i);
+  return h&&v?{ym:iccYm(h[1],h[2]),value:Number(v[1].replace(',','.'))}:null;
+}
+async function consumerConfidence(){
+  const history={},errors=[];let latest=null,published=null,url=ICC_PAGE;
+  try{const x=await seriesRows('380.3_ICC_NACIONNAL_0_T_12',{start:'2001-01-01'});for(const r of x.rows){const v=Number(r.value);if(Number.isFinite(v))history[String(r.date).slice(0,7)]=round(v,2);}}catch(e){errors.push(`Datos Argentina: ${String(e?.message||e).slice(0,60)}`);}
+  try{
+    const r=await fetch(ICC_PAGE,{headers:{accept:'text/html','user-agent':'Mozilla/5.0 macrodatos.ar'},signal:AbortSignal.timeout(15000)});if(!r.ok)throw new Error(`página ${r.status}`);
+    const cs=(r.headers.get('content-type')||'').match(/charset=([\w-]+)/i)?.[1]||'iso-8859-1';let dec;try{dec=new TextDecoder(cs);}catch{dec=new TextDecoder('iso-8859-1');}
+    const P=parseIccPage(dec.decode(await r.arrayBuffer()));const target=P.heads[0]?.ym;
+    if(target&&!history[target]){
+      const {pdfText}=await import('./pdf-text.mjs');
+      for(const href of P.pdfs.slice(0,3)){
+        try{const pr=await fetch(href,{headers:{'user-agent':'Mozilla/5.0 macrodatos.ar'},signal:AbortSignal.timeout(20000)});if(!pr.ok)continue;
+          const rep=parseIccReport(await pdfText(await pr.arrayBuffer(),40));
+          if(rep?.ym===target&&rep.value>5&&rep.value<100){history[rep.ym]=rep.value;url=href;const ts=href.match(/fname=_(\d{10})/)?.[1];if(ts)published=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Argentina/Buenos_Aires'}).format(new Date(Number(ts)*1000));break;}}
+        catch{}
+      }
+      // Sin PDF legible: variación del titular sobre el último nivel conocido (redondeo a 0,1%).
+      if(!history[target]){const ks=Object.keys(history).sort(),prev=ks.at(-1),h=P.heads.find(z=>z.ym===target);
+        const pk=prev&&(()=>{const [y,m]=target.split('-').map(Number);return m===1?`${y-1}-12`:`${y}-${String(m-1).padStart(2,'0')}`;})();
+        if(prev===pk&&h){history[target]=round(history[prev]*(1+h.mom/100),2);latest={estimated:true};errors.push('ICC: nivel estimado con la variación del titular');}}
+    }
+    const top=P.heads[0];if(top&&history[top.ym]!=null)latest={...(latest||{}),ym:top.ym,mom:top.mom};
+  }catch(e){errors.push(`UTDT: ${String(e?.message||e).slice(0,80)}`);}
+  const keys=Object.keys(history).sort();if(keys.length<24)throw new Error(`ICC: ${errors.join(' · ')||'serie incompleta'}`);
+  const last=keys.at(-1);if(!latest||latest.ym!==last)latest={ym:last};
+  return {status:'ok',source:'Universidad Torcuato Di Tella — Índice de Confianza del Consumidor (CIF)',sourceUrl:url,history,latest:{...latest,...(published&&latest.ym===last&&!latest.estimated?{published}:{})},...(errors.length?{warnings:errors}:{})};
+}
 // v232 · Créditos hipotecarios NUEVOS por mes (montos operados, BCRA — Tasas de interés por préstamos al sector privado):
 // UVA (preser_uva.xls, "Balance flows" del total de préstamos hipotecarios UVA, desde 2016) + hipotecarios tradicionales en
 // pesos y en dólares (preser_mon.xls, hoja de montos del sector privado, columna "Mortgage loans · Total", desde 1993).
@@ -1475,7 +1521,7 @@ async function bcraPurchasesHistorical(){
   if(Object.keys(monthly).length<200)throw new Error('compras BCRA: serie corta');
   return {status:'ok',source:'BCRA — compras netas de divisas: sector privado (var. 78, USD) y Tesoro Nacional (var. 48, $ convertidos al mayorista A3500)',sourceUrl:'https://api.bcra.gob.ar/estadisticas/v4.0/monetarias/78',lastDay:Object.keys(d).sort().at(-1),monthly,...(Object.keys(treasury).length?{treasury}:{})};
 }
-const JOBS={capacity:()=>capacityUtilization(),monetaryBase:()=>monetaryBase(),mortgageCredit:()=>mortgageCredit(),mortgageFlows:()=>mortgageFlows(),wages:()=>wagesIndec(),bcraPurchasesHistorical:()=>bcraPurchasesHistorical(),supermarkets:()=>supermarkets(),scentia:()=>scentiaLive(),ipcHistorical:()=>ipcHistorical(),gdpHistorical:()=>gdpHistorical(),emaeHistorical:()=>emaeHistorical(),industryHistorical:()=>industryHistorical(),unemploymentHistorical:()=>unemploymentHistorical(),tradeHistorical:()=>tradeHistorical(),financialHistorical:()=>financialHistorical(),exchangeHistorical:()=>exchangeHistorical(),ipc:()=>ipc(),arca:()=>arca(),icg:()=>icg(),bcra:()=>bcra(),rem:()=>rem(),salary:()=>salaryRipte(),icl:()=>icl(),contractIndices:()=>contractIndices(),isacHistorical:()=>isacHistorical(),creditHistorical:()=>creditHistorical(),arrearsHistorical:()=>arrearsHistorical(),activityPulse:()=>activityPulse(),ilaHistorical:()=>ilaHistorical(),igaHistorical:()=>igaHistorical(),nowcastInputs:()=>nowcastInputs(get),equilibraActivity:()=>equilibraActivity(get),bopHistorical:()=>bopHistorical(),autos:()=>autosLive(),ipcCaba:()=>ipcCabaLive(),poverty:()=>povertyLive(),cement:()=>cementLive(),came:()=>cameLive()};
+const JOBS={icc:()=>consumerConfidence(),capacity:()=>capacityUtilization(),monetaryBase:()=>monetaryBase(),mortgageCredit:()=>mortgageCredit(),mortgageFlows:()=>mortgageFlows(),wages:()=>wagesIndec(),bcraPurchasesHistorical:()=>bcraPurchasesHistorical(),supermarkets:()=>supermarkets(),scentia:()=>scentiaLive(),ipcHistorical:()=>ipcHistorical(),gdpHistorical:()=>gdpHistorical(),emaeHistorical:()=>emaeHistorical(),industryHistorical:()=>industryHistorical(),unemploymentHistorical:()=>unemploymentHistorical(),tradeHistorical:()=>tradeHistorical(),financialHistorical:()=>financialHistorical(),exchangeHistorical:()=>exchangeHistorical(),ipc:()=>ipc(),arca:()=>arca(),icg:()=>icg(),bcra:()=>bcra(),rem:()=>rem(),salary:()=>salaryRipte(),icl:()=>icl(),contractIndices:()=>contractIndices(),isacHistorical:()=>isacHistorical(),creditHistorical:()=>creditHistorical(),arrearsHistorical:()=>arrearsHistorical(),activityPulse:()=>activityPulse(),ilaHistorical:()=>ilaHistorical(),igaHistorical:()=>igaHistorical(),nowcastInputs:()=>nowcastInputs(get),equilibraActivity:()=>equilibraActivity(get),bopHistorical:()=>bopHistorical(),autos:()=>autosLive(),ipcCaba:()=>ipcCabaLive(),poverty:()=>povertyLive(),cement:()=>cementLive(),came:()=>cameLive()};
 export const GROUPS={
   core:['ipc','arca','icg','bcra','rem','salary','wages','icl','contractIndices','autos','ipcCaba','came'],
   history:['ipcHistorical','gdpHistorical','industryHistorical','unemploymentHistorical','tradeHistorical'],
@@ -1483,7 +1529,7 @@ export const GROUPS={
   mortgage:['mortgageCredit','mortgageFlows','monetaryBase'], // v230–v232: crédito hipotecario (stock y créditos nuevos por mes); v237: base monetaria (BCRA)
   activity:['emaeHistorical','isacHistorical','creditHistorical','activityPulse','cement','supermarkets','scentia','capacity'],
   banks:['arrearsHistorical','bcraPurchasesHistorical'], // v131: grupo propio (anexo xlsx del BCRA, pesado en memoria)
-  leading:['ilaHistorical','igaHistorical'],
+  leading:['ilaHistorical','igaHistorical','icc'], // v246: confianza del consumidor (UTDT)
   nowcast:['nowcastInputs','equilibraActivity'], // v220–v222: insumos del anticipo del EMAE (Datos Argentina) y anticipo de Equilibra
   external:['bopHistorical','poverty'] // v122/v128: XML de INDEC y pobreza en un grupo propio
 };
@@ -1493,7 +1539,7 @@ export const GROUPS={
 // v134 · "Último dato publicado" para la portada: se calcula con la misma función del navegador
 // (public/releases.js) sobre los snapshots guardados y se guarda chico en KV (release:latest).
 const RELEASE_KEY='release:latest:v198';
-const CARD_ORDER=[['ipi','IPI manufacturero','INDEC'],['capacity','Capacidad instalada','INDEC'],['isac','ISAC construcción','INDEC'],['cement','Despachos de cemento','AFCP'],['came','Ventas minoristas pyme','CAME'],['super','Consumo en supermercados','INDEC'],['scentia','Consumo masivo','Scentia'],['arca','Recaudación','ARCA'],['autos','Patentamientos 0 km','ACARA'],['bop','Balanza de pagos','INDEC'],['icg','Confianza gobierno','UTDT'],['ila','Índice Líder (ILA)','CICEc'],['poverty','Pobreza','INDEC'],['iga','IGA','OJF'],['emae','EMAE','INDEC'],['credit','Crédito privado','BCRA'],['mortgage','Crédito hipotecario','BCRA'],['arrears','Mora bancaria','BCRA'],['trade','Balanza comercial','INDEC'],['fiscal','Resultado fiscal','Economía'],['wages','Índice de salarios','INDEC'],['ipcCaba','Inflación CABA','IDECBA'],['ipc','Inflación nacional','INDEC']];
+const CARD_ORDER=[['ipi','IPI manufacturero','INDEC'],['capacity','Capacidad instalada','INDEC'],['isac','ISAC construcción','INDEC'],['cement','Despachos de cemento','AFCP'],['came','Ventas minoristas pyme','CAME'],['super','Consumo en supermercados','INDEC'],['scentia','Consumo masivo','Scentia'],['arca','Recaudación','ARCA'],['autos','Patentamientos 0 km','ACARA'],['bop','Balanza de pagos','INDEC'],['icg','Confianza gobierno','UTDT'],['icc','Confianza del consumidor','UTDT'],['ila','Índice Líder (ILA)','CICEc'],['poverty','Pobreza','INDEC'],['iga','IGA','OJF'],['emae','EMAE','INDEC'],['credit','Crédito privado','BCRA'],['mortgage','Crédito hipotecario','BCRA'],['arrears','Mora bancaria','BCRA'],['trade','Balanza comercial','INDEC'],['fiscal','Resultado fiscal','Economía'],['wages','Índice de salarios','INDEC'],['ipcCaba','Inflación CABA','IDECBA'],['ipc','Inflación nacional','INDEC']];
 const MES_CORTO=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
 export function topCardRelease(R,seen={}){
   const rows=[];

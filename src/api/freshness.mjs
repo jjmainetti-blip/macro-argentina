@@ -12,7 +12,7 @@ const dd = (ym, day) => `${ym}-${String(Math.min(day, 28)).padStart(2, '0')}`;
 
 // group = grupo de /api/macro-data que la actualiza. lag = meses entre el período y la publicación; day = día habitual.
 // v169 · Organismo de cada tarjeta (para la agenda de próximas publicaciones).
-export const AGENCY = { capacity: 'INDEC', ipc: 'INDEC', ipcCaba: 'IDECBA', arca: 'ARCA', icg: 'UTDT', autos: 'ACARA', came: 'CAME', super: 'INDEC', scentia: 'Scentia', emae: 'INDEC', isac: 'INDEC', fiscal: 'Ministerio de Economía', cement: 'AFCP', credit: 'BCRA', mortgage: 'BCRA', arrears: 'BCRA', ipi: 'INDEC', trade: 'INDEC', ila: 'CICEc', iga: 'OJF', bop: 'INDEC', poverty: 'INDEC', wages: 'INDEC' };
+export const AGENCY = { icc: 'UTDT', capacity: 'INDEC', ipc: 'INDEC', ipcCaba: 'IDECBA', arca: 'ARCA', icg: 'UTDT', autos: 'ACARA', came: 'CAME', super: 'INDEC', scentia: 'Scentia', emae: 'INDEC', isac: 'INDEC', fiscal: 'Ministerio de Economía', cement: 'AFCP', credit: 'BCRA', mortgage: 'BCRA', arrears: 'BCRA', ipi: 'INDEC', trade: 'INDEC', ila: 'CICEc', iga: 'OJF', bop: 'INDEC', poverty: 'INDEC', wages: 'INDEC' };
 export const CARDS = [
   { key: 'ipc', title: 'Inflación nacional', group: 'core', freq: 'M', lag: 1, day: 15, cal: /precios al consumidor \(IPC\)/i, latest: S => lastKey(Object.fromEntries((S.ipc?.monthly || []).map(r => [String(r.date).slice(0, 7), r.value]))) },
   // v211 · Índice de salarios (INDEC): sale ~2 meses después del período.
@@ -20,6 +20,7 @@ export const CARDS = [
   { key: 'ipcCaba', title: 'Inflación CABA', group: 'core', freq: 'M', lag: 1, day: 8, latest: S => lastKey(S.ipcCaba?.history) },
   { key: 'arca', title: 'Recaudación', group: 'core', freq: 'M', lag: 1, day: 2, cal: /Recaudaci[oó]n tributaria/i, latest: S => maxKey(lastKey(S.arca?.history), S.arca?.latest?.ym) },
   { key: 'icg', title: 'Confianza en el gobierno', group: 'core', freq: 'M', lag: 0, day: 28, latest: S => lastKey(S.icg?.history) },
+  { key: 'icc', title: 'Confianza del consumidor', group: 'leading', freq: 'M', lag: 0, day: 22, latest: S => lastKey(S.icc?.history) }, // v246: UTDT (CIF)
   { key: 'autos', title: 'Patentamientos 0 km', group: 'core', freq: 'M', lag: 1, day: 2, latest: S => maxKey(lastKey(S.autos?.history?.['Patentamientos (unidades)']), lastKey(S.activityPulse?.autos?.history?.['Patentamientos (unidades)'])) },
   { key: 'came', title: 'Ventas minoristas pyme', group: 'core', freq: 'M', lag: 1, day: 5, latest: S => maxKey(lastKey(S.came?.monthlyYoy), S.came?.latest?.ym) },
   // v169 · Consumo: supermercados (INDEC) y consumo masivo (Scentia).
