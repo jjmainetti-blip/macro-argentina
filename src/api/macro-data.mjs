@@ -321,6 +321,8 @@ async function tradeHistorical(){
   fillMissing(monthlyBalance,indecRecent);
   // v205: el mes recién publicado (X de INDEC o portada) si todavía no está en el cuadro.
   let icaNews=null;try{const n=parseIndecIca(await indecNewsText());const last=Object.keys(monthlyBalance).sort().at(-1);if(n&&(!last||n.ym>last)){monthlyBalance[n.ym]=n.balance;icaNews={ym:n.ym,exports:n.exports,imports:n.imports,source:'INDEC — informe técnico (X / portada)'};}}catch{}
+  // v247: si tampoco está en X / portada, el resumen del informe en la página del ICA ("En octubre de 2026, las exportaciones…").
+  if(!ica)try{const r=await fetch('https://www.indec.gob.ar/Nivel4/Tema/3/2/40',{headers:{accept:'text/html','user-agent':'Mozilla/5.0 macrodatos.ar'},signal:AbortSignal.timeout(15000)});if(r.ok){const t=(await r.text()).replace(/<[^>]+>/g,' ');const n=parseIndecIca(t);const last=Object.keys(monthlyBalance).sort().at(-1);if(n&&(!last||n.ym>last)){monthlyBalance[n.ym]=n.balance;icaNews={ym:n.ym,exports:n.exports,imports:n.imports,source:'INDEC — informe técnico (página del ICA)'};}}}catch{}
   return {status:'ok',source:'INDEC — Intercambio Comercial Argentino (ICA, cuadros oficiales; Datos Argentina de respaldo); CPI-U BLS para USD constantes',sourceUrl:ica?.url||'https://www.indec.gob.ar/indec/web/Nivel4-Tema-3-2-40',balance,exports,imports,real,monthlyBalance,...(icaNews?{indecNews:icaNews}:{}),estimatedImports:[...est].sort()};
 }
 

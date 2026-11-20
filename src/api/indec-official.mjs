@@ -86,9 +86,26 @@ export function parseIsac(rows) {
   return { level: seriesFrom(L, 2, v => v), monthlyYoy: seriesFrom(L, 3), monthlySaMom: seriesFrom(L, 7) };
 }
 // ICA (hoja c1): año en curso y anterior por mes. Exportaciones cols 2–3, importaciones cols 6–7 (millones de USD).
+// v247: desde el informe de nov-2026 el cuadro 1 viene "vertical": año en la columna A (sólo en enero, con "*"), mes en B,
+// y columnas Exportaciones / Importaciones / Saldo (mensuales) y luego los acumulados. Se aceptan los dos formatos.
+export function parseIcaVertical(rows) {
+  const head = rows.find(r => r && r.some(c => /^exportaciones/i.test(String(c ?? '').trim())) && r.some(c => /^importaciones/i.test(String(c ?? '').trim())));
+  if (!head) throw new Error('ICA: encabezado no encontrado');
+  const ce = head.findIndex(c => /^exportaciones/i.test(String(c ?? '').trim())), ci = head.findIndex(c => /^importaciones/i.test(String(c ?? '').trim()));
+  const cs = head.findIndex(c => /^saldo/i.test(String(c ?? '').trim())); // saldo publicado (evita diferencias de redondeo)
+  const exports = {}, imports = {}, monthlyBalance = {};
+  for (const { ym, r } of monthRows(rows, 0, 1)) { const e = n(r[ce]), i = n(r[ci]), b = cs > ci ? n(r[cs]) : null; if (e == null || i == null) continue; exports[ym] = r1(e); imports[ym] = r1(i); monthlyBalance[ym] = r1(b ?? e - i); }
+  if (Object.keys(monthlyBalance).length < 12) throw new Error('ICA: meses insuficientes');
+  const annual = { exports: {}, imports: {}, balance: {} };
+  for (const y of new Set(Object.keys(exports).map(k => k.slice(0, 4)))) {
+    const ks = Object.keys(exports).filter(k => k.startsWith(`${y}-`)); if (ks.length !== 12) continue;
+    annual.exports[y] = r1(ks.reduce((s, k) => s + exports[k], 0)); annual.imports[y] = r1(ks.reduce((s, k) => s + imports[k], 0)); annual.balance[y] = r1(annual.exports[y] - annual.imports[y]);
+  }
+  return { exports, imports, monthlyBalance, annual };
+}
 export function parseIca(rows) {
   const hdr = rows.find(r => r && n(String(r[2] ?? '').slice(0, 4)) > 2000 && n(String(r[3] ?? '').slice(0, 4)) > 2000);
-  if (!hdr) throw new Error('ICA: encabezado de años no encontrado');
+  if (!hdr) return parseIcaVertical(rows);
   const yCur = +String(hdr[2]).slice(0, 4), yPrev = +String(hdr[3]).slice(0, 4);
   const exports = {}, imports = {}, monthlyBalance = {};
   for (const r of rows) {

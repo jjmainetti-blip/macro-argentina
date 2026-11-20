@@ -866,3 +866,7 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 - Nueva tarjeta "Confianza del consumidor" (Índice de Confianza del Consumidor, CIF – UTDT, nivel nacional): job `icc` en el grupo `leading`.
 - Historia desde mar-2001 de Datos Argentina (380.3_ICC_NACIONNAL_0_T_12). Último dato: informe PDF de la página del CIF (https://www.utdt.edu/ver_contenido.php?id_contenido=2575&id_item_menu=4982), "El ICC se ubicó en X puntos"; se leen hasta 3 PDF hasta encontrar el mes del titular más reciente (`parseIccPage`, `parseIccReport`). Fecha de publicación desde el nombre del PDF. Si ningún PDF se puede leer, se estima el nivel con la variación del titular (marcado como estimado).
 - Tarjeta: variación mensual (detalle: puntos e interanual), gráfico de toda la serie con cambios presidenciales, fila en el semáforo, resumen para mails/avisos y regla de publicación (mismo mes, día ~22).
+
+## v247 — ICA: nuevo formato del cuadro 1
+- Desde el informe del 19/11/2026 el cuadro 1 de `ica_cuadros_*.xls` viene "vertical" (año en la columna A, mes en B, Exportaciones / Importaciones / Saldo mensuales y luego acumulados), en lugar de dos años lado a lado. `parseIca` ya no encontraba el encabezado y el sitio se quedaba en septiembre. Nuevo `parseIcaVertical` (usa el saldo publicado); se aceptan los dos formatos.
+- Respaldo adicional: si el cuadro no se puede leer, el saldo del mes se toma del resumen del informe en la página del ICA.
