@@ -874,3 +874,6 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 ## v248 — Comercio exterior: acumulado de 12 meses
 - `tradeHistorical` suma `monthlyExports` y `monthlyImports` (Datos Argentina 74.3_IET_0_M_16 / 74.3_IIT_0_M_25 desde 1990, con los meses del cuadro 1 del ICA encima —revisiones y último mes— o del resumen del informe).
 - Series históricas → Balanza comercial / Exportaciones / Importaciones: nuevo selector "Total anual / Acumulado 12 meses". El acumulado móvil llega hasta el último mes publicado y respeta las tres unidades: USD corrientes, USD constantes (cada mes deflactado por el CPI-U mensual, base 2025 como la serie anual) y % del PIB (PIB en USD de los años que cubre la ventana, ponderado por meses; el año sin dato usa el último disponible). Saldo = exportaciones − importaciones acumuladas.
+
+## v249 — Balanza de pagos: acumulado de 4 trimestres
+- Series históricas → Balanza de pagos: nueva frecuencia "Acumulado 4 trimestres" (suma móvil de los últimos 4 trimestres, hasta el último publicado), para la cuenta corriente y sus componentes, en USD o % del PIB (PIB en USD de los años que cubre la ventana, ponderado por trimestres; el año sin dato usa el último disponible). Resumen propio (último acumulado, mejor y peor ventana).
