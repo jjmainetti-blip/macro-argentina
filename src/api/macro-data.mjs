@@ -323,7 +323,14 @@ async function tradeHistorical(){
   let icaNews=null;try{const n=parseIndecIca(await indecNewsText());const last=Object.keys(monthlyBalance).sort().at(-1);if(n&&(!last||n.ym>last)){monthlyBalance[n.ym]=n.balance;icaNews={ym:n.ym,exports:n.exports,imports:n.imports,source:'INDEC — informe técnico (X / portada)'};}}catch{}
   // v247: si tampoco está en X / portada, el resumen del informe en la página del ICA ("En octubre de 2026, las exportaciones…").
   if(!ica)try{const r=await fetch('https://www.indec.gob.ar/Nivel4/Tema/3/2/40',{headers:{accept:'text/html','user-agent':'Mozilla/5.0 macrodatos.ar'},signal:AbortSignal.timeout(15000)});if(r.ok){const t=(await r.text()).replace(/<[^>]+>/g,' ');const n=parseIndecIca(t);const last=Object.keys(monthlyBalance).sort().at(-1);if(n&&(!last||n.ym>last)){monthlyBalance[n.ym]=n.balance;icaNews={ym:n.ym,exports:n.exports,imports:n.imports,source:'INDEC — informe técnico (página del ICA)'};}}}catch{}
-  return {status:'ok',source:'INDEC — Intercambio Comercial Argentino (ICA, cuadros oficiales; Datos Argentina de respaldo); CPI-U BLS para USD constantes',sourceUrl:ica?.url||'https://www.indec.gob.ar/indec/web/Nivel4-Tema-3-2-40',balance,exports,imports,real,monthlyBalance,...(icaNews?{indecNews:icaNews}:{}),estimatedImports:[...est].sort()};
+  // v248: exportaciones e importaciones mensuales (para el acumulado de 12 meses): Datos Argentina desde 1990 y, encima,
+  // los meses del cuadro 1 del ICA (incluye revisiones y el último mes) o del resumen del informe.
+  const monthlyExports={},monthlyImports={};
+  try{const [me,mi]=await Promise.all([seriesRows('74.3_IET_0_M_16',{start:'1990-01-01'}),seriesRows('74.3_IIT_0_M_25',{start:'1990-01-01'})]);
+    for(const [x,o] of [[me,monthlyExports],[mi,monthlyImports]])for(const r of x.rows){const k=String(r.date).slice(0,7),v=Number(r.value);if(/^\d{4}-\d{2}$/.test(k)&&Number.isFinite(v))o[k]=round(v,1);}}catch{}
+  if(ica){Object.assign(monthlyExports,ica.exports||{});Object.assign(monthlyImports,ica.imports||{});}
+  if(icaNews&&monthlyExports[icaNews.ym]==null){monthlyExports[icaNews.ym]=icaNews.exports;monthlyImports[icaNews.ym]=icaNews.imports;}
+  return {status:'ok',source:'INDEC — Intercambio Comercial Argentino (ICA, cuadros oficiales; Datos Argentina de respaldo); CPI-U BLS para USD constantes',sourceUrl:ica?.url||'https://www.indec.gob.ar/indec/web/Nivel4-Tema-3-2-40',balance,exports,imports,real,monthlyBalance,monthlyExports,monthlyImports,...(icaNews?{indecNews:icaNews}:{}),estimatedImports:[...est].sort()};
 }
 
 function annualLastGeneric(rows){

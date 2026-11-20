@@ -870,3 +870,7 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 ## v247 — ICA: nuevo formato del cuadro 1
 - Desde el informe del 19/11/2026 el cuadro 1 de `ica_cuadros_*.xls` viene "vertical" (año en la columna A, mes en B, Exportaciones / Importaciones / Saldo mensuales y luego acumulados), en lugar de dos años lado a lado. `parseIca` ya no encontraba el encabezado y el sitio se quedaba en septiembre. Nuevo `parseIcaVertical` (usa el saldo publicado); se aceptan los dos formatos.
 - Respaldo adicional: si el cuadro no se puede leer, el saldo del mes se toma del resumen del informe en la página del ICA.
+
+## v248 — Comercio exterior: acumulado de 12 meses
+- `tradeHistorical` suma `monthlyExports` y `monthlyImports` (Datos Argentina 74.3_IET_0_M_16 / 74.3_IIT_0_M_25 desde 1990, con los meses del cuadro 1 del ICA encima —revisiones y último mes— o del resumen del informe).
+- Series históricas → Balanza comercial / Exportaciones / Importaciones: nuevo selector "Total anual / Acumulado 12 meses". El acumulado móvil llega hasta el último mes publicado y respeta las tres unidades: USD corrientes, USD constantes (cada mes deflactado por el CPI-U mensual, base 2025 como la serie anual) y % del PIB (PIB en USD de los años que cubre la ventana, ponderado por meses; el año sin dato usa el último disponible). Saldo = exportaciones − importaciones acumuladas.
