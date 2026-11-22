@@ -245,8 +245,11 @@ export function parseScentiaHeadlines(items) {
   for (const it of items) {
     const t = String(it.title || '').replace(/\s+/g, ' ');
     if (!/consumo masivo/i.test(t)) continue;
-    const m = t.match(/consumo masivo\b.*?\b(cay[óo]|cae|baj[óo]|retrocedi[óo]|se contrajo|se hundi[óo]|se desplom[óo]|creci[óo]|crece|subi[óo]|aument[óo]|repunt[óo]|avanz[óo]|se recuper[óo])\s+(?:un\s+|el\s+)?(\d{1,2}(?:[.,]\d{1,2})?)\s*%(?:\s+interanual)?\s+(?:en|durante)\s+(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)/i);
-    if (!m) continue;
+    let m = t.match(/consumo masivo\b.*?\b(cay[óo]|cae|baj[óo]|retrocedi[óo]|se contrajo|se hundi[óo]|se desplom[óo]|creci[óo]|crece|subi[óo]|aument[óo]|repunt[óo]|avanz[óo]|se recuper[óo])\s+(?:un\s+|el\s+)?(\d{1,2}(?:[.,]\d{1,2})?)\s*%(?:\s+interanual)?\s+(?:en|durante)\s+(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)/i);
+    // v250: "cerró octubre con una leve suba interanual del 0,9%"
+    const m2 = !m && t.match(/consumo masivo\b.*?\b(?:cerr[óo]|termin[óo]|en)\s+(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)\s+con\s+(?:una?\s+)?(?:leve\s+|fuerte\s+|nueva\s+)?(suba|alza|crecimiento|aumento|ca[íi]da|baja|retroceso|contracci[óo]n)\s+interanual\s+(?:de(?:l)?\s+)?(\d{1,2}(?:[.,]\d{1,2})?)\s*%/i);
+    if (!m && !m2) continue;
+    if (m2) { const neg2 = /ca[íi]da|baja|retroceso|contracci/i.test(m2[2]); m = [m2[0], neg2 ? 'cayó' : 'creció', m2[3], m2[1]]; }
     if (/mensual|respecto (?:al|del) mes anterior|contra (?:el mes|julio|junio)/i.test(t) && !/interanual/i.test(t)) continue;
     const neg = /cay|cae|baj|retroced|contrajo|hundi|desplom/i.test(m[1]);
     const v = (neg ? -1 : 1) * Number(m[2].replace(',', '.'));
@@ -265,20 +268,60 @@ export function parseScentiaHeadlines(items) {
   }
   const ok = [...cands.values()].filter(c => c.sources.size >= 2 || (c.interanual && c.sources.size >= 1 && c.ytd !== null));
   ok.sort((a, b) => b.ym.localeCompare(a.ym) || b.sources.size - a.sources.size);
+  // v250: el acumulado del año suele venir en otro título ("…acumula una caída del 2,3% en el año"): se toma el valor que
+  // más se repite entre las notas publicadas hasta 4 días después del dato.
+  for (const c of ok) {
+    if (c.ytd !== null) continue;
+    const votes = new Map();
+    for (const it of items) {
+      const t = String(it.title || ''); if (!/consumo masivo/i.test(t)) continue;
+      const a = t.match(/acumula(?:\s+una?)?\s+(baja|ca[íi]da|retroceso|contracci[óo]n|suba|alza|crecimiento|aumento)\s+(?:de(?:l)?\s+)?(\d{1,2}(?:[.,]\d{1,2})?)\s*%\s+en\s+(?:el\s+)?(?:año|lo que va del año|\d{4})/i); if (!a) continue;
+      const pd = new Date(it.pubDate || 0); if (Number.isNaN(pd.getTime())) continue;
+      const d = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' }).format(pd);
+      if (c.published && (d < c.published || d > new Date(Date.parse(c.published) + 4 * 864e5).toISOString().slice(0, 10))) continue;
+      const v = (/baja|ca[íi]da|retroceso|contracci/i.test(a[1]) ? -1 : 1) * Number(a[2].replace(',', '.'));
+      votes.set(v, (votes.get(v) || 0) + 1);
+    }
+    const best = [...votes.entries()].sort((x, y) => y[1] - x[1])[0]; if (best) c.ytd = best[0];
+  }
+  // v250: variación mensual ("…con una suba del 6,2% respecto a septiembre"), sólo si nombra el mes anterior al del dato.
+  for (const c of ok) {
+    const prev = MESES_SC[(Number(c.ym.slice(5)) + 10) % 12], votes = new Map();
+    for (const it of items) {
+      const t = String(it.title || ''); if (!/consumo masivo/i.test(t)) continue;
+      const a = t.match(new RegExp(`(suba|alza|crecimiento|aumento|ca[íi]da|baja|retroceso|creci[óo]|subi[óo]|cay[óo]|baj[óo])\\s+(?:de(?:l)?\\s+|un\\s+)?(\\d{1,2}(?:[.,]\\d{1,2})?)\\s*%\\s+(?:respecto|frente|contra|en comparaci[óo]n)\\s+(?:a|al|de|del|con)?\\s*(?:mes de\\s+)?${prev}`, 'i'));
+      if (!a) continue;
+      const v = (/ca[íi]da|baja|retroceso|cay|baj/i.test(a[1]) ? -1 : 1) * Number(a[2].replace(',', '.'));
+      votes.set(v, (votes.get(v) || 0) + 1);
+    }
+    const best = [...votes.entries()].sort((x, y) => y[1] - x[1])[0]; if (best) c.mom = best[0];
+  }
   return ok;
 }
 export async function scentiaLive() {
-  const url = 'https://news.google.com/rss/search?q=%22consumo+masivo%22+Scentia+when:60d&hl=es-419&gl=AR&ceid=AR:es-419';
-  const xml = await (await fetchWithTimeout(url, { headers: { 'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36', accept: 'application/rss+xml,application/xml,text/xml' } }, 12000)).text();
+  // v250: Google Noticias responde 503 a los servidores de Cloudflare; se suma el RSS de Bing Noticias (mismo tipo de títulos,
+  // con medio y fecha). Se usan los dos cuando responden.
+  const UA = { 'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36', accept: 'application/rss+xml,application/xml,text/xml' };
   const dec = s => String(s || '').replace(/<!\[CDATA\[|\]\]>/g, '').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').trim();
-  const items = [...xml.matchAll(/<item>([\s\S]*?)<\/item>/g)].map(m => ({
-    title: dec((m[1].match(/<title>([\s\S]*?)<\/title>/) || [])[1]).replace(/\s+-\s+[^-]+$/, ''),
-    pubDate: dec((m[1].match(/<pubDate>([\s\S]*?)<\/pubDate>/) || [])[1]),
-    source: dec((m[1].match(/<source[^>]*>([\s\S]*?)<\/source>/) || [])[1]),
-  }));
-  if (!items.length) throw new Error('Scentia: Google Noticias no devolvió notas');
+  const feeds = [
+    { name: 'Google Noticias', url: 'https://news.google.com/rss/search?q=%22consumo+masivo%22+Scentia+when:60d&hl=es-419&gl=AR&ceid=AR:es-419', src: /<source[^>]*>([\s\S]*?)<\/source>/ },
+    { name: 'Bing Noticias', url: 'https://www.bing.com/news/search?q=%22consumo+masivo%22+Scentia&format=rss&setlang=es-AR&cc=AR', src: /<News:Source>([\s\S]*?)<\/News:Source>/i },
+  ];
+  const items = [], errs = [];
+  for (const f of feeds) {
+    try {
+      const r = await fetchWithTimeout(f.url, { headers: UA }, 12000); if (!r.ok) throw new Error(`${r.status}`);
+      const xml = await r.text();
+      for (const m of xml.matchAll(/<item>([\s\S]*?)<\/item>/g)) items.push({
+        title: dec((m[1].match(/<title>([\s\S]*?)<\/title>/) || [])[1]).replace(/\s+-\s+[^-]+$/, ''),
+        pubDate: dec((m[1].match(/<pubDate>([\s\S]*?)<\/pubDate>/) || [])[1]),
+        source: dec((m[1].match(f.src) || [])[1]),
+      });
+    } catch (e) { errs.push(`${f.name}: ${String(e?.message || e).slice(0, 60)}`); }
+  }
+  if (!items.length) throw new Error(`Scentia: sin notas (${errs.join(' · ')})`);
   const found = parseScentiaHeadlines(items);
   if (!found.length) throw new Error('Scentia: no hay un dato confirmado por dos medios');
   const best = found[0];
-  return { status: 'ok', source: 'Scentia — consumo masivo, total multicanal (unidades)', sourceUrl: 'https://news.google.com/search?q=Scentia%20consumo%20masivo&hl=es-419&gl=AR&ceid=AR:es-419', monthlyYoy: { [best.ym]: best.yoy }, ...(best.ytd !== null ? { ytd: { [best.ym]: best.ytd } } : {}), published: { [best.ym]: best.published }, latest: { ym: best.ym, published: best.published, sources: best.sources.size } };
+  return { status: 'ok', source: 'Scentia — consumo masivo, total multicanal (unidades)', sourceUrl: 'https://www.bing.com/news/search?q=%22consumo+masivo%22+Scentia&setlang=es-AR&cc=AR', monthlyYoy: { [best.ym]: best.yoy }, ...(best.ytd !== null ? { ytd: { [best.ym]: best.ytd } } : {}), ...(Number.isFinite(best.mom) ? { monthlyMom: { [best.ym]: best.mom } } : {}), published: { [best.ym]: best.published }, latest: { ym: best.ym, published: best.published, sources: best.sources.size } };
 }

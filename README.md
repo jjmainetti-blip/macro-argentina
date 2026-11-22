@@ -877,3 +877,7 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 
 ## v249 — Balanza de pagos: acumulado de 4 trimestres
 - Series históricas → Balanza de pagos: nueva frecuencia "Acumulado 4 trimestres" (suma móvil de los últimos 4 trimestres, hasta el último publicado), para la cuenta corriente y sus componentes, en USD o % del PIB (PIB en USD de los años que cubre la ventana, ponderado por trimestres; el año sin dato usa el último disponible). Resumen propio (último acumulado, mejor y peor ventana).
+
+## v250 — Consumo masivo (Scentia): carga automática con Bing Noticias
+- Google Noticias responde 503 a los servidores de Cloudflare, así que la carga automática dejó de funcionar (septiembre y octubre se cargaron a mano). `scentiaLive` ahora lee también el RSS de Bing Noticias (que sí trae medio y fecha) y usa los dos cuando responden.
+- Títulos: nuevo patrón "cerró octubre con una suba interanual del 0,9%"; el acumulado del año ("acumula una caída del 2,3% en el año") y la variación mensual ("suba del 6,2% respecto a septiembre") se toman de cualquier título publicado hasta 4 días después, por mayoría. Sigue la regla de que la interanual la confirmen al menos dos medios.
