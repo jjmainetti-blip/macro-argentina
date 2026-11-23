@@ -881,3 +881,7 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 ## v250 — Consumo masivo (Scentia): carga automática con Bing Noticias
 - Google Noticias responde 503 a los servidores de Cloudflare, así que la carga automática dejó de funcionar (septiembre y octubre se cargaron a mano). `scentiaLive` ahora lee también el RSS de Bing Noticias (que sí trae medio y fecha) y usa los dos cuando responden.
 - Títulos: nuevo patrón "cerró octubre con una suba interanual del 0,9%"; el acumulado del año ("acumula una caída del 2,3% en el año") y la variación mensual ("suba del 6,2% respecto a septiembre") se toman de cualquier título publicado hasta 4 días después, por mayoría. Sigue la regla de que la interanual la confirmen al menos dos medios.
+
+## v251 — ICG: noviembre 2026 no se cargaba
+- UTDT publicó el informe con el título «Noviembre 2026» pero el texto dice «El ICG de octubre fue de 2,04 puntos». El parser exigía que el mes del texto coincidiera con el del título y descartaba la entrada. Ahora manda el mes del título.
+- `ICG_PUB_DATES`: octubre 2026 → 2026-10-26, noviembre 2026 → 2026-11-23.
