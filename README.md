@@ -890,3 +890,6 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 - Worker (`emaeHistorical`): nuevo campo `monthlySaLevel` (índice 2004 = 100). Fuentes: Datos Argentina `143.3_NO_PR_2004_A_31`, luego API del INDEC (serie desestacionalizada) o cuadro oficial (col. 4 de `sh_emae_mensual_base2004`). `spliceSaLevel` reescala el tramo viejo al empalmar fuentes; si el último mes llegó sólo con la variación mensual (informe/X), el nivel se extiende encadenando.
 - `parseEmae` e `emaeApi` devuelven `saLevel`.
 - Tarjeta EMAE (modal): se mantienen las barras de variación mensual s.e. (eje izquierdo) y se agrega la línea del nivel s.e. (eje derecho). El modal admite un segundo eje (`series.y2`).
+
+## v253 — EMAE: selector en lugar de gráfico superpuesto
+- El modal del EMAE tiene botones «Variación mensual» (barras, por defecto) y «Nivel desestacionalizado» (línea, índice 2004 = 100), como el selector Primario/Financiero del resultado fiscal. Los botones aparecen sólo si hay `monthlySaLevel`.
