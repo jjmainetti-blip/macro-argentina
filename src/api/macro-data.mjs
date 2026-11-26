@@ -996,23 +996,30 @@ async function isacHistorical(){
   return await addIndecNews({status:'ok',source:off?'INDEC — ISAC (cuadros oficiales; Datos Argentina de respaldo)':'INDEC / Datos Argentina — ISAC (respaldo)',sourceUrl,monthlyYoy:monthly,...(monthlySaMom?{monthlySaMom}:{})},'indicador sint[eé]tico de la actividad de la construcci[oó]n(?: \\(ISAC\\))?').then(o=>withCalendarDate(o,/construcci[oó]n \(ISAC\)/i));
 }
 
+// v252: la serie desestacionalizada se revisa entera cada mes; al combinar fuentes, la parte vieja se reescala en el primer mes de la nueva.
+function spliceSaLevel(old,nw){const N=Object.fromEntries(Object.entries(nw||{}).filter(([,v])=>Number.isFinite(Number(v))).map(([k,v])=>[k,round(Number(v),2)]));const ks=Object.keys(N).sort();if(!ks.length)return old;const f=old?.[ks[0]]?N[ks[0]]/old[ks[0]]:1,o={};for(const [k,v] of Object.entries(old||{}))if(k<ks[0])o[k]=round(v*f,2);return {...o,...N};}
 async function emaeHistorical(){
   // v114: la tarjeta muestra la variación mensual desestacionalizada (143.3_ICE_SER_VM_2004_A_34) y, abajo, la interanual.
-  const [yoyR,saR]=await Promise.allSettled([seriesRows('143.3_ICE_SERVIA_2004_A_25',{start:'2018-01-01'}),seriesRows('143.3_ICE_SER_VM_2004_A_34',{start:'2015-01-01'})]);
+  const [yoyR,saR,lvR]=await Promise.allSettled([seriesRows('143.3_ICE_SERVIA_2004_A_25',{start:'2018-01-01'}),seriesRows('143.3_ICE_SER_VM_2004_A_34',{start:'2015-01-01'}),seriesRows('143.3_NO_PR_2004_A_31',{start:'2015-01-01'})]);
+  // v252: nivel desestacionalizado (índice 2004=100) para la línea de la tarjeta.
+  const toLevel=rows=>{const m={};for(const r of rows){const k=String(r.date).slice(0,7),v=Number(r.value);if(/^\d{4}-\d{2}$/.test(k)&&Number.isFinite(v)&&v>50)m[k]=round(v,2);}return m;};
   const toPct=rows=>{const m={};for(const r of rows){const k=String(r.date).slice(0,7);if(/^\d{4}-\d{2}$/.test(k)&&Number.isFinite(Number(r.value)))m[k]=Number(r.value);}const p=fractionMapToPct(m);for(const k of Object.keys(p))p[k]=round(Number(p[k]),1)+0;return p;};
   const out={status:'ok',source:'INDEC / Datos Argentina — EMAE (respaldo)'};
   if(yoyR.status==='fulfilled'){out.monthlyYoy=toPct(yoyR.value.rows);out.sourceUrl=yoyR.value.url;}
   if(saR.status==='fulfilled')out.monthlySaMom=toPct(saR.value.rows);
+  if(lvR.status==='fulfilled'){const l=toLevel(lvR.value.rows);if(Object.keys(l).length>24)out.monthlySaLevel=l;}
   // v238: API del INDEC (últimos ~40 meses). Se usa si la interanual coincide con Datos Argentina; la desestacionalizada se
   // toma entera de la API (se revisa cada mes, como en el cuadro).
   if(indecApiEnabled())try{const a=await emaeApi();const check=agrees(out.monthlyYoy||{},a.monthlyYoy,'pct');out.indecApi={used:false,check,diag:a.apiDiag};
-    if(check.ok&&Object.keys(a.monthlyYoy).length){out.monthlyYoy={...(out.monthlyYoy||{}),...Object.fromEntries(Object.entries(a.monthlyYoy).filter(([k])=>k>='2018-01'))};out.monthlySaMom={...(out.monthlySaMom||{}),...a.monthlySaMom};out.indecApi.used=true;out.source='INDEC — EMAE (API INDEC; Datos Argentina de respaldo)';out.sourceUrl=a.url;}}
+    if(check.ok&&Object.keys(a.monthlyYoy).length){out.monthlyYoy={...(out.monthlyYoy||{}),...Object.fromEntries(Object.entries(a.monthlyYoy).filter(([k])=>k>='2018-01'))};out.monthlySaMom={...(out.monthlySaMom||{}),...a.monthlySaMom};if(Object.keys(a.saLevel||{}).length>12)out.monthlySaLevel=spliceSaLevel(out.monthlySaLevel,a.saLevel);out.indecApi.used=true;out.source='INDEC — EMAE (API INDEC; Datos Argentina de respaldo)';out.sourceUrl=a.url;}}
   catch(e){out.indecApi={used:false,error:String(e?.message||e).slice(0,120)};}
   // v197: cuadro oficial de INDEC (sh_emae_mensual_base2004); v239: sólo si la API del INDEC no se pudo usar.
-  if(!out.indecApi?.used)try{const off=await indecEmae();out.monthlyYoy={...(out.monthlyYoy||{}),...Object.fromEntries(Object.entries(off.monthlyYoy).filter(([k])=>k>='2018-01'))};out.monthlySaMom={...(out.monthlySaMom||{}),...Object.fromEntries(Object.entries(off.monthlySaMom).filter(([k])=>k>='2015-01'))};out.sourceUrl=off.url;out.source='INDEC — EMAE (cuadros oficiales; Datos Argentina de respaldo)';}catch(e){console.warn('EMAE INDEC',e);}
+  if(!out.indecApi?.used)try{const off=await indecEmae();out.monthlyYoy={...(out.monthlyYoy||{}),...Object.fromEntries(Object.entries(off.monthlyYoy).filter(([k])=>k>='2018-01'))};out.monthlySaMom={...(out.monthlySaMom||{}),...Object.fromEntries(Object.entries(off.monthlySaMom).filter(([k])=>k>='2015-01'))};if(Object.keys(off.saLevel||{}).length>24)out.monthlySaLevel=spliceSaLevel(out.monthlySaLevel,Object.fromEntries(Object.entries(off.saLevel).filter(([k])=>k>='2015-01')));out.sourceUrl=off.url;out.source='INDEC — EMAE (cuadros oficiales; Datos Argentina de respaldo)';}catch(e){console.warn('EMAE INDEC',e);}
   // v205: el mes recién publicado (X de INDEC o portada) antes de que llegue el cuadro.
   try{const n=parseIndecNews(await indecNewsText(),'estimador mensual de actividad econ[oó]mica(?: \\(EMAE\\))?');const last=Object.keys(out.monthlyYoy||{}).sort().at(-1);
     if(n&&(!last||n.ym>last)){out.monthlyYoy={...(out.monthlyYoy||{}),[n.ym]:n.yoy};if(n.mom!==null)out.monthlySaMom={...(out.monthlySaMom||{}),[n.ym]:n.mom};out.indecNews={ym:n.ym,source:'INDEC — informe técnico (X / portada)'};}}catch{}
+  // v252: si el nivel s.e. no llega hasta el último mes con variación mensual (p. ej., dato tomado del informe), se extiende encadenando.
+  if(out.monthlySaLevel&&out.monthlySaMom){const L=out.monthlySaLevel;let k=Object.keys(L).sort().at(-1);for(const m of Object.keys(out.monthlySaMom).sort()){if(m<=k)continue;const v=Number(out.monthlySaMom[m]);if(!Number.isFinite(v))break;const [y,mo]=k.split('-').map(Number),nx=mo===12?`${y+1}-01`:`${y}-${String(mo+1).padStart(2,'0')}`;if(m!==nx)break;L[m]=round(L[k]*(1+v/100),2);k=m;}}
   if(!out.monthlyYoy&&!out.monthlySaMom)throw new Error('series EMAE no disponibles');
   return out;
 }

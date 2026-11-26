@@ -73,7 +73,7 @@ export function parseEmae(rows) {
   const L = monthRows(rows, 0, 1); if (L.length < 120) throw new Error(`EMAE: ${L.length} meses`);
   const first = +L[0].ym.slice(0, 4), yoy = seriesFrom(L, 3);
   for (const k of Object.keys(yoy)) if (+k.slice(0, 4) <= first) delete yoy[k]; // el primer año no tiene variación
-  return { level: seriesFrom(L, 2, v => v), monthlyYoy: yoy, monthlySaMom: seriesFrom(L, 5) };
+  return { level: seriesFrom(L, 2, v => v), saLevel: seriesFrom(L, 4, v => Math.round(v * 100) / 100), monthlyYoy: yoy, monthlySaMom: seriesFrom(L, 5) };
 }
 // IPI manufacturero (Cuadro 1): _ | año | mes | nivel general | var. i.a. % | acum. % | _ | desest. | var. m/m %
 export function parseIpi(rows) {

@@ -56,7 +56,7 @@ export async function emaeApi() {
     else if (me === 'mom' && k === 'sa') put(V.mom, ym, v);
   }
   const monthlyYoy = { ...yoyFrom(L.orig), ...V.yoy }, monthlySaMom = { ...momFrom(L.sa), ...V.mom };
-  return { level: L.orig, monthlyYoy, monthlySaMom, url: `${BASE}/estimador-mensual-de-actividad-economica-nivel-general`, apiDiag: diag(rows, ['tipo_de_indicador_descripcion', 'tipo_de_indicador', 'unidad_de_medida', 'observaciones'], { yoy: Object.keys(monthlyYoy).length, saMom: Object.keys(monthlySaMom).length }) };
+  return { level: L.orig, saLevel: L.sa, monthlyYoy, monthlySaMom, url: `${BASE}/estimador-mensual-de-actividad-economica-nivel-general`, apiDiag: diag(rows, ['tipo_de_indicador_descripcion', 'tipo_de_indicador', 'unidad_de_medida', 'observaciones'], { yoy: Object.keys(monthlyYoy).length, saMom: Object.keys(monthlySaMom).length }) };
 }
 
 // IPI manufacturero, nivel general.
