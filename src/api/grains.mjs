@@ -5,7 +5,7 @@
 //   si la campaña todavía no está ahí, la estimación del último informe mensual («Producción estimada (ton)»).
 // Este módulo no depende de nada del worker: el mismo código se usó para reconstruir el histórico embebido.
 
-import { GRAINS_BASE_ANNUAL, GRAINS_BASE_PROGRESS, GRAINS_BASE_ESTIMATES } from './grains-history.mjs';
+import { GRAINS_BASE_ANNUAL, GRAINS_BASE_PROGRESS, GRAINS_BASE_ESTIMATES, GRAINS_BASE_PRICES } from './grains-history.mjs';
 
 export const GRAIN_CROPS = [
   ['soja', 'Soja'], ['maiz', 'Maíz'], ['trigo', 'Trigo'], ['girasol', 'Girasol'], ['cebada', 'Cebada'], ['sorgo', 'Sorgo'],
@@ -169,13 +169,37 @@ export async function grainsLatestReports(now = new Date()) {
 export async function grainsPdf(url) { return pdfPlain(await (await getText(url)).arrayBuffer()); }
 export const GRAINS_URLS = { reports: REPORTS, annual: ESTIM };
 
+// ---------- Precios FOB oficiales (API diaria de la Secretaría de Agricultura) ----------
+// Posición NCM por cultivo; se toma el embarque más cercano y, entre variantes (granel/embolsado), el menor precio.
+export const FOB_NCM = { soja: '12019000', maiz: '10059010', trigo: '10019900', girasol: '12060090', sorgo: '10079000', cebada: '10039010' };
+const FOB_API = 'https://www.magyp.gob.ar/sitio/areas/ss_mercados_agropecuarios/ws/ssma/precios_fob.php';
+export function pickFob(posts) {
+  const out = {}, per = r => (Number(r['añoDesde']) * 12 + Number(r.mesDesde)) || 0;
+  for (const [c, pre] of Object.entries(FOB_NCM)) {
+    const rows = (posts || []).filter(p => String(p.posicion).startsWith(pre) && Number(p.precio) > 0); if (!rows.length) continue;
+    const mn = Math.min(...rows.map(per)); out[c] = Math.min(...rows.filter(r => per(r) === mn).map(r => Number(r.precio)));
+  }
+  return out;
+}
+export async function grainsFobLatest(now = new Date()) {
+  for (let k = 0; k < 8; k++) {
+    const d = new Date(now.getTime() - k * 864e5), dow = d.getUTCDay(); if (dow === 0 || dow === 6) continue;
+    const s = `${String(d.getUTCDate()).padStart(2, '0')}/${String(d.getUTCMonth() + 1).padStart(2, '0')}/${d.getUTCFullYear()}`;
+    try {
+      const t = await (await getText(`${FOB_API}?Fecha=${s}`)).text(); if (/too many/i.test(t)) continue;
+      const p = pickFob(JSON.parse(t).posts); if (Object.keys(p).length >= 3) return { date: d.toISOString().slice(0, 10), prices: p };
+    } catch { }
+  }
+  return null;
+}
+
 // ---------- Job del worker ----------
 // Devuelve el histórico embebido más lo que se pueda bajar ahora. El snapshot fusiona objetos en profundidad, así que los
 // meses que se van agregando (progress[YYYY-MM]) y las estimaciones por campaña quedan guardados aunque el job sólo
 // informe el mes en curso. La cosecha mensual se calcula en el navegador.
 export async function grainsJob() {
   const out = { status: 'ok', source: 'Secretaría de Agricultura, Ganadería y Pesca — Estimaciones Agrícolas', sourceUrl: REPORTS, annualUrl: ESTIM,
-    unit: 't', crops: GRAIN_CROPS, annual: { ...GRAINS_BASE_ANNUAL }, progress: { ...GRAINS_BASE_PROGRESS }, estimates: JSON.parse(JSON.stringify(GRAINS_BASE_ESTIMATES)), errors: {} };
+    unit: 't', crops: GRAIN_CROPS, prices: { ...GRAINS_BASE_PRICES }, fobUrl: FOB_API, annual: { ...GRAINS_BASE_ANNUAL }, progress: { ...GRAINS_BASE_PROGRESS }, estimates: JSON.parse(JSON.stringify(GRAINS_BASE_ESTIMATES)), errors: {} };
   try { Object.assign(out.annual, await grainsAnnual()); } catch (e) { out.errors.annual = String(e?.message || e).slice(0, 160); }
   try {
     const R = await grainsLatestReports();
@@ -191,6 +215,8 @@ export async function grainsJob() {
       out.latestMonthly = { date: R.monthly.date, url: R.monthly.u, estimates: est };
     }
   } catch (e) { out.errors.reports = String(e?.message || e).slice(0, 160); }
+  // v256: precio FOB oficial del último día hábil con datos → mes en curso (USD por tonelada).
+  try { const F = await grainsFobLatest(); if (F) { out.prices[F.date.slice(0, 7)] = F.prices; out.latestFob = F; } } catch (e) { out.errors.fob = String(e?.message || e).slice(0, 160); }
   if (!Object.keys(out.errors).length) delete out.errors;
   return out;
 }
