@@ -277,8 +277,14 @@
   function openStaff(S) {
     const body = openModal('acct-modal-wide'), o = S.official, nx = S.nextOfficial;
     const rows = [...S.rows].reverse();
+    // v254: atajo arriba de todo para registrar el pago pendiente más antiguo (o el próximo), sin bajar hasta la tabla.
+    const pending = S.rows.filter(r => r.paid == null && (r.past || r.today) && r.date >= (S.trackFrom || S.start));
+    const target = pending[0] || (S.next && S.rows.find(r => r.date === S.next.date && r.paid == null)) || null;
+    const quick = `<div class="acct-quickpay${pending.length ? ' due' : ''}"><div><span>${target ? (pending.length ? 'Pago sin registrar' : 'Próximo pago') : 'Pagos'}</span><b>${target ? `${esc(day(target.date))} · ${money(target.expected)}` : 'Al día'}</b>${pending.length > 1 ? `<small>${pending.length} pagos sin registrar</small>` : ''}</div>${target ? `<button class="btn primary" type="button" data-pay data-date="${target.date}">Registrar pago</button>` : ''}</div>
+      <div class="acct-payform" id="payForm" hidden></div>`;
     body.innerHTML = `<div class="kpi-modal-head"><div><span class="kpi-modal-agency">${esc(CATS[S.category])}${S.category === 'caseros' ? '' : ` · ${S.retiro} retiro`}${S.zona ? ' · zona desfavorable' : ''}</span><h2>${esc(S.name)}</h2><p>${esc(staffFreqTxt(S))} · ${money(S.current.amount)} por ${S.current.hours} h</p></div>
       <strong>${S.next ? money(S.next.expected) : '—'}<small class="acct-modal-sub">${S.next ? `próximo pago · ${esc(day(S.next.date))}` : ''}</small></strong></div>
+      ${quick}
       <div class="acct-loan-sum">
         <div><span>Valor por hora</span><b>${money(S.hourly)}</b></div>
         <div><span>Mínimo oficial por hora</span><b>${money(o?.hour)}</b><small>escala de ${esc(day(o?.from))}</small></div>
@@ -292,11 +298,10 @@
       <h3 class="acct-h3b">Pagos</h3>
       <div class="upd-table-wrap acct-loan-table"><table class="upd-table acct-table acct-pay-table"><thead><tr><th>Fecha</th><th>A pagar</th><th>Pagado</th><th>Diferencia</th><th></th></tr></thead><tbody>
       ${rows.map(r => `<tr class="${r.past || r.today ? '' : 'acct-future'}${S.next && r.date === S.next.date ? ' acct-next-row' : ''}" data-date="${r.date}"><td>${esc(day(r.date))}${r.carryIn ? `<small>${r.carryIn > 0 ? '+' : '−'}${money(Math.abs(r.carryIn))} anterior</small>` : ''}</td><td><strong>${money(r.expected)}</strong></td>
-        <td>${r.paid != null ? `${money(r.paid)}<small>${r.carry ? 'diferencia pasada al siguiente' : r.diff ? 'diferencia no se arrastra' : ''}${r.note ? `${r.carry || r.diff ? ' · ' : ''}${esc(r.note)}` : ''}</small>` : (r.past || r.today ? (r.date >= (S.trackFrom || S.start) ? '<i class="acct-bad">sin registrar</i>' : '<i>no registrado</i>') : '—')}</td>
-        <td>${r.paid != null ? (r.diff ? money(r.diff) : '—') : ''}</td>
+        <td>${r.paid != null ? `${money(r.paid)}<small>${r.carry ? 'diferencia pasada al siguiente' : r.diff ? 'diferencia no se arrastra' : ''}${r.note ? `${r.carry || r.diff ? ' · ' : ''}${esc(r.note)}` : ''}</small>` : (r.past || r.today ? (r.date >= (S.trackFrom || S.start) ? '<i class="acct-bad">sin registrar</i>' : '<i>no registrado</i>') : '')}</td>
+        <td>${r.paid != null && r.diff ? money(r.diff) : ''}</td>
         <td>${r.paid != null ? '<button class="link-btn" data-unpay>Deshacer</button>' : (r.past || r.today || r === S.next || (S.next && r.date === S.next.date)) ? '<button class="btn small" data-pay>Registrar</button>' : ''}</td></tr>`).join('')}
       </tbody></table></div>
-      <div class="acct-payform" id="payForm" hidden></div>
       ${S.notes ? `<p class="acct-note">Nota: ${esc(S.notes)}</p>` : ''}
       <div class="acct-actions"><button class="btn primary" data-act="edit">Editar</button><button class="btn small" data-act="import">Importar pagos (CSV)</button>${S.reminders?.mode !== 'off' && state.mail ? '<button class="btn small" data-act="test">Enviarme un mail de prueba</button>' : ''}<button class="btn small danger" data-act="del">Eliminar</button></div>
       <div class="acct-payform" id="importForm" hidden></div>
@@ -306,14 +311,14 @@
     sacBtn?.addEventListener('click', () => { const open = sacBox.hidden; sacBox.hidden = !open; sacBtn.setAttribute('aria-expanded', String(open)); if (open && !sacBox.firstChild) renderSac(S, sacBox, 'current'); });
     const refresh = async j => { const i = state.staff.findIndex(x => x.id === S.id); if (j?.staff && i >= 0) state.staff[i] = j.staff; openStaff(state.staff[i]); viewAccountKeepModal(); };
     body.querySelectorAll('[data-pay]').forEach(b => b.onclick = () => {
-      const tr = b.closest('tr'), r = S.rows.find(x => x.date === tr.dataset.date);
+      const r = S.rows.find(x => x.date === (b.dataset.date || b.closest('tr')?.dataset.date)); if (!r) return;
       pf.hidden = false;
       pf.innerHTML = `<h4>Registrar el pago del ${esc(day(r.date))}</h4><div class="acct-fields"><label>Monto pagado<input name="paid" inputmode="decimal" value="${String(r.expected).replace('.', ',')}"></label>
         <label class="acct-check"><input type="checkbox" name="carry" checked> Sumar (o descontar) la diferencia en el pago siguiente</label></div>
         <p class="acct-note" id="payDiff"></p><div class="acct-actions"><button class="btn primary" type="button" id="paySave">Guardar pago</button><button class="btn ghost-dark" type="button" id="payCancel">Cancelar</button></div>`;
       const inp = pf.querySelector('[name=paid]'), dif = pf.querySelector('#payDiff');
       const upd = () => { const v = Number(inp.value.replace(/\./g, '').replace(',', '.')), d = r.expected - v; dif.textContent = Number.isFinite(v) && Math.abs(d) >= 0.01 ? (d > 0 ? `Quedan ${money(d)} sin pagar.` : `Se pagaron ${money(-d)} de más.`) : ''; };
-      inp.oninput = upd; upd(); inp.focus(); inp.select(); pf.scrollIntoView({ block: 'nearest' });
+      inp.oninput = upd; upd(); pf.scrollIntoView({ block: 'center', behavior: 'smooth' }); inp.focus({ preventScroll: true }); inp.select();
       pf.querySelector('#payCancel').onclick = () => { pf.hidden = true; };
       pf.querySelector('#paySave').onclick = async () => { try { refresh(await api(`/staff/${S.id}/pay`, { method: 'POST', body: { date: r.date, paid: inp.value, carry: pf.querySelector('[name=carry]').checked } })); } catch (err) { dif.textContent = err.message; } };
     });

@@ -893,3 +893,7 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 
 ## v253 — EMAE: selector en lugar de gráfico superpuesto
 - El modal del EMAE tiene botones «Variación mensual» (barras, por defecto) y «Nivel desestacionalizado» (línea, índice 2004 = 100), como el selector Primario/Financiero del resultado fiscal. Los botones aparecen sólo si hay `monthlySaLevel`.
+
+## v254 — Casas particulares: layout para celular
+- Ficha de cada persona: barra «Registrar pago» arriba de todo (pago sin registrar más antiguo o, si está al día, el próximo), visible al abrir. El formulario de pago se abre ahí mismo y queda centrado en pantalla.
+- En pantallas de hasta 640 px la tabla de pagos pasa a tarjetas apiladas (fecha y monto arriba, pagado y diferencia abajo, botón a todo el ancho): ya no hay desplazamiento horizontal. Se ocultan el monto repetido del encabezado y se compactan los recuadros de resumen.
