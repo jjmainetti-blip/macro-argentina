@@ -897,3 +897,11 @@ Búsqueda complementaria con el mismo criterio (precio nominal observado en su �
 ## v254 — Casas particulares: layout para celular
 - Ficha de cada persona: barra «Registrar pago» arriba de todo (pago sin registrar más antiguo o, si está al día, el próximo), visible al abrir. El formulario de pago se abre ahí mismo y queda centrado en pantalla.
 - En pantallas de hasta 640 px la tabla de pagos pasa a tarjetas apiladas (fecha y monto arriba, pagado y diferencia abajo, botón a todo el ancho): ya no hay desplazamiento horizontal. Se ocultan el monto repetido del encabezado y se compactan los recuadros de resumen.
+
+## v255 — Series históricas: producción de granos
+- Nueva serie «Granos» (botón en Series históricas) con selector **Anual (por campaña)** / **Mensual (cosecha)**, barras apiladas por cultivo (soja, maíz, trigo, girasol, cebada, sorgo y, en la anual, otros granos).
+- Worker: `src/api/grains.mjs` (nuevo) y job `grains` en el grupo `history`.
+  - Anual: CSV de datosestimaciones.magyp.gob.ar (POST del formulario «Descargar», producción total país, 1969/70 en adelante).
+  - Mensual: último informe semanal de la Secretaría de Agricultura (tablas «AVANCE DE LA COSECHA DE …», total país, % cosechado) y último informe mensual («Producción estimada (ton)» de la campaña en curso). Lector de PDF propio (`pdfPlain`) y parser tolerante a texto pegado.
+  - `src/api/grains-history.mjs` (nuevo): histórico embebido (producción anual y % cosechado de fin de mes desde feb-2023), así la serie funciona aunque el sitio del ministerio no responda. El snapshot fusiona los meses nuevos.
+- Cliente: la cosecha del mes = producción de la campaña × avance de cosecha, por diferencia con el mes anterior (`grainsMonthlyHarvest`); si un cultivo deja de figurar con ≥60 % cosechado, el resto va a ese mes. El mes en curso se marca «parcial».
